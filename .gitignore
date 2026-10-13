@@ -1,0 +1,56 @@
+# Dependencies (install with `composer install`)
+/vendor/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Runtime output
+/storage/logs/*
+!/storage/logs/.gitkeep
+/public/uploads/avatars/*
+!/public/uploads/avatars/.gitkeep
+*.log
+
+# Test and analysis caches
+/.phpunit.cache/
+/.phpunit.result.cache
+/coverage/
+/build/
+/tests/_output/
+
+# Database engine files and local dumps (export SQL instead)
+*.frm
+*.ibd
+*.MYD
+*.MYI
+ibdata*
+ib_logfile*
+db.opt
+*.sql
+*.sql.gz
+!/database/schema.sql
+!/database/seed.sql
+/database/local/
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.code-workspace
+*.sublime-*
+*.swp
+*~
+
+# Operating systems
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backups and archives
+*.bak
+*.orig
+*.zip
+
+# Local agent/tooling config
+/.claude/

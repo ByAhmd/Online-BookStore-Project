@@ -1,0 +1,112 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Shared PDO connection. All queries use prepared statements with native
+ * (non-emulated) parameter binding and throw PDOException on failure.
+ */
+function db(): PDO
+{
+    static $pdo = null;
+    if ($pdo instanceof PDO) {
+        return $pdo;
+    }
+
+    $dsn = sprintf(
+        'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
+        config('db.host'),
+        config('db.port'),
+        config('db.name')
+    );
+
+    $pdo = new PDO($dsn, (string) config('db.user'), (string) config('db.pass'), [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::ATTR_STRINGIFY_FETCHES => false,
+    ]);
+
+    // Keep TIMESTAMP values and NOW() in the application's timezone. Named zones
+    // handle daylight saving but need the server's time zone tables; fall back
+    // to the current UTC offset when they are not loaded.
+    try {
+        $pdo->prepare('SET time_zone = ?')->execute([date_default_timezone_get()]);
+    } catch (PDOException) {
+        $pdo->exec("SET time_zone = '" . (new DateTimeImmutable('now'))->format('P') . "'");
+    }
+
+    return $pdo;
+}
+
+/**
+ * Runs a prepared statement and returns it.
+ *
+ * @param array<int|string, mixed> $params
+ */
+function db_run(string $sql, array $params = []): PDOStatement
+{
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt;
+}
+
+/**
+ * @param array<int|string, mixed> $params
+ * @return array<string, mixed>|null
+ */
+function db_one(string $sql, array $params = []): ?array
+{
+    $row = db_run($sql, $params)->fetch();
+    return $row === false ? null : $row;
+}
+
+/**
+ * @param array<int|string, mixed> $params
+ * @return list<array<string, mixed>>
+ */
+function db_all(string $sql, array $params = []): array
+{
+    return db_run($sql, $params)->fetchAll();
+}
+
+/**
+ * @param array<int|string, mixed> $params
+ */
+function db_value(string $sql, array $params = []): mixed
+{
+    $value = db_run($sql, $params)->fetchColumn();
+    return $value === false ? null : $value;
+}
+
+/**
+ * Executes $callback inside a transaction, committing on success and rolling
+ * back (then rethrowing) on any exception.
+ *
+ * @template T
+ * @param callable(PDO): T $callback
+ * @return T
+ */
+function db_transaction(callable $callback): mixed
+{
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $result = $callback($pdo);
+        $pdo->commit();
+        return $result;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/**
+ * True when a PDOException is a duplicate-key violation (SQLSTATE 23000 / 1062).
+ */
+function is_duplicate_key_error(PDOException $e): bool
+{
+    return ($e->errorInfo[1] ?? null) === 1062;
+}

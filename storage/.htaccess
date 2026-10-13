@@ -1,0 +1,2 @@
+# Logs (including reset links in mail.log during development) must never be served.
+Require all denied

@@ -1,0 +1,603 @@
+/* =====================================================================
+   BookWise shared styles: tokens, layout shell (nav/footer), buttons,
+   forms, flash messages and utilities. Loaded on every page before the
+   page-specific stylesheet.
+   ===================================================================== */
+
+:root {
+    --color-bg: #f4f4f4;
+    --color-surface: #ffffff;
+    --color-surface-muted: #ececec;
+    --color-chrome: #242424;
+    --color-chrome-text: #ffffff;
+    --color-text: #2b2b2b;
+    --color-text-muted: #5c5c5c;
+    --color-border: #d4d4d4;
+    --color-primary: #19393e;
+    --color-primary-hover: #0f5132;
+    --color-accent: #c62828;
+    --color-accent-hover: #8e1b1b;
+    --color-success-bg: #e6f4ea;
+    --color-success-text: #1e5631;
+    --color-error-bg: #fdecea;
+    --color-error-text: #8a1c1c;
+    --color-info-bg: #e8f0fe;
+    --color-info-text: #1a3e72;
+    --color-focus: #ffbf47;
+    --color-focus-ink: #0b0c0c;
+    --radius-sm: 6px;
+    --radius: 10px;
+    --radius-lg: 20px;
+    --shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    --font-body: "Quicksand", "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --page-max: 1200px;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    font-family: var(--font-body);
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    line-height: 1.5;
+}
+
+img {
+    max-width: 100%;
+}
+
+a {
+    color: var(--color-primary);
+}
+
+a:hover {
+    color: var(--color-primary-hover);
+}
+
+/* Two-tone focus ring: a yellow band inside a near-black outline stays visible
+   (>= 3:1) on light and dark surfaces alike. Dark regions (.site-header,
+   .site-footer and page-specific dark panels) switch to a yellow-only ring.
+   Rules that hide the outline (e.g. on tabindex="-1" targets) must also reset
+   box-shadow. */
+:focus-visible {
+    outline: 3px solid var(--color-focus-ink);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 5px var(--color-focus);
+}
+
+.site-header :focus-visible,
+.site-footer :focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.skip-link {
+    position: absolute;
+    left: 8px;
+    top: -60px;
+    z-index: 100;
+    padding: 8px 14px;
+    background: var(--color-focus);
+    color: #000;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.skip-link:focus {
+    top: 8px;
+}
+
+/* ---------------------------------------------------------------------
+   Navigation
+   --------------------------------------------------------------------- */
+
+.site-header {
+    background-color: var(--color-chrome);
+    color: var(--color-chrome-text);
+}
+
+.site-nav {
+    max-width: var(--page-max);
+    margin: 0 auto;
+    min-height: 80px;
+    padding: 10px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+}
+
+.brand {
+    color: var(--color-chrome-text);
+    text-decoration: none;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.brand:hover,
+.brand:visited {
+    color: var(--color-chrome-text);
+}
+
+.brand-tag {
+    font-size: 0.75rem;
+    font-weight: 700;
+    vertical-align: middle;
+    padding: 2px 8px;
+    border-radius: var(--radius-lg);
+    background: var(--color-accent);
+}
+
+.nav-links,
+.nav-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 18px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.nav-links a {
+    color: var(--color-chrome-text);
+    text-decoration: none;
+    font-size: 1.05rem;
+    padding: 6px 2px;
+    border-bottom: 2px solid transparent;
+}
+
+.nav-links a:hover,
+.nav-links a[aria-current="page"] {
+    border-bottom-color: var(--color-chrome-text);
+    color: var(--color-chrome-text);
+}
+
+.cart-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 4px;
+}
+
+.cart-link img {
+    width: 30px;
+    height: 30px;
+}
+
+.cart-badge {
+    position: absolute;
+    top: -4px;
+    right: -8px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 10px;
+    background: var(--color-accent);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+}
+
+.nav-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    display: block;
+}
+
+.logout-form {
+    margin: 0;
+}
+
+/* Pill buttons used in the nav (original BookWise look). */
+.pill {
+    display: inline-block;
+    border: none;
+    color: #fff;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    padding: 8px 18px;
+    border-radius: 40px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 0.2s;
+}
+
+.pill:visited,
+.pill:hover {
+    color: #fff;
+}
+
+.pill-dark {
+    background-color: #000;
+}
+
+.pill-dark:hover {
+    background-color: #555;
+}
+
+.pill-red {
+    background-color: var(--color-accent);
+}
+
+.pill-red:hover {
+    background-color: var(--color-accent-hover);
+}
+
+/* ---------------------------------------------------------------------
+   Main + footer
+   --------------------------------------------------------------------- */
+
+.site-main {
+    flex: 1 0 auto;
+    width: 100%;
+}
+
+.site-main:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.page-container {
+    max-width: var(--page-max);
+    margin: 0 auto;
+    padding: 24px 20px 40px;
+}
+
+.page-title {
+    font-size: 2rem;
+    margin: 8px 0 20px;
+}
+
+.site-footer {
+    background-color: var(--color-chrome);
+    color: var(--color-chrome-text);
+    padding: 24px 20px;
+    text-align: center;
+}
+
+.footer-brand {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+}
+
+.footer-tagline {
+    margin: 0 0 12px;
+    color: #d6d6d6;
+}
+
+.footer-links {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 20px;
+}
+
+.footer-links a {
+    color: #ecf0f1;
+}
+
+.footer-links a:hover {
+    color: #fff;
+}
+
+/* ---------------------------------------------------------------------
+   Flash messages
+   --------------------------------------------------------------------- */
+
+.flash-stack {
+    max-width: var(--page-max);
+    margin: 16px auto 0;
+    padding: 0 20px;
+    display: grid;
+    gap: 10px;
+}
+
+.flash {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    font-weight: 600;
+}
+
+/* Long unbroken words (names, titles, emails) wrap instead of widening the page. */
+.flash p {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.flash-success {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+    border-color: #b7dfc3;
+}
+
+.flash-error {
+    background: var(--color-error-bg);
+    color: var(--color-error-text);
+    border-color: #f5c2c0;
+}
+
+.flash-info {
+    background: var(--color-info-bg);
+    color: var(--color-info-text);
+    border-color: #c4d7fb;
+}
+
+.flash-close {
+    flex: 0 0 auto;
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+/* ---------------------------------------------------------------------
+   Buttons and forms
+   --------------------------------------------------------------------- */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background-color: var(--color-primary);
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s;
+}
+
+.btn:visited,
+.btn:hover {
+    color: #fff;
+}
+
+.btn:hover {
+    background-color: var(--color-primary-hover);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+    background-color: #9e9e9e;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background-color: #000;
+}
+
+.btn-secondary:hover {
+    background-color: #555;
+}
+
+.btn-danger {
+    background-color: var(--color-accent);
+}
+
+.btn-danger:hover {
+    background-color: var(--color-accent-hover);
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    padding: 0;
+    min-height: 0;
+    color: var(--color-primary);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.form-field {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.form-field label {
+    font-weight: 700;
+}
+
+.form-hint {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+}
+
+.field-error {
+    font-size: 0.9rem;
+    color: var(--color-error-text);
+    font-weight: 600;
+}
+
+.form-control {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid #767676; /* 4.5:1 on white */
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: var(--color-text);
+    font: inherit;
+}
+
+.form-control:focus {
+    border-color: var(--color-primary);
+}
+
+.form-control[aria-invalid="true"] {
+    border-color: var(--color-accent);
+}
+
+textarea.form-control {
+    min-height: 120px;
+    resize: vertical;
+}
+
+/* ---------------------------------------------------------------------
+   Shared content blocks
+   --------------------------------------------------------------------- */
+
+.card {
+    background: var(--color-surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--color-text-muted);
+}
+
+.empty-state p {
+    margin: 0 0 16px;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: var(--radius-lg);
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: capitalize;
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+.status-paid {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+.status-pending {
+    background: var(--color-info-bg);
+    color: var(--color-info-text);
+}
+
+.status-canceled,
+.status-expired,
+.status-failed {
+    background: var(--color-error-bg);
+    color: var(--color-error-text);
+}
+
+.error-page {
+    max-width: 640px;
+    margin: 60px auto;
+    padding: 32px 24px;
+    text-align: center;
+}
+
+.error-code {
+    font-size: 4rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--color-accent);
+}
+
+.error-detail {
+    text-align: left;
+    white-space: pre-wrap;
+    background: var(--color-surface-muted);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+}
+
+.error-actions {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+@media (max-width: 768px) {
+    .site-nav {
+        justify-content: center;
+        text-align: center;
+    }
+
+    .page-title {
+        font-size: 1.6rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .brand {
+        font-size: 1.35rem;
+    }
+
+    .nav-links a {
+        font-size: 0.95rem;
+    }
+
+    .pill {
+        font-size: 0.9rem;
+        padding: 6px 14px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition: none !important;
+        animation: none !important;
+    }
+}

@@ -1,0 +1,9 @@
+# Apache settings for the public/ document root (ignored by other servers).
+# Re-allow access here: the project root's .htaccess denies everything else.
+Require all granted
+Options -Indexes
+
+# Never serve dotfiles (e.g. a misplaced .env).
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

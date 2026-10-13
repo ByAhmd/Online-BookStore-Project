@@ -1,0 +1,429 @@
+/* =====================================================================
+   Admin dashboard and edit-book pages. Everything is scoped under
+   .admin-page; the shared nav/footer come from common.css.
+   ===================================================================== */
+
+.admin-page {
+    --admin-border: #dddddd;
+    --admin-head-bg: #f4f4f4;
+    --admin-add: #2e7d32;
+    --admin-add-hover: #1b5e20;
+}
+
+.admin-page .admin-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 16px;
+    margin-bottom: 20px;
+}
+
+.admin-page .admin-heading .page-title {
+    margin-bottom: 0;
+}
+
+.admin-page .admin-welcome {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.admin-page .muted {
+    color: var(--color-text-muted);
+}
+
+.admin-page .admin-back {
+    margin: 0 0 8px;
+}
+
+.admin-page .admin-back a {
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.admin-page .admin-back a:hover {
+    text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------
+   Section cards
+   --------------------------------------------------------------------- */
+
+.admin-page .admin-content {
+    background: var(--color-surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin: 0 0 24px;
+    min-width: 0;
+}
+
+.admin-page .admin-content h2 {
+    margin: 0 0 16px;
+    font-size: 1.4rem;
+    color: var(--color-primary);
+}
+
+/* ---------------------------------------------------------------------
+   Stats row
+   --------------------------------------------------------------------- */
+
+.admin-page .admin-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.admin-page .stat-card {
+    background: var(--color-surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border-left: 5px solid var(--color-primary);
+    padding: 14px 18px;
+}
+
+.admin-page .stat-card:nth-child(even) {
+    border-left-color: var(--color-accent);
+}
+
+.admin-page .stat-label {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+}
+
+.admin-page .stat-value {
+    margin: 4px 0 0;
+    font-size: clamp(1.2rem, 2.4vw, 1.6rem);
+    font-weight: 700;
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+}
+
+/* Revenue: one figure per order currency, one per line. */
+.admin-page .stat-figure {
+    display: block;
+}
+
+/* ---------------------------------------------------------------------
+   Book form
+   --------------------------------------------------------------------- */
+
+.admin-page .book-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 20px;
+}
+
+/* Keep fields top-aligned when a neighbour in the same row has a hint or error. */
+.admin-page .book-form .form-field {
+    align-content: start;
+}
+
+.admin-page .form-control {
+    border: 1px solid #000;
+    border-radius: var(--radius);
+}
+
+.admin-page .form-control[aria-invalid="true"] {
+    border: 2px solid var(--color-accent);
+}
+
+.admin-page .form-hint {
+    margin: 0;
+}
+
+.admin-page .field-error {
+    margin: 0;
+}
+
+.admin-page .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.admin-page .admin-submit {
+    border-radius: var(--radius);
+    background-color: var(--admin-add);
+}
+
+.admin-page .admin-submit:hover {
+    background-color: var(--admin-add-hover);
+}
+
+.admin-page .admin-submit:disabled {
+    background-color: #9e9e9e;
+}
+
+.admin-page .form-actions .btn-secondary {
+    border-radius: var(--radius);
+}
+
+/* ---------------------------------------------------------------------
+   Tables
+   --------------------------------------------------------------------- */
+
+/* position: relative keeps the absolutely positioned .sr-only labels inside the scroller. */
+.admin-page .table-scroll {
+    position: relative;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-sm);
+}
+
+.admin-page .table-scroll:focus-visible {
+    outline: 3px solid var(--color-focus-ink);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 5px var(--color-focus);
+}
+
+.admin-page .admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+}
+
+.admin-page .books-table {
+    min-width: 600px;
+}
+
+.admin-page .orders-table {
+    min-width: 640px;
+}
+
+.admin-page .admin-table th,
+.admin-page .admin-table td {
+    padding: 12px 14px;
+    text-align: left;
+    vertical-align: middle;
+    border: 1px solid var(--admin-border);
+}
+
+.admin-page .admin-table thead th {
+    background-color: var(--admin-head-bg);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.admin-page .admin-table tbody tr:hover {
+    background-color: #fafafa;
+}
+
+.admin-page .admin-table tbody th {
+    font-weight: 700;
+}
+
+.admin-page .admin-table .num {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.admin-page .title-cell {
+    min-width: 180px;
+}
+
+/* A fixed cover column: without min-width the auto table layout squeezes it
+   (and the max-width: 100% image) to a few pixels on narrow screens. */
+.admin-page .cover-cell {
+    width: 72px;
+    min-width: 72px;
+}
+
+.admin-page .cover-cell img {
+    display: block;
+    max-width: none;
+    width: 48px;
+    height: 68px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--color-surface-muted);
+}
+
+.admin-page .customer-name {
+    display: block;
+    font-weight: 700;
+}
+
+.admin-page .customer-email {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    overflow-wrap: break-word;
+}
+
+.admin-page .orders-table time {
+    white-space: nowrap;
+}
+
+.admin-page .time-of-day {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+/* Row actions: dark Edit link, red Delete button. */
+.admin-page .row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.admin-page .row-actions form {
+    margin: 0;
+}
+
+.admin-page .action-edit,
+.admin-page .action-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 8px 16px;
+    border: 1px solid #000;
+    border-radius: var(--radius);
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.admin-page .action-edit {
+    background-color: var(--color-chrome);
+}
+
+.admin-page .action-edit:visited,
+.admin-page .action-edit:hover {
+    color: #fff;
+}
+
+.admin-page .action-edit:hover {
+    background-color: #555;
+}
+
+.admin-page .action-delete {
+    background-color: var(--color-accent);
+}
+
+.admin-page .action-delete:hover {
+    background-color: var(--color-accent-hover);
+}
+
+.admin-page .action-delete:disabled {
+    background-color: #9e9e9e;
+    cursor: not-allowed;
+}
+
+.admin-page .empty-state {
+    padding: 24px 12px;
+}
+
+/* ---------------------------------------------------------------------
+   Edit page
+   --------------------------------------------------------------------- */
+
+.admin-page .edit-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0 24px;
+    align-items: start;
+}
+
+.admin-page .cover-preview {
+    text-align: center;
+}
+
+.admin-page .cover-preview img {
+    display: block;
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+    aspect-ratio: 11 / 16;
+    object-fit: cover;
+    margin: 0 auto 16px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    background: var(--color-surface-muted);
+}
+
+.admin-page .book-meta {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 12px;
+    margin: 0;
+    text-align: left;
+}
+
+.admin-page .book-meta dt {
+    font-weight: 700;
+    color: var(--color-text-muted);
+}
+
+.admin-page .book-meta dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------------
+   Responsive
+   --------------------------------------------------------------------- */
+
+@media (min-width: 768px) {
+    .admin-page .book-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-page .form-field-wide {
+        grid-column: 1 / -1;
+    }
+
+    .admin-page .admin-content {
+        padding: 24px 28px;
+    }
+}
+
+@media (min-width: 960px) {
+    .admin-page .edit-layout {
+        grid-template-columns: 280px minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 959px) {
+    .admin-page .admin-table th,
+    .admin-page .admin-table td {
+        padding: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-page .admin-content {
+        padding: 16px 14px;
+    }
+
+    .admin-page .admin-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .admin-page .stat-card {
+        padding: 12px 14px;
+    }
+
+    .admin-page .stat-value {
+        font-size: 1.25rem;
+    }
+
+    .admin-page .form-actions .btn {
+        flex: 1 1 auto;
+    }
+}

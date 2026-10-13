@@ -1,0 +1,373 @@
+/* =====================================================================
+   Cart page (cart.php). Layout shell, buttons and forms come from
+   common.css; everything here is scoped under .cart-page.
+   ===================================================================== */
+
+.cart-page .cart-title {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.cart-page .cart-layout {
+    display: grid;
+    gap: 24px;
+    align-items: start;
+}
+
+/* ---------------------------------------------------------------------
+   Items table (white card, grey header, bold total row)
+   --------------------------------------------------------------------- */
+
+.cart-page .cart-card {
+    padding: 20px;
+    min-width: 0;
+}
+
+.cart-page .cart-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.cart-page .cart-table th,
+.cart-page .cart-table td {
+    padding: 12px 10px;
+    text-align: center;
+    vertical-align: middle;
+    border-bottom: 1px solid #ddd;
+}
+
+.cart-page .cart-table thead th {
+    background-color: var(--color-bg);
+    font-weight: 700;
+}
+
+.cart-page .cart-table thead th:first-child {
+    text-align: left;
+}
+
+.cart-page .cart-table .cart-book {
+    text-align: left;
+}
+
+.cart-page .cart-book-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.cart-page .cart-book-link:hover .cart-book-title,
+.cart-page .cart-book-link:focus-visible .cart-book-title {
+    color: var(--color-primary);
+    text-decoration: underline;
+}
+
+.cart-page .cart-cover {
+    flex: 0 0 auto;
+    width: 56px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+    background-color: var(--color-surface-muted);
+}
+
+.cart-page .cart-cover-placeholder {
+    display: block;
+    background: linear-gradient(135deg, var(--color-primary), #2f6168);
+}
+
+.cart-page .cart-book-text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.cart-page .cart-book-title {
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.cart-page .cart-book-author {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    overflow-wrap: anywhere;
+}
+
+.cart-page .cart-price,
+.cart-page .cart-line-total {
+    white-space: nowrap;
+}
+
+.cart-page .cart-line-total {
+    font-weight: 700;
+}
+
+.cart-page .qty-form {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.cart-page .qty-input {
+    width: 4.5rem;
+    min-height: 40px;
+    padding: 6px 8px;
+    text-align: center;
+}
+
+.cart-page .cart-remove form {
+    margin: 0;
+}
+
+.cart-page .btn-small {
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 0.95rem;
+}
+
+.cart-page .total-row th,
+.cart-page .total-row td {
+    border-bottom: none;
+    padding-top: 18px;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.cart-page .total-row th {
+    text-align: right;
+}
+
+.cart-page .total-row-amount {
+    white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------
+   Order summary
+   --------------------------------------------------------------------- */
+
+.cart-page .cart-summary {
+    padding: 20px;
+    width: 100%;
+    max-width: 420px;
+    justify-self: end;
+}
+
+.cart-page .cart-summary-title {
+    font-size: 1.3rem;
+    margin: 0 0 12px;
+}
+
+.cart-page .summary-list {
+    margin: 0 0 20px;
+}
+
+.cart-page .summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #ddd;
+}
+
+.cart-page .summary-row dt,
+.cart-page .summary-row dd {
+    margin: 0;
+}
+
+.cart-page .summary-total {
+    border-bottom: none;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.cart-page .checkout-form {
+    margin: 0;
+}
+
+.cart-page .btn-pay,
+.cart-page .cart-empty .btn {
+    background-color: var(--color-accent);
+}
+
+.cart-page .btn-pay:hover,
+.cart-page .cart-empty .btn:hover {
+    background-color: var(--color-accent-hover);
+}
+
+.cart-page .checkout-form .btn-pay {
+    width: 100%;
+    font-size: 1.05rem;
+}
+
+.cart-page .btn-pay:disabled {
+    background-color: #9e9e9e;
+    cursor: progress;
+}
+
+/* Loading state: common.js marks data-once buttons aria-disabled on submit. */
+.cart-page .btn-pay .label-busy,
+.cart-page .btn-pay[aria-disabled="true"] .label-idle {
+    display: none;
+}
+
+.cart-page .btn-pay[aria-disabled="true"] .label-busy {
+    display: inline;
+}
+
+.cart-page .secure-note {
+    margin: 14px 0 10px;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    text-align: center;
+}
+
+.cart-page .continue-link {
+    display: block;
+    text-align: center;
+    font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------
+   Empty state
+   --------------------------------------------------------------------- */
+
+.cart-page .cart-empty {
+    max-width: 560px;
+    margin: 0 auto;
+}
+
+.cart-page .cart-empty h2 {
+    margin: 0 0 8px;
+    color: var(--color-text);
+}
+
+/* ---------------------------------------------------------------------
+   Responsive
+   --------------------------------------------------------------------- */
+
+@media (min-width: 1100px) {
+    .cart-page .cart-layout {
+        grid-template-columns: minmax(0, 1fr) 320px;
+    }
+
+    .cart-page .cart-summary {
+        position: sticky;
+        top: 20px;
+        max-width: none;
+    }
+}
+
+/* Below tablet-landscape widths each cart line becomes a stacked card. */
+@media (max-width: 860px) {
+    .cart-page .cart-card {
+        padding: 8px 16px;
+    }
+
+    .cart-page .cart-table,
+    .cart-page .cart-table tbody,
+    .cart-page .cart-table tfoot,
+    .cart-page .cart-table tr,
+    .cart-page .cart-table td,
+    .cart-page .cart-table th {
+        display: block;
+    }
+
+    .cart-page .cart-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+    }
+
+    .cart-page .cart-table tbody tr {
+        padding: 14px 0;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .cart-page .cart-table td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 0;
+        border-bottom: none;
+        text-align: right;
+    }
+
+    .cart-page .cart-table td[data-label]::before {
+        content: attr(data-label);
+        font-weight: 700;
+        color: var(--color-text-muted);
+        text-align: left;
+    }
+
+    .cart-page .cart-table .cart-book {
+        display: block;
+        padding-bottom: 10px;
+    }
+
+    .cart-page .cart-table .cart-remove {
+        justify-content: flex-end;
+    }
+
+    .cart-page .cart-table .total-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        padding: 14px 0 8px;
+    }
+
+    .cart-page .cart-table .total-row th,
+    .cart-page .cart-table .total-row td {
+        padding: 0;
+        text-align: left;
+    }
+
+    .cart-page .cart-table .total-row-spacer {
+        display: none;
+    }
+
+    .cart-page .cart-summary {
+        max-width: none;
+    }
+}
+
+/* Tablet: book on the left, price/quantity/total/remove stacked on the right. */
+@media (min-width: 561px) and (max-width: 860px) {
+    .cart-page .cart-table tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        column-gap: 28px;
+        align-items: center;
+    }
+
+    .cart-page .cart-table .cart-book {
+        grid-row: span 4;
+        padding-bottom: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .cart-page .cart-title {
+        margin-bottom: 18px;
+    }
+
+    .cart-page .qty-form {
+        gap: 6px;
+    }
+
+    .cart-page .qty-input {
+        width: 4rem;
+    }
+
+    .cart-page .cart-summary {
+        padding: 16px;
+    }
+}

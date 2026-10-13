@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    BookWise test suite.
+
+      composer test:unit                  unit tests only (no database needed)
+      DB_PORT=3306 vendor/bin/phpunit     unit + integration + HTTP end-to-end tests
+
+    The "http" testsuite (tests/Http) drives the real pages through `php -S`
+    with a hermetic environment (tests/Support/AppServer.php); run it alone by
+    passing the testsuite option with the value http.
+
+    Integration tests need a MySQL/MariaDB database whose name ends in "_test";
+    every table in it is dropped and recreated. Values below are defaults:
+    real environment variables win (force="false"). The project's .env file
+    is never read by the tests.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         cacheDirectory=".phpunit.cache"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true"
+         beStrictAboutOutputDuringTests="true"
+         displayDetailsOnIncompleteTests="true"
+         displayDetailsOnSkippedTests="true"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerErrors="true"
+         displayDetailsOnTestsThatTriggerNotices="true"
+         displayDetailsOnTestsThatTriggerWarnings="true">
+    <testsuites>
+        <testsuite name="unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
+        <testsuite name="http">
+            <directory>tests/Http</directory>
+        </testsuite>
+    </testsuites>
+
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+
+    <php>
+        <ini name="error_reporting" value="-1"/>
+        <ini name="memory_limit" value="512M"/>
+        <env name="APP_ENV" value="testing" force="false"/>
+        <env name="APP_DEBUG" value="true" force="false"/>
+        <env name="APP_URL" value="http://127.0.0.1:8100" force="false"/>
+        <env name="APP_TIMEZONE" value="Asia/Riyadh" force="false"/>
+        <env name="DB_HOST" value="127.0.0.1" force="false"/>
+        <env name="DB_PORT" value="3306" force="false"/>
+        <env name="DB_NAME" value="bookwise_test" force="false"/>
+        <env name="DB_USER" value="root" force="false"/>
+        <env name="DB_PASS" value="" force="false"/>
+        <env name="STRIPE_SECRET_KEY" value="sk_test_phpunit" force="false"/>
+        <env name="STRIPE_WEBHOOK_SECRET" value="whsec_phpunit" force="false"/>
+        <env name="STRIPE_CURRENCY" value="sar" force="false"/>
+        <env name="MAIL_DRIVER" value="null" force="false"/>
+        <!-- Keep test log output out of storage/logs. -->
+        <env name="LOG_DIR" value=".phpunit.cache/logs" force="false"/>
+    </php>
+</phpunit>

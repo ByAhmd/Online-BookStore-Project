@@ -1,0 +1,159 @@
+/* =====================================================================
+   Payment result pages (success_pay.php, cancel_pay.php), scoped under
+   .checkout-result. Uses the cart's white card + red/black buttons.
+   ===================================================================== */
+
+.checkout-result .result-card {
+    max-width: 720px;
+    margin: 20px auto;
+    padding: 36px 32px;
+    text-align: center;
+}
+
+.checkout-result .result-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    margin-bottom: 12px;
+    border-radius: 50%;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+.checkout-result .result-paid .result-icon {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+.checkout-result .result-processing .result-icon {
+    background: var(--color-info-bg);
+    color: var(--color-info-text);
+}
+
+.checkout-result .result-unpaid .result-icon,
+.checkout-result .result-canceled .result-icon,
+.checkout-result .result-error .result-icon,
+.checkout-result .result-invalid .result-icon {
+    background: var(--color-error-bg);
+    color: var(--color-accent);
+}
+
+.checkout-result .result-eyebrow {
+    margin: 0 0 4px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.checkout-result .result-title {
+    font-size: 1.9rem;
+    line-height: 1.25;
+    margin: 0 0 12px;
+}
+
+.checkout-result .result-lead {
+    font-size: 1.1rem;
+    margin: 0 0 12px;
+}
+
+.checkout-result .result-note {
+    color: var(--color-text-muted);
+    margin: 0 0 12px;
+}
+
+.checkout-result .result-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.checkout-result .btn-pay {
+    background-color: var(--color-accent);
+}
+
+.checkout-result .btn-pay:hover {
+    background-color: var(--color-accent-hover);
+}
+
+/* ---------------------------------------------------------------------
+   Paid order summary
+   --------------------------------------------------------------------- */
+
+.checkout-result .order-table {
+    width: 100%;
+    margin: 24px 0 16px;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.checkout-result .order-table th,
+.checkout-result .order-table td {
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+    vertical-align: top;
+}
+
+.checkout-result .order-table thead th {
+    background-color: var(--color-bg);
+}
+
+.checkout-result .order-table .num {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.checkout-result .order-book {
+    display: block;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.checkout-result .order-unit {
+    display: block;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+}
+
+.checkout-result .order-table tfoot th,
+.checkout-result .order-table tfoot td {
+    border-bottom: none;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.checkout-result .order-table tfoot th {
+    text-align: right;
+}
+
+@media (max-width: 600px) {
+    .checkout-result .result-card {
+        margin: 8px auto;
+        padding: 28px 16px;
+    }
+
+    .checkout-result .result-title {
+        font-size: 1.45rem;
+    }
+
+    .checkout-result .result-lead {
+        font-size: 1rem;
+    }
+
+    .checkout-result .order-table th,
+    .checkout-result .order-table td {
+        padding: 8px 6px;
+    }
+
+    .checkout-result .result-actions .btn {
+        flex: 1 1 100%;
+    }
+}

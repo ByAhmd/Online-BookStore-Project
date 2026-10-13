@@ -1,0 +1,10 @@
+# Static analysis for the BookWise foundation (composer analyse).
+# Covers the shared foundation (src), CLI scripts (bin) and the pages (public).
+parameters:
+    level: 6
+    paths:
+        - src
+        - bin
+        - public
+    bootstrapFiles:
+        - tests/Support/phpstan-bootstrap.php

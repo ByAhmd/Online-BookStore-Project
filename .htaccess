@@ -1,0 +1,6 @@
+# Defence in depth for setups where the project folder itself is inside the
+# web root (e.g. copied into XAMPP's htdocs). Only public/ may be served;
+# .env, storage/logs, vendor/, src/, bin/, database/ and tests/ must not be.
+# The recommended setup points the document root (or an Alias) at public/.
+Require all denied
+Options -Indexes

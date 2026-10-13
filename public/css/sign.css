@@ -1,0 +1,286 @@
+/* =====================================================================
+   Authentication pages (index.php, reset_form.php): the grey card on the
+   book background, the Sign Up / Login switcher and the form controls.
+   Everything is scoped under body.auth-page; common.css owns the shell.
+   ===================================================================== */
+
+.auth-page [hidden] {
+    display: none !important;
+}
+
+.auth-page .site-main {
+    display: flex;
+    flex-direction: column;
+    background: #d9d9d9 url("../imges/backgroound.jpg") center / cover no-repeat;
+}
+
+.auth-page .auth-shell {
+    flex: 1 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 16px;
+}
+
+.auth-page .auth-card {
+    width: 100%;
+    max-width: 480px;
+    padding: 30px;
+    background-color: #d4d4d4;
+    border: 1px solid #cccccc;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    color: #3c3939;
+    overflow-wrap: break-word;
+}
+
+.auth-page .auth-title {
+    margin: 8px 0 18px;
+    font-size: 1.875rem;
+    line-height: 1.2;
+}
+
+/* Headings focused by script show the shared two-tone ring (common.css) only
+   after keyboard interaction. */
+.auth-page .auth-title:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+}
+
+.auth-page .auth-intro {
+    margin: -6px 0 18px;
+    font-size: 1.05rem;
+}
+
+/* ---------------------------------------------------------------------
+   Sign Up / Login switcher (styled like the original nav pill buttons)
+   --------------------------------------------------------------------- */
+
+.auth-page .auth-switch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.auth-page .auth-switch .pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 8px 22px;
+    font-size: 1.15rem;
+}
+
+.auth-page .auth-switch [aria-current="page"],
+.auth-page .auth-switch [aria-expanded="true"] {
+    box-shadow: 0 0 0 3px #d4d4d4, 0 0 0 5px #19393e;
+}
+
+/* Focused current pill: the shared ring moves outside the "current" ring. */
+.auth-page .auth-switch [aria-current="page"]:focus-visible,
+.auth-page .auth-switch [aria-expanded="true"]:focus-visible {
+    outline-offset: 7px;
+    box-shadow: 0 0 0 3px #d4d4d4, 0 0 0 5px #19393e, 0 0 0 10px var(--color-focus);
+}
+
+/* ---------------------------------------------------------------------
+   Form controls
+   --------------------------------------------------------------------- */
+
+.auth-page .auth-form .form-field {
+    margin-bottom: 18px;
+}
+
+.auth-page .auth-form label {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.auth-page .auth-input {
+    display: block;
+    width: 100%;
+    min-height: 50px;
+    padding: 10px 12px;
+    border: none;
+    border-bottom: 2px solid #19393e;
+    border-radius: 4px 4px 0 0;
+    background-color: #e6e6e6;
+    color: #1f1f1f;
+    font: inherit;
+    font-size: 1.05rem;
+    transition: background-color 0.2s;
+}
+
+.auth-page .auth-input:hover {
+    background-color: #ededed;
+}
+
+.auth-page .auth-input:focus {
+    background-color: #ffffff;
+    border-bottom-color: #0f5132;
+}
+
+.auth-page .auth-input[aria-invalid="true"] {
+    border-bottom-color: #c62828;
+    background-color: #fbeaea;
+}
+
+.auth-page .auth-input[readonly] {
+    background-color: #dcdcdc;
+}
+
+.auth-page .form-hint,
+.auth-page .field-error {
+    margin: 0;
+}
+
+.auth-page .form-hint {
+    color: #464242;
+}
+
+.auth-page .field-error {
+    color: #8a1c1c;
+}
+
+.auth-page .password-wrapper {
+    position: relative;
+}
+
+.auth-page .password-wrapper .auth-input {
+    padding-right: 56px;
+}
+
+.auth-page .password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    transform: translateY(-50%);
+}
+
+.auth-page .password-toggle:hover {
+    background-color: rgba(25, 57, 62, 0.1);
+}
+
+.auth-page .password-toggle img {
+    display: block;
+    width: 26px;
+    height: auto;
+}
+
+/* Strike through the eye while the password is visible. */
+.auth-page .password-toggle[aria-pressed="true"]::after {
+    content: "";
+    position: absolute;
+    width: 2px;
+    height: 30px;
+    border-radius: 1px;
+    background-color: #3c3939;
+    transform: rotate(45deg);
+}
+
+.auth-page .auth-forgot {
+    margin: -6px 0 6px;
+    font-size: 1.05rem;
+}
+
+.auth-page .auth-submit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 50px;
+    margin-top: 14px;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    background-color: #19393e;
+    color: #ffffff;
+    font: inherit;
+    font-size: 1.3rem;
+    font-weight: 700;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.3s, background-color 0.3s;
+}
+
+.auth-page .auth-submit:visited,
+.auth-page .auth-submit:hover {
+    color: #ffffff;
+}
+
+.auth-page .auth-submit:hover {
+    background-color: #006400;
+    transform: translateY(-3px);
+}
+
+.auth-page .auth-submit:disabled {
+    background-color: #5f7375;
+    cursor: progress;
+    transform: none;
+}
+
+.auth-page .auth-link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: #0b3d91;
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.auth-page .auth-link:hover {
+    color: #062a66;
+    text-decoration: none;
+}
+
+.auth-page .auth-alt {
+    margin: 22px 0 0;
+    text-align: center;
+}
+
+.auth-page .auth-actions {
+    display: grid;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+/* ---------------------------------------------------------------------
+   Responsive
+   --------------------------------------------------------------------- */
+
+@media (max-width: 480px) {
+    .auth-page .auth-shell {
+        padding: 24px 16px;
+    }
+
+    .auth-page .auth-card {
+        padding: 22px 16px;
+    }
+
+    .auth-page .auth-title {
+        font-size: 1.6rem;
+    }
+
+    .auth-page .auth-switch .pill {
+        flex: 1 1 0;
+        font-size: 1.05rem;
+    }
+
+    .auth-page .auth-submit {
+        font-size: 1.15rem;
+    }
+}

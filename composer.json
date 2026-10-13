@@ -1,0 +1,64 @@
+{
+    "name": "bookwise/online-bookstore",
+    "description": "BookWise: an online bookstore built with plain PHP, MySQL/MariaDB and Stripe Checkout.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-fileinfo": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
+        "sendgrid/sendgrid": "^8.1",
+        "stripe/stripe-php": "^16.3"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^10.5"
+    },
+    "suggest": {
+        "ext-gd": "Re-encodes uploaded profile pictures to strip metadata and embedded payloads."
+    },
+    "autoload": {
+        "files": [
+            "src/env.php",
+            "src/helpers.php",
+            "src/db.php",
+            "src/csrf.php",
+            "src/validation.php",
+            "src/auth.php",
+            "src/mailer.php",
+            "src/password_reset.php",
+            "src/users.php",
+            "src/books.php",
+            "src/cart.php",
+            "src/orders.php",
+            "src/uploads.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "BookWise\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "lint": "@php bin/lint.php",
+        "analyse": "phpstan analyse --memory-limit=512M",
+        "test": "phpunit",
+        "test:unit": "phpunit --testsuite unit",
+        "check": [
+            "@lint",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "platform": {
+            "php": "8.1.0"
+        },
+        "sort-packages": true,
+        "optimize-autoloader": true
+    }
+}
