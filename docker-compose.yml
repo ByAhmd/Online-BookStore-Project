@@ -1,0 +1,71 @@
+# Local BookWise store with simulated payments (see docs/DEPLOYMENT.md):
+#
+#     docker compose up --build        then open http://localhost:8080
+#     docker compose down              stop (add -v to also delete the data)
+#
+# Everything here is for LOCAL USE ONLY: the passwords below are public
+# placeholders. Do not reuse them anywhere else.
+
+name: bookwise
+
+services:
+  db:
+    image: mysql:8.0
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: bookwise
+      MYSQL_USER: bookwise
+      MYSQL_PASSWORD: bookwise-local-only
+      MYSQL_ROOT_PASSWORD: root-local-only
+    healthcheck:
+      # 127.0.0.1 forces TCP, so the check only passes once initialisation is complete.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - db-data:/var/lib/mysql
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: bookwise:local
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      APP_URL: http://localhost:8080
+      APP_ENV: local
+      APP_DEBUG: "false"
+      # Demo mode: banner, built-in payment simulator at /stripe-sim
+      # (no Stripe account needed, no real payments).
+      APP_DEMO: "true"
+      REQUIRE_EMAIL_VERIFICATION: "false"
+      # Emails (including password-reset links) are written to
+      # storage/logs/mail.log inside the container instead of being sent:
+      #     docker compose exec app cat storage/logs/mail.log
+      MAIL_DRIVER: log
+      STRIPE_CURRENCY: sar
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: bookwise
+      DB_USER: bookwise
+      DB_PASS: bookwise-local-only
+      # Local-only administrator, created on start-up. Do NOT reuse these
+      # values on a public site; change them here before the first start.
+      BOOKWISE_ADMIN_EMAIL: admin@bookwise.test
+      BOOKWISE_ADMIN_PASSWORD: local-admin-password
+    volumes:
+      # Uploaded images (public/uploads) survive container rebuilds.
+      - uploads:/var/www/bookwise/public/uploads
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads:

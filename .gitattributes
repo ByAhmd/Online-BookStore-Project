@@ -1,0 +1,21 @@
+# Line endings for files that run inside Linux containers. The repository is
+# also edited on Windows (core.autocrlf=true); these must keep LF endings in
+# every checkout, or bash and Apache inside the image would see stray CRs.
+*.sh                 text eol=lf
+docker/*             text eol=lf
+docker/**            text eol=lf
+Dockerfile           text eol=lf
+.dockerignore        text eol=lf
+docker-compose.yml   text eol=lf
+render.yaml          text eol=lf
+
+# Binary files: never convert line endings or show text diffs.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
