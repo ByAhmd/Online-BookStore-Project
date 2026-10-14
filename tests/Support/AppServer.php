@@ -20,9 +20,9 @@ use RuntimeException;
  * (plus LOG_DIR and STRIPE_API_BASE) is set explicitly, and load_env() only
  * fills variables that are missing, so the developer's .env never leaks into
  * the tests; see http_router.php for the empty-value case on Windows.
- * Sessions (session.save_path) and the app.log, mail.log and php-error.log
- * files (LOG_DIR) live in a private temporary directory that is removed when
- * the server stops.
+ * Sessions (session.save_path), the app.log, mail.log and php-error.log
+ * files (LOG_DIR) and the payment simulator's state (PAYMENT_SIMULATOR_STORE)
+ * live in a private temporary directory that is removed when the server stops.
  *
  * Uploaded avatars are the one exception: the application stores them under
  * public/uploads/avatars of the checkout. HttpTestCase deletes the ones its
@@ -224,6 +224,10 @@ final class AppServer
             'REQUIRE_EMAIL_VERIFICATION' => 'false',
             'DB_SSL_CA' => '',
             'DB_SSL_CA_PEM' => '',
+            // Stripe calls go to the recorded mock (STRIPE_API_BASE); tests of the
+            // in-process simulator switch it on with AccountHelpers::configureServer().
+            'PAYMENT_SIMULATOR' => 'false',
+            'PAYMENT_SIMULATOR_STORE' => dirname($logDirectory) . DIRECTORY_SEPARATOR . 'payment-simulator.json',
         ];
 
         $missing = array_diff(self::exampleKeys(), array_keys($configuration));

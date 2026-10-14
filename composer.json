@@ -37,6 +37,7 @@
             "src/books.php",
             "src/cart.php",
             "src/orders.php",
+            "src/payment_simulator.php",
             "src/uploads.php"
         ]
     },

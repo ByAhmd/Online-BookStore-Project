@@ -144,6 +144,10 @@ function app_config(bool $refresh = false): array
             'currency' => strtolower((string) env('STRIPE_CURRENCY', 'sar')),
             // Test-only override used by the automated test suite's local Stripe mock.
             'api_base' => env('STRIPE_API_BASE'),
+            // Built-in payment simulator instead of Stripe (src/payment_simulator.php); on by default in demo mode.
+            'simulator' => env_bool('PAYMENT_SIMULATOR', env_bool('APP_DEMO', false)),
+            // The simulator's state file; relative paths start at the project root.
+            'simulator_store' => env('PAYMENT_SIMULATOR_STORE', 'storage/payment-simulator.json'),
         ],
         'mail' => [
             // log, smtp, database (demo inbox, needs APP_DEMO=true) or null.

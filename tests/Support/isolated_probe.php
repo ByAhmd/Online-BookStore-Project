@@ -35,6 +35,34 @@ try {
         case 'stripe_client':
             $result = ['api_base' => stripe_client()->getApiBase()];
             break;
+        case 'simulated_payment':
+            // A Checkout Session created (twice, with one idempotency key), paid on
+            // the hosted page and refunded, all through stripe_client().
+            $stripe = stripe_client();
+            $params = [
+                'mode' => 'payment',
+                'line_items' => [['price_data' => ['currency' => 'sar', 'product_data' => ['name' => 'Probe Book'], 'unit_amount' => 1250], 'quantity' => 2]],
+                'client_reference_id' => '7',
+                'success_url' => absolute_url('success_pay.php') . '?session_id={CHECKOUT_SESSION_ID}',
+                'cancel_url' => absolute_url('cancel_pay.php?order=7'),
+                'expires_at' => time() + 3600,
+            ];
+            $session = $stripe->checkout->sessions->create($params, ['idempotency_key' => 'probe-order-7']);
+            $replayed = $stripe->checkout->sessions->create($params, ['idempotency_key' => 'probe-order-7']);
+            $action = payment_simulator_checkout_action((string) $session->id, 'pay');
+            $paid = $stripe->checkout->sessions->retrieve((string) $session->id);
+            $refund = $stripe->refunds->create(['payment_intent' => (string) $paid->payment_intent]);
+            $result = [
+                'api_base' => $stripe->getApiBase(),
+                'http_client' => get_class(\Stripe\ApiRequestor::httpClient()),
+                'url' => $session->url,
+                'amount_total' => $session->amount_total,
+                'replayed' => $replayed->id === $session->id,
+                'redirect' => $action['redirect'] ?? null,
+                'payment_status' => $paid->payment_status,
+                'refund' => [$refund->status, $refund->amount],
+            ];
+            break;
         case 'start_checkout':
             $result = ['redirect' => start_checkout($args['user'])];
             break;

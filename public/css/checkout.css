@@ -1,6 +1,7 @@
 /* =====================================================================
-   Payment result pages (success_pay.php, cancel_pay.php), scoped under
-   .checkout-result. Uses the cart's white card + red/black buttons.
+   Payment pages (success_pay.php, cancel_pay.php and the payment
+   simulator's pay.php), scoped under .checkout-result. Uses the cart's
+   white card + red/black buttons.
    ===================================================================== */
 
 .checkout-result .result-card {
@@ -146,6 +147,66 @@
 
 .checkout-result .order-table tfoot th {
     text-align: end;
+}
+
+/* ---------------------------------------------------------------------
+   Simulated payment page (pay.php)
+   --------------------------------------------------------------------- */
+
+.checkout-result .pay-notice {
+    max-width: 560px;
+    margin: 0 auto 8px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-info-bg);
+    color: var(--color-info-text);
+}
+
+.checkout-result .pay-form {
+    margin-top: 8px;
+    text-align: start;
+}
+
+.checkout-result .pay-choose {
+    margin: 0 0 12px;
+    font-weight: 700;
+}
+
+.checkout-result .pay-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.checkout-result .pay-option {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.checkout-result .pay-option .btn {
+    width: 100%;
+}
+
+.checkout-result .pay-hint {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+}
+
+.checkout-result .btn-outline {
+    background-color: transparent;
+    color: var(--color-text);
+    box-shadow: inset 0 0 0 2px var(--color-text);
+}
+
+.checkout-result .btn-outline:visited {
+    color: var(--color-text);
+}
+
+.checkout-result .btn-outline:hover {
+    background-color: var(--color-surface-muted);
+    color: var(--color-text);
 }
 
 @media (max-width: 600px) {

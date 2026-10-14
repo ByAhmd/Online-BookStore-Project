@@ -66,6 +66,9 @@
         <env name="STRIPE_CURRENCY" value="sar" force="false"/>
         <env name="MAIL_DRIVER" value="null" force="false"/>
         <env name="APP_DEMO" value="0" force="false"/>
+        <!-- Stripe calls go to the recorded local mock (StripeMock), not the in-process simulator. -->
+        <env name="PAYMENT_SIMULATOR" value="0" force="false"/>
+        <env name="PAYMENT_SIMULATOR_STORE" value=".phpunit.cache/payment-simulator.json" force="false"/>
         <env name="APP_DEFAULT_LOCALE" value="en" force="false"/>
         <env name="REQUIRE_EMAIL_VERIFICATION" value="0" force="false"/>
         <!-- Keep test log output out of storage/logs. -->

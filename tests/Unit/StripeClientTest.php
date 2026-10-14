@@ -81,4 +81,58 @@ final class StripeClientTest extends TestCase
 
         self::assertSame(['ok' => true, 'api_base' => 'http://127.0.0.1:12345'], $run['result']);
     }
+
+    public function testALiveKeyIsRefusedInDemoModeEvenInProduction(): void
+    {
+        // A public demo must never take real money, also when the simulator is switched off.
+        $run = IsolatedPhp::run('stripe_client', [], [
+            'APP_ENV' => 'production', 'APP_DEMO' => 'true', 'PAYMENT_SIMULATOR' => 'false', 'STRIPE_SECRET_KEY' => 'sk_live_not_a_real_key',
+        ]);
+
+        self::assertSame('CheckoutException', $run['result']['exception'] ?? null);
+        self::assertStringContainsString('Refusing to use a non-test Stripe key in demo mode', $run['files']['storage/logs/app.log'] ?? '');
+        self::assertStringNotContainsString('sk_live_not_a_real_key', $run['files']['storage/logs/app.log'] ?? '');
+
+        $test = IsolatedPhp::run('stripe_client', [], [
+            'APP_ENV' => 'production', 'APP_DEMO' => 'true', 'PAYMENT_SIMULATOR' => 'false', 'STRIPE_SECRET_KEY' => 'sk_test_phpunit', 'STRIPE_API_BASE' => null,
+        ]);
+        self::assertSame(['ok' => true, 'api_base' => 'https://api.stripe.com'], $test['result'], 'A demo may use Stripe test mode');
+    }
+
+    public function testTheSimulatorNeedsNoStripeKeyAndAnswersInProcess(): void
+    {
+        $run = IsolatedPhp::run('simulated_payment', [], [
+            'PAYMENT_SIMULATOR' => 'true', 'STRIPE_SECRET_KEY' => null, 'STRIPE_API_BASE' => 'http://127.0.0.1:9', 'APP_URL' => 'https://demo.example.com',
+        ]);
+
+        $result = $run['result'];
+        self::assertTrue($result['ok'], (string) json_encode($result));
+        self::assertSame(PAYMENT_SIMULATOR_API_BASE, $result['api_base'], 'STRIPE_API_BASE is ignored: nothing goes over the network');
+        self::assertSame(\PaymentSimulatorHttpClient::class, $result['http_client']);
+        self::assertMatchesRegularExpression('#^https://demo\.example\.com/pay\.php\?session=cs_test_[a-f0-9]{24}$#', $result['url']);
+        self::assertSame(2500, $result['amount_total']);
+        self::assertTrue($result['replayed'], 'A repeated idempotency key returns the first session');
+        self::assertMatchesRegularExpression('#^https://demo\.example\.com/success_pay\.php\?session_id=cs_test_[a-f0-9]{24}$#', $result['redirect']);
+        self::assertSame('paid', $result['payment_status']);
+        self::assertSame(['succeeded', 2500], $result['refund']);
+
+        // The state lives in PAYMENT_SIMULATOR_STORE (relative to the project root) and holds no secrets.
+        $state = json_decode($run['files']['storage/payment-simulator.json'] ?? '', true);
+        self::assertIsArray($state);
+        self::assertCount(1, $state['sessions']);
+        self::assertCount(1, $state['refunds']);
+        self::assertArrayNotHasKey('storage/logs/app.log', $run['files'], 'Nothing is logged');
+    }
+
+    public function testDemoModeTurnsTheSimulatorOnUnlessItIsSwitchedOff(): void
+    {
+        $demo = IsolatedPhp::run('stripe_client', [], ['APP_DEMO' => 'true', 'PAYMENT_SIMULATOR' => null, 'STRIPE_SECRET_KEY' => null]);
+        self::assertSame(['ok' => true, 'api_base' => PAYMENT_SIMULATOR_API_BASE], $demo['result']);
+
+        $off = IsolatedPhp::run('stripe_client', [], ['APP_DEMO' => 'true', 'PAYMENT_SIMULATOR' => 'false', 'STRIPE_SECRET_KEY' => null]);
+        self::assertSame('Online payments are not configured yet. Please try again later.', $off['result']['message'] ?? null);
+
+        $local = IsolatedPhp::run('stripe_client', [], ['APP_DEMO' => 'false', 'PAYMENT_SIMULATOR' => 'true', 'STRIPE_SECRET_KEY' => null]);
+        self::assertSame(['ok' => true, 'api_base' => PAYMENT_SIMULATOR_API_BASE], $local['result'], 'Also without demo mode, e.g. for local development');
+    }
 }

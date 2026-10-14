@@ -337,6 +337,38 @@ return [
         ],
     ],
 
+    // The payment simulator's checkout page (pay.php), shown instead of Stripe's payment page.
+    'pay' => [
+        'title' => 'Simulated payment',
+        'eyebrow' => 'Payment simulator',
+        'heading' => 'Pay :store',
+        'notice' => "This is the store's payment simulator, not a real payment page. No money is taken and no card details are needed.",
+        'items_caption' => 'Books in this payment',
+        'col_book' => 'Book',
+        'col_qty' => 'Qty',
+        'col_total' => 'Total',
+        'each' => ':price each',
+        'total' => 'Total due',
+        'choose' => 'Choose how the payment ends:',
+        'pay' => 'Pay :amount',
+        'pay_hint' => 'The payment succeeds.',
+        'decline' => 'Decline',
+        'decline_hint' => 'The card is declined. Nothing is charged, and you can try again.',
+        'slow' => 'Slow payment',
+        'slow_hint' => 'The bank takes a few seconds to confirm the payment, as with some payment methods.',
+        'cancel' => 'Cancel',
+        'cancel_hint' => 'Return to the store without paying.',
+        'declined' => 'Your card was declined (simulated). You have not been charged. Try again, or cancel to return to the store.',
+        'invalid_action' => 'Please choose one of the payment buttons.',
+        'unknown' => 'This payment link is not valid.',
+        'closed' => [
+            'paid' => 'This payment is complete.',
+            'processing' => 'This payment is being confirmed.',
+            'expired' => 'This payment session has ended. You have not been charged.',
+        ],
+        'back_to_store' => 'Return to the store',
+    ],
+
     'about' => [
         'title' => 'About Us',
         'project_heading' => 'Welcome to Our Project',

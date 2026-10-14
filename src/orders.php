@@ -53,6 +53,13 @@ const NON_TWO_DECIMAL_CURRENCIES = [
     'bhd', 'jod', 'kwd', 'omr', 'tnd',
 ];
 
+/**
+ * The Stripe client for this request. With the payment simulator on
+ * (PAYMENT_SIMULATOR, by default in demo mode) every request is answered
+ * in-process by src/payment_simulator.php and no Stripe account is needed.
+ * Otherwise it talks to Stripe with STRIPE_SECRET_KEY (or to STRIPE_API_BASE,
+ * the test suites' local mock).
+ */
 function stripe_client(): \Stripe\StripeClient
 {
     static $client = null;
@@ -60,20 +67,34 @@ function stripe_client(): \Stripe\StripeClient
         return $client;
     }
 
-    $key = config('stripe.secret_key');
-    if (!is_string($key) || $key === '') {
-        throw new CheckoutException(t('shop.checkout.not_configured'));
-    }
-    // Guard against accidentally charging real cards from a development setup:
-    // outside production only test-mode secret or restricted keys are accepted.
-    if (config('app.env') !== 'production' && !preg_match('/^(sk|rk)_test_/', $key)) {
-        app_log('error', 'Refusing to use a non-test Stripe key outside APP_ENV=production');
-        throw new CheckoutException(t('shop.checkout.not_available'));
-    }
     $currency = (string) config('stripe.currency');
     if (!preg_match('/^[a-z]{3}$/D', $currency) || in_array($currency, NON_TWO_DECIMAL_CURRENCIES, true)) {
         app_log('error', 'STRIPE_CURRENCY must be a three-letter code of a two-decimal currency', ['currency' => $currency]);
         throw new CheckoutException(t('shop.checkout.misconfigured'));
+    }
+
+    if (payment_simulator_enabled()) {
+        // stripe-php sends every request through one global HTTP client: the
+        // simulator's answers them in-process, so nothing reaches the network.
+        \Stripe\ApiRequestor::setHttpClient(new PaymentSimulatorHttpClient());
+        return $client = new \Stripe\StripeClient(['api_key' => PAYMENT_SIMULATOR_API_KEY, 'api_base' => PAYMENT_SIMULATOR_API_BASE]);
+    }
+
+    $key = config('stripe.secret_key');
+    if (!is_string($key) || $key === '') {
+        throw new CheckoutException(t('shop.checkout.not_configured'));
+    }
+    // Guard against accidentally charging real cards from a development setup
+    // or a public demo: there only test-mode secret or restricted keys are accepted.
+    if (!preg_match('/^(sk|rk)_test_/', $key)) {
+        if (config('app.env') !== 'production') {
+            app_log('error', 'Refusing to use a non-test Stripe key outside APP_ENV=production');
+            throw new CheckoutException(t('shop.checkout.not_available'));
+        }
+        if (config('app.demo')) {
+            app_log('error', 'Refusing to use a non-test Stripe key in demo mode (APP_DEMO=true)');
+            throw new CheckoutException(t('shop.checkout.not_available'));
+        }
     }
 
     $options = ['api_key' => $key];
@@ -81,18 +102,7 @@ function stripe_client(): \Stripe\StripeClient
     if (is_string($apiBase) && $apiBase !== '') {
         $options['api_base'] = rtrim($apiBase, '/');
     }
-    if (config('app.demo')) {
-        // The demo's payment simulator runs on the same web server and needs a
-        // free worker of its own: give up quickly, without retries, so a busy
-        // server cannot tie up every worker waiting on itself.
-        $http = new \Stripe\HttpClient\CurlClient();
-        $http->setTimeout(10);
-        $http->setConnectTimeout(2);
-        \Stripe\ApiRequestor::setHttpClient($http);
-        \Stripe\Stripe::setMaxNetworkRetries(0);
-    } else {
-        \Stripe\Stripe::setMaxNetworkRetries(2);
-    }
+    \Stripe\Stripe::setMaxNetworkRetries(2);
 
     return $client = new \Stripe\StripeClient($options);
 }
@@ -730,9 +740,10 @@ function refund_order(int $orderId): string
             $refundId = $e->getStripeCode() === 'charge_already_refunded'
                 ? confirmed_full_refund($paymentIntent, (int) $order['amount_minor'], (string) $order['currency'])
                 : null;
-            if ($refundId === null && config('app.demo') && $e->getStripeCode() === 'resource_missing') {
-                // Demo: the payment simulator forgets its payments when the server
-                // restarts. No real money was ever taken, so record the refund here.
+            if ($refundId === null && (config('app.demo') || payment_simulator_enabled()) && $e->getStripeCode() === 'resource_missing') {
+                // Demo or simulated payments: the payment simulator forgets payments when its
+                // state file is lost (a new container, an ephemeral disk) or after 30 days.
+                // No real money was ever taken, so record the refund here.
                 $refundId = 're_demo_' . bin2hex(random_bytes(12));
                 app_log('info', 'Demo: the simulator no longer knows this payment; refund recorded locally', ['order_id' => $orderId]);
             }

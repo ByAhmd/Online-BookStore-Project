@@ -44,7 +44,7 @@ final class CheckoutTest extends CheckoutTestCase
         self::assertSame('sar', $session['currency']);
         self::assertSame((string) $order['id'], $session['client_reference_id']);
         self::assertSame($user['Eaddress'], $session['customer_email']);
-        self::assertSame(2, $session['line_items_count']);
+        self::assertCount(2, $session['simulator']['line_items']);
         self::assertSame([self::ESABELLA => 3, self::BIOLOGY => 1], $this->cartQuantities((int) $user['id']), 'The cart is kept until payment is confirmed');
     }
 

@@ -22,7 +22,7 @@ final class IsolatedPhp
     private const CONFIG_KEYS = [
         'APP_NAME', 'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_TIMEZONE', 'APP_DEMO',
         'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS',
-        'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_CURRENCY', 'STRIPE_API_BASE',
+        'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_CURRENCY', 'STRIPE_API_BASE', 'PAYMENT_SIMULATOR',
         'MAIL_DRIVER', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME',
         'SMTP_HOST', 'SMTP_PORT', 'SMTP_USERNAME', 'SMTP_PASSWORD', 'SMTP_ENCRYPTION', 'SMTP_TIMEOUT',
     ];
@@ -59,6 +59,10 @@ final class IsolatedPhp
         if (!array_key_exists('LOG_DIR', $env)) {
             // Relative to the child's throwaway BASE_PATH, so logs land in $base/storage/logs.
             $environment['LOG_DIR'] = 'storage/logs';
+        }
+        if (!array_key_exists('PAYMENT_SIMULATOR_STORE', $env)) {
+            // Likewise for the payment simulator's state: $base/storage/payment-simulator.json.
+            $environment['PAYMENT_SIMULATOR_STORE'] = 'storage/payment-simulator.json';
         }
         $environment['BOOKWISE_PROBE_BASE'] = $base;
         $environment['BOOKWISE_PROBE_ACTION'] = $action;
