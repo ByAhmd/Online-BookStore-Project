@@ -9,6 +9,16 @@ const COVER_MAX_BYTES = 5 * 1024 * 1024;
 const COVER_DIR = 'uploads/covers';
 /** Largest accepted width and height of an uploaded image, in pixels. */
 const UPLOAD_MAX_DIMENSION = 4000;
+/** Width in pixels of the small WebP copy of a cover (book cards, the cart, admin tables). */
+const COVER_THUMB_WIDTH = 190;
+/**
+ * Widest WebP copy of an uploaded cover. Covers are displayed at most 260
+ * pixels wide, so this is sharp on 3x screens, and it bounds the memory GD
+ * needs to encode the copy of a large upload.
+ */
+const COVER_COPY_MAX_WIDTH = 780;
+/** Quality (0-100) of the WebP copies; 80 keeps covers sharp at a fraction of the PNG size. */
+const WEBP_QUALITY = 80;
 
 final class UploadException extends RuntimeException
 {
@@ -28,14 +38,24 @@ function store_avatar_upload(array $file): string
 
 /**
  * Validates an uploaded book cover and stores it under public/uploads/covers
- * with a random name (see store_image_upload()).
+ * with a random name (see store_image_upload()), next to its WebP copies
+ * (see create_webp_variants()).
  *
  * @param array<string, mixed> $file An entry from $_FILES
  * @return string Path relative to public/, e.g. "uploads/covers/ab12....jpg"
  */
 function store_cover_upload(array $file): string
 {
-    return store_image_upload($file, COVER_DIR, COVER_MAX_BYTES, 'admin.upload');
+    $path = store_image_upload($file, COVER_DIR, COVER_MAX_BYTES, 'admin.upload');
+    try {
+        create_webp_variants(base_path('public/' . $path), false, COVER_COPY_MAX_WIDTH);
+    } catch (Throwable $e) {
+        // The copies only make pages lighter: pages show the stored cover
+        // itself when a copy is missing, so the upload still succeeds.
+        delete_webp_variants(base_path('public/' . $path));
+        app_log('warning', 'Could not create the WebP copies of an uploaded cover: ' . $e->getMessage(), ['cover' => $path]);
+    }
+    return $path;
 }
 
 /**
@@ -144,13 +164,7 @@ function reencode_image(string $source, string $target, string $mime): bool
     if (!extension_loaded('gd')) {
         return false;
     }
-    $image = match ($mime) {
-        'image/jpeg' => @imagecreatefromjpeg($source),
-        'image/png' => @imagecreatefrompng($source),
-        'image/gif' => @imagecreatefromgif($source),
-        'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($source) : false,
-        default => false,
-    };
+    $image = decode_image($source, $mime);
     if ($image === false) {
         return false;
     }
@@ -163,7 +177,207 @@ function reencode_image(string $source, string $target, string $mime): bool
         'image/png' => imagepng($image, $target, 6),
         'image/gif' => imagegif($image, $target),
         'image/webp' => imagewebp($image, $target, 88),
+        default => false,
     };
+}
+
+/**
+ * Decodes a JPEG, PNG, GIF or WebP file with GD; false when GD cannot.
+ */
+function decode_image(string $file, string $mime): GdImage|false
+{
+    return match ($mime) {
+        'image/jpeg' => @imagecreatefromjpeg($file),
+        'image/png' => @imagecreatefrompng($file),
+        'image/gif' => @imagecreatefromgif($file),
+        'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($file) : false,
+        default => false,
+    };
+}
+
+/* ---------------------------------------------------------------------
+ * WebP copies of covers
+ * ------------------------------------------------------------------- */
+
+/**
+ * Where the WebP copies of an image go, next to it: "imges/a/b.png" has the
+ * full-size copy "imges/a/b.webp" and the thumbnail "imges/a/b-w190.webp"
+ * (COVER_THUMB_WIDTH pixels wide). Works on absolute paths and on paths
+ * relative to public/. A WebP image is its own full-size copy.
+ *
+ * @return array{full: string, thumb: string}
+ */
+function webp_variant_paths(string $image): array
+{
+    $stem = (string) preg_replace('/\.[A-Za-z0-9]+$/D', '', $image);
+    return [
+        'full' => preg_match('/\.webp$/iD', $image) === 1 ? $image : $stem . '.webp',
+        'thumb' => $stem . '-w' . COVER_THUMB_WIDTH . '.webp',
+    ];
+}
+
+/**
+ * Writes the WebP copies of a JPEG, PNG, GIF or WebP file (an absolute path,
+ * see webp_variant_paths()): the full-size copy, scaled down to $maxWidth
+ * when given, and, for images wider than COVER_THUMB_WIDTH, the thumbnail.
+ * A copy at least as new as the image is kept unless $force is set. Returns
+ * the files written; none when this PHP's GD cannot write WebP.
+ *
+ * @return list<string>
+ */
+function create_webp_variants(string $image, bool $force = false, ?int $maxWidth = null): array
+{
+    if (!function_exists('imagewebp')) {
+        return [];
+    }
+    $info = @getimagesize($image);
+    if ($info === false) {
+        throw new RuntimeException('Not a readable image: ' . $image);
+    }
+    [$width, $height] = $info;
+    $paths = webp_variant_paths($image);
+
+    // Target file => width.
+    $targets = [];
+    if ($paths['full'] !== $image) {
+        $targets[$paths['full']] = max(1, min($width, $maxWidth ?? $width));
+    }
+    if ($width > COVER_THUMB_WIDTH) {
+        $targets[$paths['thumb']] = COVER_THUMB_WIDTH;
+    }
+    if (!$force) {
+        clearstatcache(true, $image);
+        $modified = filemtime($image);
+        $targets = array_filter($targets, static function (string $target) use ($modified): bool {
+            clearstatcache(true, $target);
+            return !is_file($target) || filemtime($target) < $modified;
+        }, ARRAY_FILTER_USE_KEY);
+    }
+    if ($targets === []) {
+        return [];
+    }
+
+    $source = decode_image($image, $info['mime']);
+    if ($source === false) {
+        throw new RuntimeException('GD cannot decode ' . $image);
+    }
+    // WebP needs true colour; transparency (PNG, GIF, WebP) is kept.
+    imagepalettetotruecolor($source);
+    imagealphablending($source, false);
+    imagesavealpha($source, true);
+
+    $written = [];
+    foreach ($targets as $target => $targetWidth) {
+        $copy = $targetWidth === $width
+            ? $source
+            : resize_image($source, $targetWidth, max(1, (int) round($height * $targetWidth / $width)));
+        write_webp($copy, $target);
+        $written[] = $target;
+    }
+    return $written;
+}
+
+/**
+ * A resampled copy of a true-colour image, with its transparency.
+ */
+function resize_image(GdImage $image, int $width, int $height): GdImage
+{
+    if ($width < 1 || $height < 1) {
+        throw new InvalidArgumentException("Invalid image size {$width}×{$height}");
+    }
+    $copy = imagecreatetruecolor($width, $height);
+    $transparent = $copy !== false ? imagecolorallocatealpha($copy, 0, 0, 0, 127) : false;
+    if ($copy === false || $transparent === false) {
+        throw new RuntimeException("Could not create a {$width}×{$height} image");
+    }
+    imagealphablending($copy, false);
+    imagesavealpha($copy, true);
+    imagefill($copy, 0, 0, $transparent);
+    imagecopyresampled($copy, $image, 0, 0, 0, 0, $width, $height, imagesx($image), imagesy($image));
+    return $copy;
+}
+
+/**
+ * Encodes an image as WebP at $target. It is written to a temporary file in
+ * the same directory first, so a half-written copy is never served.
+ */
+function write_webp(GdImage $image, string $target): void
+{
+    $temporary = $target . '.' . bin2hex(random_bytes(4)) . '.tmp';
+    try {
+        if (!imagewebp($image, $temporary, WEBP_QUALITY) || !rename($temporary, $target)) {
+            throw new RuntimeException('Could not write ' . $target);
+        }
+    } finally {
+        if (is_file($temporary)) {
+            @unlink($temporary);
+        }
+    }
+    @chmod($target, 0644);
+}
+
+/**
+ * Deletes the WebP copies of an image (never the image itself).
+ */
+function delete_webp_variants(string $image): void
+{
+    foreach (webp_variant_paths($image) as $variant) {
+        if ($variant !== $image && is_file($variant)) {
+            @unlink($variant);
+        }
+    }
+}
+
+/**
+ * srcset of the WebP copies of a local image (a path relative to public/, as
+ * image_url() returns it), smallest first, e.g.
+ * "imges/a/b-w190.webp?v=… 190w, imges/a/b.webp?v=… 380w". Empty for
+ * external URLs and for images without a full-size copy.
+ */
+function webp_srcset(string $src): string
+{
+    if ($src === '' || str_contains($src, '..') || preg_match('#^[a-z][a-z0-9+.\-]*:#i', $src) === 1) {
+        return '';
+    }
+    $variants = webp_variant_paths($src);
+    $full = base_path('public/' . $variants['full']);
+    $size = is_file($full) ? @getimagesize($full) : false;
+    if ($size === false) {
+        return '';
+    }
+    $candidates = [];
+    if ($size[0] > COVER_THUMB_WIDTH && is_file(base_path('public/' . $variants['thumb']))) {
+        $candidates[] = asset($variants['thumb']) . ' ' . COVER_THUMB_WIDTH . 'w';
+    }
+    $candidates[] = asset($variants['full']) . ' ' . $size[0] . 'w';
+    return implode(', ', $candidates);
+}
+
+/**
+ * A cover as <picture>: its WebP copies for browsers that support WebP, and
+ * $src itself as the <img> for the others. $src comes from image_url(): a
+ * path in public/, or an https URL (shown as it is). $sizes is the width the
+ * cover is displayed at, from which the browser picks a copy, e.g.
+ * "(max-width: 720px) 220px, 260px". $attributes are the other attributes of
+ * the <img> (alt defaults to ""), e.g. ['width' => 260, 'loading' => 'lazy'].
+ *
+ * @param array<string, string|int> $attributes
+ */
+function cover_picture(string $src, string $sizes, array $attributes = []): string
+{
+    $html = '<picture>';
+    $srcset = webp_srcset($src);
+    if ($srcset !== '') {
+        $html .= '<source type="image/webp" srcset="' . e($srcset) . '" sizes="' . e($sizes) . '">';
+    }
+    $html .= '<img src="' . e(asset($src)) . '"';
+    foreach ($attributes + ['alt' => ''] as $name => $value) {
+        if (preg_match('/^[a-z][a-z-]*$/D', $name) !== 1) {
+            throw new InvalidArgumentException('Invalid attribute name: ' . $name);
+        }
+        $html .= ' ' . $name . '="' . e($value) . '"';
+    }
+    return $html . '></picture>';
 }
 
 /**
@@ -185,12 +399,16 @@ function delete_uploaded_avatar(?string $path): void
 }
 
 /**
- * Deletes a previously uploaded book cover. Only files inside uploads/covers
- * with generated names are ever removed (never the catalog's imges/ files).
+ * Deletes a previously uploaded book cover and its WebP copies. Only files
+ * inside uploads/covers with generated names are ever removed (never the
+ * catalog's imges/ files).
  */
 function delete_uploaded_cover(?string $path): void
 {
     delete_generated_upload($path, COVER_DIR);
+    if ($path !== null && is_generated_upload($path, COVER_DIR)) {
+        delete_webp_variants(base_path('public/' . $path));
+    }
 }
 
 function delete_generated_upload(?string $path, string $dir): void

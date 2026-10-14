@@ -14,6 +14,9 @@
     display: flex;
     flex-direction: column;
     background: #d9d9d9 url("../imges/backgroound.jpg") center / cover no-repeat;
+    /* The WebP copy where supported (bin/optimize-images.php); other browsers
+       ignore this declaration and keep the JPEG. */
+    background-image: image-set(url("../imges/backgroound.webp") type("image/webp"), url("../imges/backgroound.jpg") type("image/jpeg"));
 }
 
 .auth-page .auth-shell {

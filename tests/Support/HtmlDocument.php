@@ -236,21 +236,45 @@ final class HtmlDocument
     }
 
     /**
-     * Same-origin scripts, stylesheets and images referenced by the page.
+     * Same-origin scripts, stylesheets and images referenced by the page,
+     * including every candidate of srcset attributes (<picture> sources).
      *
      * @return list<string>
      */
     public function localAssets(): array
     {
-        $assets = [];
+        $urls = [];
         foreach ($this->elements('//script[@src] | //link[@rel="stylesheet"][@href] | //img[@src]') as $element) {
-            $url = $element->hasAttribute('src') ? $element->getAttribute('src') : $element->getAttribute('href');
+            $urls[] = $element->hasAttribute('src') ? $element->getAttribute('src') : $element->getAttribute('href');
+        }
+        foreach ($this->elements('//*[@srcset]') as $element) {
+            array_push($urls, ...self::srcsetUrls($element->getAttribute('srcset')));
+        }
+        $assets = [];
+        foreach ($urls as $url) {
             if ($url === '' || preg_match('#^(?:[a-z][a-z0-9+.\-]*:|//)#i', $url)) {
                 continue; // external (https://fonts...) or data: URLs
             }
             $assets[] = $url;
         }
         return array_values(array_unique($assets));
+    }
+
+    /**
+     * URLs of a srcset value ("a.webp 190w, b.webp 380w" => [a.webp, b.webp]).
+     *
+     * @return list<string>
+     */
+    public static function srcsetUrls(string $srcset): array
+    {
+        $urls = [];
+        foreach (explode(',', $srcset) as $candidate) {
+            $url = (string) strtok(trim($candidate), " \t\n");
+            if ($url !== '') {
+                $urls[] = $url;
+            }
+        }
+        return $urls;
     }
 
     /**

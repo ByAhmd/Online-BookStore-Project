@@ -190,7 +190,7 @@ final class CatalogTest extends HttpTestCase
         self::assertSame('Showing 1–24 of 55 books in all genres.', $data['summary']);
 
         $first = $data['books'][0];
-        self::assertSame(['id', 'title', 'author', 'genre', 'price', 'price_display', 'cover_image', 'url', 'stock_status', 'availability'], array_keys($first));
+        self::assertSame(['id', 'title', 'author', 'genre', 'price', 'price_display', 'cover_image', 'cover_webp_srcset', 'url', 'stock_status', 'availability'], array_keys($first));
         $book = find_book($first['id']);
         self::assertNotNull($book);
         self::assertSame($book['title'], $first['title']);
@@ -203,6 +203,8 @@ final class CatalogTest extends HttpTestCase
             self::assertIsInt($row['id']);
             self::assertMatchesRegularExpression('/^\d+\.\d{2}$/', $row['price']);
             self::assertMatchesRegularExpression('#^(imges|uploads)/#', $row['cover_image']);
+            // The seed covers have WebP copies: a thumbnail and the full size.
+            self::assertMatchesRegularExpression('#^imges/\S+-w190\.webp\?v=\d+ 190w, imges/\S+\.webp\?v=\d+ 380w$#', $row['cover_webp_srcset']);
             self::assertContains($row['stock_status'], ['in', 'low', 'out']);
         }
 

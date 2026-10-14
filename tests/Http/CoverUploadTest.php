@@ -12,8 +12,9 @@ use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 
 /**
  * Book cover uploads on the admin add and edit forms: stored re-encoded in
- * public/uploads/covers, rejected when not an image, and the old file is
- * removed when a cover is replaced or its book deleted.
+ * public/uploads/covers with WebP copies, rejected when not an image, and the
+ * old file and its copies are removed when a cover is replaced or its book
+ * deleted.
  */
 #[RequiresPhpExtension('gd')]
 final class CoverUploadTest extends HttpTestCase
@@ -53,10 +54,10 @@ final class CoverUploadTest extends HttpTestCase
         return array_values(array_map('basename', glob(self::COVERS . '/*') ?: []));
     }
 
-    private function imageFile(string $type = 'png', string $extra = ''): string
+    private function imageFile(string $type = 'png', string $extra = '', int $width = 40, int $height = 64): string
     {
-        $image = imagecreatetruecolor(40, 64);
-        imagefilledrectangle($image, 0, 0, 39, 63, (int) imagecolorallocate($image, 198, 40, 40));
+        $image = imagecreatetruecolor($width, $height);
+        imagefilledrectangle($image, 0, 0, $width - 1, $height - 1, (int) imagecolorallocate($image, 198, 40, 40));
         ob_start();
         $type === 'jpeg' ? imagejpeg($image) : imagepng($image);
         return $this->tempFile((string) ob_get_clean() . $extra);
@@ -116,6 +117,49 @@ final class CoverUploadTest extends HttpTestCase
     private static function cover(int $bookId): string
     {
         return (string) db_value('SELECT cover_image FROM books WHERE id = ?', [$bookId]);
+    }
+
+    /**
+     * The WebP copies of an uploaded cover (paths relative to public/) that exist.
+     *
+     * @return list<string>
+     */
+    private static function webpCopies(string $cover): array
+    {
+        $copies = array_filter(webp_variant_paths($cover), static fn (string $copy): bool => $copy !== $cover && is_file(BASE_PATH . '/public/' . $copy));
+        return array_values($copies);
+    }
+
+    public function testAnUploadedCoverGetsWebpCopiesThatThePagesOffer(): void
+    {
+        if (!function_exists('imagewebp')) {
+            self::markTestSkipped('GD cannot write WebP here.');
+        }
+        [$admin] = $this->signedInAdmin();
+        $this->assertRedirect($this->addBook($admin, self::book(), self::upload($this->imageFile('png', '', 400, 640))), 'admin_dashboard.php');
+        $id = (int) db_value('SELECT id FROM books WHERE title = ?', ['Uploaded Cover Book']);
+        $cover = self::cover($id);
+        $stem = substr($cover, 0, -strlen('.png'));
+        self::assertSame([$stem . '.webp', $stem . '-w190.webp'], self::webpCopies($cover));
+
+        [$customer] = $this->signedInCustomer();
+        $page = $this->bookPage($customer, $id);
+        $document = $this->assertHtmlPage($page); // the copies load
+        $picture = $document->first('//div[' . HtmlDocument::hasClass('book-cover') . ']/picture');
+        self::assertNotNull($picture);
+        // Uploads keep plain URLs (random names; cached briefly).
+        self::assertSame($stem . '-w190.webp 190w, ' . $stem . '.webp 400w', $document->first('./source', $picture)?->getAttribute('srcset'));
+        self::assertSame($cover, $document->first('.//img', $picture)?->getAttribute('src'));
+        $served = $this->client()->get($stem . '-w190.webp');
+        $this->assertStatus(200, $served);
+        self::assertStringStartsWith('image/webp', $served->contentType());
+
+        // The JSON for explore.js carries the same sources.
+        $json = $customer->get('fetch_books.php?q=' . rawurlencode('Uploaded Cover Book'))->json();
+        self::assertSame([[$cover, $stem . '-w190.webp 190w, ' . $stem . '.webp 400w']], array_map(
+            static fn (array $book): array => [$book['cover_image'], $book['cover_webp_srcset']],
+            $json['books']
+        ));
     }
 
     public function testABookWhoseCoverFileWasLostCanStillBeEdited(): void
@@ -248,14 +292,25 @@ final class CoverUploadTest extends HttpTestCase
         $id = (int) db_value('SELECT id FROM books WHERE title = ?', ['Uploaded Cover Book']);
         $first = self::cover($id);
         self::assertFileExists(BASE_PATH . '/public/' . $first);
+        $firstCopies = self::webpCopies($first);
+        if (function_exists('imagewebp')) {
+            self::assertCount(1, $firstCopies, 'A 40-pixel cover gets the full-size WebP copy only');
+        }
 
         // A new upload on the edit page replaces the file.
-        $response = $this->editBook($admin, $id, [], self::upload($this->imageFile('jpeg'), 'new.jpg', 'image/jpeg'));
+        $response = $this->editBook($admin, $id, [], self::upload($this->imageFile('jpeg', '', 400, 640), 'new.jpg', 'image/jpeg'));
         $this->assertRedirect($response, 'admin_dashboard.php#manage-books');
         $second = self::cover($id);
         self::assertNotSame($first, $second);
         self::assertFileDoesNotExist(BASE_PATH . '/public/' . $first, 'The replaced upload is deleted');
+        foreach ($firstCopies as $copy) {
+            self::assertFileDoesNotExist(BASE_PATH . '/public/' . $copy, 'and so are its WebP copies');
+        }
         self::assertFileExists(BASE_PATH . '/public/' . $second);
+        $secondCopies = self::webpCopies($second);
+        if (function_exists('imagewebp')) {
+            self::assertCount(2, $secondCopies);
+        }
 
         // Saving without a new file keeps the current upload.
         $this->assertRedirect($this->editBook($admin, $id, ['title' => 'Renamed Cover Book']), 'admin_dashboard.php#manage-books');
@@ -272,7 +327,12 @@ final class CoverUploadTest extends HttpTestCase
         $this->assertRedirect($this->editBook($admin, $id, ['cover_image' => 'imges/All_section/dark.png']), 'admin_dashboard.php#manage-books');
         self::assertSame('imges/All_section/dark.png', self::cover($id));
         self::assertFileDoesNotExist(BASE_PATH . '/public/' . $second);
+        foreach ($secondCopies as $copy) {
+            self::assertFileDoesNotExist(BASE_PATH . '/public/' . $copy);
+        }
         self::assertFileExists(BASE_PATH . '/public/imges/All_section/dark.png', 'Catalog images are never deleted');
+        self::assertFileExists(BASE_PATH . '/public/imges/All_section/dark.webp', 'nor their WebP copies');
+        self::assertSame($this->coversBefore, self::coverFiles());
     }
 
     public function testDeletingABookRemovesItsUploadedCoverUnlessAnotherBookUsesIt(): void
@@ -281,6 +341,7 @@ final class CoverUploadTest extends HttpTestCase
         $this->assertRedirect($this->addBook($admin, self::book(), self::upload($this->imageFile())), 'admin_dashboard.php');
         $first = (int) db_value('SELECT id FROM books WHERE title = ?', ['Uploaded Cover Book']);
         $cover = self::cover($first);
+        $copies = self::webpCopies($cover);
         // A second book points at the same uploaded file through the path field.
         $this->assertRedirect($this->addBook($admin, self::book(['title' => 'Shared Cover Book', 'cover_image' => $cover]), []), 'admin_dashboard.php');
         $second = (int) db_value('SELECT id FROM books WHERE title = ?', ['Shared Cover Book']);
@@ -288,9 +349,10 @@ final class CoverUploadTest extends HttpTestCase
         $delete = static fn (int $id): HttpResponse => $admin->submitForm($admin->get('admin_dashboard.php'), 'admin_dashboard.php', [], ['action' => 'delete_book', 'id' => (string) $id]);
         $this->assertRedirect($delete($first), 'admin_dashboard.php#manage-books');
         self::assertFileExists(BASE_PATH . '/public/' . $cover, 'Still used by the other book');
+        self::assertSame($copies, self::webpCopies($cover), 'with its WebP copies');
 
         $this->assertRedirect($delete($second), 'admin_dashboard.php#manage-books');
         self::assertFileDoesNotExist(BASE_PATH . '/public/' . $cover);
-        self::assertSame($this->coversBefore, self::coverFiles());
+        self::assertSame($this->coversBefore, self::coverFiles(), 'The WebP copies are deleted too');
     }
 }

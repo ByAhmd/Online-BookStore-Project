@@ -51,7 +51,7 @@ page_header(t('shop.cart.title'), ['cart.css']);
                                 <td class="cart-book" role="cell">
                                     <a class="cart-book-link" href="Selected.php?id=<?= (int) $line['book_id'] ?>">
 <?php if ($cover !== ''): ?>
-                                        <img class="cart-cover" src="<?= e($cover) ?>" alt="" width="56" height="80" loading="lazy">
+                                        <?= cover_picture($cover, '56px', ['class' => 'cart-cover', 'width' => 56, 'height' => 80, 'loading' => 'lazy']) ?>
 <?php else: ?>
                                         <span class="cart-cover cart-cover-placeholder" aria-hidden="true"></span>
 <?php endif; ?>

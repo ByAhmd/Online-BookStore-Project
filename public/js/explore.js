@@ -26,6 +26,8 @@
     const TYPING_DELAY_MS = 400;
     const COVER_FALLBACK = 'imges/header.jpeg';
     const STOCK_STATUSES = ['in', 'low', 'out'];
+    // Displayed cover width, for choosing a WebP copy (EXPLORE_COVER_SIZES in Explore_Page.php).
+    const coverSizes = root.dataset.coverSizes || '50vw';
 
     // data-i18n-error-title="..." -> text('error-title')
     const text = (name) => {
@@ -81,7 +83,17 @@
         const link = el('a', 'explore-card-link');
         link.href = bookHref(book);
 
+        // Same markup as cover_picture() in src/uploads.php: the WebP copies
+        // first, the stored cover as the fallback <img>.
         const cover = el('div', 'explore-card-cover');
+        const picture = document.createElement('picture');
+        if (typeof book.cover_webp_srcset === 'string' && book.cover_webp_srcset !== '') {
+            const source = document.createElement('source');
+            source.type = 'image/webp';
+            source.srcset = book.cover_webp_srcset;
+            source.sizes = coverSizes;
+            picture.appendChild(source);
+        }
         const img = document.createElement('img');
         img.src = typeof book.cover_image === 'string' && book.cover_image !== '' ? book.cover_image : COVER_FALLBACK;
         img.alt = '';
@@ -89,7 +101,8 @@
         img.height = 605;
         img.loading = 'lazy';
         img.decoding = 'async';
-        cover.appendChild(img);
+        picture.appendChild(img);
+        cover.appendChild(picture);
 
         // Catalog text may be right-to-left (e.g. Arabic titles).
         const title = el('h3', 'explore-card-title', String(book.title ?? ''));

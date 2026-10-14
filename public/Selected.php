@@ -174,7 +174,13 @@ page_header($title, ['selected.css']);
             <article class="book-panel" id="book" aria-labelledby="book-title">
                 <div class="book-cover">
 <?php if ($coverUrl !== ''): ?>
-                    <img class="pic" src="<?= e($coverUrl) ?>" alt="<?= e(t('shop.book.cover_alt', ['title' => $title])) ?>" width="260" height="414">
+                    <?= cover_picture($coverUrl, '(max-width: 720px) 220px, 260px', [
+                        'class' => 'pic',
+                        'alt' => t('shop.book.cover_alt', ['title' => $title]),
+                        'width' => 260,
+                        'height' => 414,
+                        'fetchpriority' => 'high', // the largest image of the page
+                    ]) ?>
 <?php else: ?>
                     <div class="pic cover-placeholder" role="img" aria-label="<?= e(t('shop.book.no_cover')) ?>"><span aria-hidden="true">&#128214;</span></div>
 <?php endif; ?>
@@ -363,7 +369,7 @@ page_header($title, ['selected.css']);
                     <li class="book-item">
                         <a class="book-link" href="Selected.php?id=<?= (int) $similar['id'] ?>">
 <?php if ($similarCover !== ''): ?>
-                            <img class="book-cover" src="<?= e($similarCover) ?>" alt="" width="150" height="239" loading="lazy">
+                            <?= cover_picture($similarCover, '(max-width: 480px) 50vw, 150px', ['class' => 'book-cover', 'width' => 150, 'height' => 239, 'loading' => 'lazy']) ?>
 <?php else: ?>
                             <span class="book-cover cover-placeholder" aria-hidden="true">&#128214;</span>
 <?php endif; ?>

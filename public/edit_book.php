@@ -109,7 +109,7 @@ page_header(t('admin.edit.title'), ['Admin_dashboard.css']);
             <div class="edit-layout">
                 <aside class="admin-content cover-preview" aria-labelledby="cover-preview-title">
                     <h2 id="cover-preview-title"><?= e(t('admin.edit.current_cover')) ?></h2>
-                    <img src="<?= e(image_url($book['cover_image'])) ?>" alt="<?= e(t('admin.edit.cover_alt', ['title' => $book['title']])) ?>" width="220" height="320">
+                    <?= cover_picture(image_url($book['cover_image']), '220px', ['alt' => t('admin.edit.cover_alt', ['title' => $book['title']]), 'width' => 220, 'height' => 320]) ?>
                     <dl class="book-meta">
                         <dt><?= e(t('admin.edit.price')) ?></dt>
                         <dd><?= e(format_money($book['price'])) ?></dd>

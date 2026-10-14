@@ -248,7 +248,7 @@ page_header(t('admin.dashboard.title'), ['Admin_dashboard.css']);
     ?>
                             <tr>
                                 <td class="cover-cell">
-                                    <img src="<?= e(image_url($book['cover_image'])) ?>" alt="" width="48" height="68" loading="lazy">
+                                    <?= cover_picture(image_url($book['cover_image']), '48px', ['width' => 48, 'height' => 68, 'loading' => 'lazy']) ?>
                                 </td>
                                 <th scope="row" class="title-cell"><span dir="auto"><?= e($book['title']) ?></span></th>
                                 <td><span dir="auto"><?= e($book['author']) ?></span></td>

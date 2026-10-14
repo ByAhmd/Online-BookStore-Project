@@ -6,6 +6,8 @@ require __DIR__ . '/../src/bootstrap.php';
 
 // Shown when a cover file is missing: a neutral bookshelf picture.
 const HOME_COVER_FALLBACK = 'imges/header.jpeg';
+// Displayed cover width in the book rows (.home-book in HomeCSS.css).
+const HOME_COVER_SIZES = '(min-width: 500px) 174px, calc(40vw - 26px)';
 
 $customer = current_user();
 $admin = $customer === null ? current_admin() : null;
@@ -33,7 +35,7 @@ $renderCard = static function (array $book, ?int $sold = null, ?float $rating = 
                         <span class="sr-only"><?= e(t('shop.home.edit_book')) ?></span>
 <?php endif; ?>
                         <div class="home-book-cover">
-                            <img src="<?= e(image_url((string) $book['cover_image'], HOME_COVER_FALLBACK)) ?>" alt="" width="380" height="605" loading="lazy" decoding="async">
+                            <?= cover_picture(image_url((string) $book['cover_image'], HOME_COVER_FALLBACK), HOME_COVER_SIZES, ['width' => 380, 'height' => 605, 'loading' => 'lazy', 'decoding' => 'async']) ?>
                         </div>
                         <div class="home-book-body">
                             <h3 class="home-book-title" dir="auto"><?= e($book['title']) ?></h3>

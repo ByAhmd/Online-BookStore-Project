@@ -20,6 +20,10 @@
     background-image:
         linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.55)),
         url("../imges/header.jpeg");
+    /* The WebP copy where supported; other browsers keep the JPEG above. */
+    background-image:
+        linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.55)),
+        image-set(url("../imges/header.webp") type("image/webp"), url("../imges/header.jpeg") type("image/jpeg"));
     background-size: cover;
     background-position: center;
     border-radius: 30px;

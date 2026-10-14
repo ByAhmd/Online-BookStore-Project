@@ -6,6 +6,8 @@ require __DIR__ . '/../src/bootstrap.php';
 
 // Shown when a cover file is missing: a neutral bookshelf picture.
 const EXPLORE_COVER_FALLBACK = 'imges/header.jpeg';
+// Displayed cover width in the grid (.explore-grid in explore.css); explore.js uses it too.
+const EXPLORE_COVER_SIZES = '(min-width: 600px) 240px, 50vw';
 const EXPLORE_QUERY_MAX_LENGTH = 100;
 
 $user = require_user();
@@ -68,7 +70,7 @@ $i18n = [
 
 page_header(t('shop.explore.title'), ['explore.css']);
 ?>
-    <div class="page-container explore-page" data-explore data-genre="<?= e($genre) ?>" data-page="<?= (int) $pagination['page'] ?>"
+    <div class="page-container explore-page" data-explore data-genre="<?= e($genre) ?>" data-page="<?= (int) $pagination['page'] ?>" data-cover-sizes="<?= e(EXPLORE_COVER_SIZES) ?>"
 <?php foreach ($i18n as $name => $text): ?>
         data-i18n-<?= e($name) ?>="<?= e($text) ?>"
 <?php endforeach; ?>
@@ -116,7 +118,7 @@ page_header(t('shop.explore.title'), ['explore.css']);
                     <li class="explore-card">
                         <a class="explore-card-link" href="Selected.php?id=<?= (int) $book['id'] ?>">
                             <div class="explore-card-cover">
-                                <img src="<?= e(image_url((string) $book['cover_image'], EXPLORE_COVER_FALLBACK)) ?>" alt="" width="380" height="605" loading="lazy" decoding="async">
+                                <?= cover_picture(image_url((string) $book['cover_image'], EXPLORE_COVER_FALLBACK), EXPLORE_COVER_SIZES, ['width' => 380, 'height' => 605, 'loading' => 'lazy', 'decoding' => 'async']) ?>
                             </div>
                             <div class="explore-card-body">
                                 <h3 class="explore-card-title" dir="auto"><?= e($book['title']) ?></h3>

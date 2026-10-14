@@ -59,6 +59,13 @@ img {
     max-width: 100%;
 }
 
+/* Covers are <picture> elements (WebP copies with the original as fallback).
+   The wrapper takes no box, so the <img> inside is laid out and styled
+   exactly as a bare <img> (flex and grid items included). */
+picture {
+    display: contents;
+}
+
 a {
     color: var(--color-primary);
 }
