@@ -51,6 +51,7 @@ The guide ends with the [limits of the free demo](#limits-of-the-free-demo), [se
 The store never needs to take real payments for a demo. With the payment simulator on, checkout works without a Stripe account and no money can ever move:
 
 - **Setting:** `PAYMENT_SIMULATOR`. When it is empty or unset, it is on in demo mode (`APP_DEMO=true`) and off otherwise; `true` or `false` overrides that.
+  A real store (`APP_ENV=production` with `APP_DEMO=false`) refuses `PAYMENT_SIMULATOR=true`, because anyone could "pay" for its orders: `pay.php` answers 404, checkout says "Online payments are not available in this environment.", `app.log` explains why, and the container does not start.
 - **In-process:** the application still uses the Stripe library, but every request goes to `src/payment_simulator.php` inside the same PHP request.
   There is no network call, no second server and no special web-server configuration. `php -S`, Apache and alwaysdata all work the same way.
 - **The payment page:** checkout sends the customer to `APP_URL/pay.php?session=cs_test_…`, a normal page of the store in English and Arabic.
@@ -67,11 +68,13 @@ The store never needs to take real payments for a demo. With the payment simulat
   Without the simulator, `pay.php` answers 404.
 - **Everything else works as with Stripe:** the store confirms each payment by retrieving the session, expires abandoned sessions at the next checkout, and refunds paid orders from the admin order page.
   Open sessions expire on their own after one hour.
-- **State:** the simulator keeps its sessions and refunds in one JSON file, `PAYMENT_SIMULATOR_STORE` (default `storage/payment-simulator.json`), which the web server must be able to write.
+- **State:** the simulator keeps its sessions and refunds in one JSON file, `PAYMENT_SIMULATOR_STORE` (default `storage/payment-simulator.json`). The web server must be able to write to its folder.
+  The file is replaced in one step (written to `….tmp` first, under a lock on `….lock`), so a full disk makes the payment fail with an error instead of damaging the file. A file that cannot be read is moved aside to `….unreadable-<date>-<time>` and the simulator starts afresh.
   It holds no card data and no email addresses. Records older than 30 days are dropped.
   If the file is lost, the store records refunds of the forgotten payments by itself (no money moved in the first place).
-- **Live keys:** while the simulator is on, `STRIPE_SECRET_KEY` is not read at all. In demo mode a live key (`sk_live_…`/`rk_live_…`) is refused even with the simulator off.
-- **Webhooks:** the simulator sends none. The store does not need them: it checks the payment when the customer returns.
+- **Stripe settings:** while the simulator is on, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_API_BASE` are not used. `STRIPE_CURRENCY` still sets the store's currency.
+  In demo mode a live key (`sk_live_…`/`rk_live_…`) is refused even with the simulator off.
+- **Webhooks:** the simulator sends none. The store does not need them: it checks the payment when the customer returns. While the simulator is on, `stripe_webhook.php` answers every request with 404 and logs nothing.
 
 ## How the container works
 
@@ -93,7 +96,7 @@ The store never needs to take real payments for a demo. With the payment simulat
 1. **`APP_URL`**: if it is not set, it defaults to `http://localhost:$PORT`. A trailing slash is removed.
    If `BOOKWISE_ADMIN_PASSWORD` is still the local-only placeholder from `docker-compose.yml` (`local-admin-password`) and `APP_URL` is not `localhost`, `127.0.0.1` or `[::1]`, the container stops: anyone could sign in with that password.
 2. **Payments**: it reports whether the payment simulator or Stripe takes the payments. Nothing has to be configured for the simulator.
-   In demo mode a live Stripe key stops the container.
+   In demo mode a live Stripe key stops the container, and so does `PAYMENT_SIMULATOR=true` on a real store (`APP_ENV=production`, the default, with `APP_DEMO=false`).
 3. **Database**: it waits until the database answers, retrying every 3 seconds for up to `DB_WAIT_SECONDS` (default 60).
    Each failed attempt is logged with the driver's reason, for example `Connection refused` or `Access denied`. Passwords are never logged.
    If the database is still unreachable after that time, the container exits with an error.
@@ -115,8 +118,9 @@ The entrypoint never prints passwords, keys or other secrets.
 | | `APP_DEMO=true` (demo) | `APP_DEMO=false` (real store) |
 | --- | --- | --- |
 | Banner | "Demo store …" on every page | none |
-| Payments | the [payment simulator](#the-payment-simulator) (unless `PAYMENT_SIMULATOR=false`) | Stripe Checkout with your own keys (unless `PAYMENT_SIMULATOR=true`) |
+| Payments | the [payment simulator](#the-payment-simulator) (unless `PAYMENT_SIMULATOR=false`) | Stripe Checkout with your own keys. `PAYMENT_SIMULATOR=true` is refused with `APP_ENV=production` and works only outside it, for example with `APP_ENV=local` for development |
 | `pay.php` | the simulated payment page | 404 |
+| `stripe_webhook.php` | 404 while the simulator is on | Stripe's webhooks, checked with `STRIPE_WEBHOOK_SECRET` |
 | `STRIPE_SECRET_KEY` | not needed; a live key stops the container | used as configured |
 | Sample catalog | loaded into an empty database, restocked at every start | only with `BOOKWISE_SEED=true` |
 
@@ -133,9 +137,10 @@ Other methods get `405`. The endpoint starts no session and sends `Cache-Control
 
 - The container output contains Apache's access log, Apache and PHP start-up errors, and the mirrored `app.log` and `php-error.log`.
 - The access log records the path **without the query string**, because password-reset and other tokens travel in URLs. Requests to `/health.php` are not logged.
-- A proxy in front of the container (a hosting platform's HTTPS proxy, or a tunnel such as Tailscale Funnel reaching it through Docker's port mapping) connects from a private address and passes the visitor's address in `X-Forwarded-For`.
-  Apache (`mod_remoteip`) takes the visitor's address from that header only when the connection comes from a private address (10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16).
-  This keeps login throttling per visitor instead of per proxy. The header is ignored on connections from public addresses.
+- A proxy in front of the container (a hosting platform's HTTPS proxy, or a tunnel such as Tailscale Funnel reaching it through Docker's port mapping) connects from a private address.
+  Apache (`mod_remoteip`) takes the visitor's address from `X-Forwarded-For` only when the connection comes from a private address (10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16), and ignores the header on connections from public addresses.
+  This keeps login throttling per visitor instead of per proxy, **provided the proxy sets that header itself** and replaces any value the visitor sent.
+  Tailscale's source code does that for Funnel, but its documentation does not promise it; [(c)](#check-the-visitors-addresses-through-funnel) shows how to check.
 
 ---
 
@@ -277,6 +282,7 @@ Nothing changes until every answer is valid and the database answers. Then the s
 - creates the administrator.
 
 Settings come from the `.env` file; nothing has to be entered in the panel's environment variables.
+If you ever turn the demo into a real store, change both `APP_DEMO` and `PAYMENT_SIMULATOR` to `false`, as described in [(d)](#d-a-real-store-stripe-payments-and-email).
 To run the script again later, for example with a new database password, add `--force`; it then replaces `.env`.
 All its options are listed by `php bin/setup.php --help`.
 
@@ -339,7 +345,8 @@ That is acceptable for a demo; note it in the limits you present.
 For a presentation you can publish the Docker store from (a) on your own computer for a while.
 [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) gives it a public HTTPS address of the form `https://<machine>.<tailnet>.ts.net`, without opening ports on your router.
 
-You need Docker as in (a), and [Tailscale](https://tailscale.com/download) 1.38.3 or newer, installed and signed in on the same computer.
+You need Docker as in (a), and [Tailscale](https://tailscale.com/download) **1.52 or newer**, installed and signed in on the same computer.
+The `tailscale funnel` commands below changed in version 1.52; `tailscale version` shows yours.
 
 1. **Allow Funnel:** in the [Tailscale admin console](https://login.tailscale.com/admin), turn on **MagicDNS** and **HTTPS certificates** (on the DNS page).
    Funnel also needs the `funnel` attribute in the tailnet policy; the first `tailscale funnel` command offers to add it for you.
@@ -359,22 +366,56 @@ You need Docker as in (a), and [Tailscale](https://tailscale.com/download) 1.38.
    ```
 
    `docker-compose.yml` passes these two values to the container as `APP_URL` and `BOOKWISE_ADMIN_PASSWORD`. The container refuses to start with the published placeholder password on a public address.
-4. **Publish it:**
+4. **Publish it:** open a second terminal and run
 
    ```bash
-   tailscale funnel --bg 8080
+   tailscale funnel 8080
    ```
 
+   The store is public for as long as this command runs, so keep that window open during the presentation.
    Funnel answers on port 443 of the public address and forwards to `http://127.0.0.1:8080`. A new address can take up to 10 minutes to appear in DNS.
    Check it from a phone on mobile data: `https://<machine>.<tailnet>.ts.net/health.php` should answer `{"status":"ok"}`.
-5. **Stop publishing** after the presentation:
+
+   Do not add `--bg`. With it, Funnel keeps running after the terminal is closed, and even after a reboot, until you run `tailscale funnel reset`.
+5. **Stop publishing** after the presentation: press **Ctrl+C** in the Funnel window, or close it. Then run:
 
    ```bash
-   tailscale funnel reset
+   tailscale funnel status
+   ```
+
+   It must no longer list your `ts.net` address. If it still does (for example after `--bg`), run `tailscale funnel reset` and check again.
+6. **Only then** go back to the local store:
+
+   ```bash
    docker compose up -d
    ```
 
-   The second command (without the two variables) puts the store back on `http://localhost:8080` with the local administrator password.
+   Without the two variables, this puts the store back on `http://localhost:8080` with the local administrator password, which is published in `docker-compose.yml`.
+   The container accepts that password because `APP_URL` is local again; it cannot tell whether Funnel is still running. So never run this while Funnel is still on.
+
+### Check the visitors' addresses through Funnel
+
+Login throttling counts failed sign-ins per visitor address. Through Funnel, every request reaches the container from a private address (Docker's own gateway), so Apache takes the visitor's address from `X-Forwarded-For` (see [Logs and proxies](#logs-and-proxies)).
+Tailscale's source code (`ipn/ipnlocal/serve.go`, October 2026) sets that header to the visitor's address and replaces any value the visitor sent, but Tailscale's documentation does not say so. Check it once while Funnel is on:
+
+1. On a device that is **not** signed in to your tailnet (for example a phone on mobile data with the Tailscale app off), open `https://<machine>.<tailnet>.ts.net/Home_Page.php`.
+   If you have a computer outside your tailnet with `curl`, also send a forged header from it:
+
+   ```bash
+   curl -s -o /dev/null -H 'X-Forwarded-For: 203.0.113.7' https://<machine>.<tailnet>.ts.net/Home_Page.php
+   ```
+
+2. On your PC, show the last requests for that page:
+
+   ```bash
+   docker compose logs app | grep 'GET /Home_Page.php' | tail -n 2
+   ```
+
+   After the `app-1 |` prefix, each access-log line starts with the address the store saw:
+
+   - **the device's public address** (search the web for "what is my IP" on it): Funnel sets the header, and throttling works per visitor. This is the expected result.
+   - **`203.0.113.7`**: the store believed the forged header, so visitors could pick their own address and avoid throttling. Stop publishing, remove the `<IfModule remoteip_module>` block from `docker/apache/server.conf` and rebuild with `docker compose up -d --build` before you publish again.
+   - **a private address** such as `172.18.0.1`: Funnel sent no header. Every visitor then shares that address: after 20 failed sign-ins within 15 minutes, sign-in is refused for everyone until the 15 minutes have passed. That is acceptable for a presentation.
 
 Notes:
 
@@ -386,7 +427,9 @@ Notes:
 
 Starting from the Docker setup, or from a server prepared with `bin/setup.php`, change the following (in the container's environment or in `.env`).
 
-1. **Leave demo mode:** set `APP_DEMO=false`, and `PAYMENT_SIMULATOR=false` if you set it. The banner disappears and `pay.php` answers 404.
+1. **Leave demo mode:** set `APP_DEMO=false` **and** `PAYMENT_SIMULATOR=false`. The banner disappears and `pay.php` answers 404.
+   `bin/setup.php` writes `PAYMENT_SIMULATOR=true` into `.env`, so on a server set up with it both lines must change (the Docker setup does not set `PAYMENT_SIMULATOR`, but `false` does no harm there).
+   If `PAYMENT_SIMULATOR=true` is left in place, the store takes no payments at all: checkout says "Online payments are not available in this environment.", `app.log` says `Refusing the payment simulator on a real store …`, and the container does not start.
 2. **Stripe:**
    - Set `STRIPE_SECRET_KEY` to your secret key. Live keys (`sk_live_…`) are accepted only with `APP_ENV=production` and outside demo mode; use a test key (`sk_test_…`) for a staging copy.
    - In the Stripe Dashboard, add a webhook endpoint at `APP_URL/stripe_webhook.php` for these events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired` and `charge.refunded`.
@@ -430,6 +473,8 @@ The free alwaysdata plan cannot be used for a store that makes money.
   **Never put live Stripe keys into a demo:** in demo mode the application never uses a live key, even with the simulator off, and the container refuses to start with one.
 - **The payment page is closed outside the simulator.** `pay.php` answers 404 when `PAYMENT_SIMULATOR` is off. Its buttons need the visitor's CSRF token, and it only ever redirects to the store's own `APP_URL`.
   The simulator keeps no card data and no email addresses.
+- **A real store never uses the simulator.** With `APP_ENV=production` and `APP_DEMO=false`, `PAYMENT_SIMULATOR=true` is refused (no payments, an error in `app.log`, and the container does not start), so a forgotten setting cannot hand out free orders.
+- **Stripe's webhook is closed in the demo.** While the simulator is on, `stripe_webhook.php` answers 404 and logs nothing, so a demo needs no webhook secret and visitors cannot fill the error log through it.
 - **Demo data is public and temporary.** Anyone can register on a public demo. Do not enter real personal data, and expect the data to be reset.
 - **Secrets stay out of the repository.** On alwaysdata they are in `~/bookwise/.env`, which `bin/setup.php` makes readable by its owner only; it never prints passwords.
   With Docker they are environment variables, and the entrypoint never prints them.
@@ -438,11 +483,12 @@ The free alwaysdata plan cannot be used for a store that makes money.
 - **Use TLS for hosted databases that require it.** Set `DB_SSL_CA_PEM` (or `DB_SSL_CA`, a file path); the server certificate is then verified. alwaysdata's own databases are reached inside its network and do not need it.
 - **Logs stay clean.** URLs are logged without query strings, so reset tokens stay out of the access log. `mail.log` is never copied to the container output.
 - **The local Compose setup is not for the internet.** `docker-compose.yml` contains placeholder passwords and an administrator with a published password; the container refuses that password on a non-local `APP_URL`.
-  Publish it only through Tailscale Funnel as in (c), with a password of your own.
+  Publish it only through Tailscale Funnel as in (c), with a password of your own, and stop Funnel before you start the store with the local password again.
 - **Check the proxy rule for other setups.** In the container, the visitor's address is read from `X-Forwarded-For` only on connections from private addresses.
   If you deploy behind a different proxy setup, check that this rule fits it.
   For example, when Docker's own port forwarding presents connections as coming from its private gateway address, visitors could set that header themselves.
   In that case, put a reverse proxy that sets `X-Forwarded-For` in front of the container, or remove the `mod_remoteip` block from `docker/apache/server.conf`.
+  For Tailscale Funnel, [(c)](#check-the-visitors-addresses-through-funnel) shows how to check.
 
 ## Container settings reference
 
@@ -454,7 +500,7 @@ These variables are specific to the container and `docker-compose.yml`. The appl
 | `APP_URL` | `http://localhost:$PORT` | Public address of the store, without a trailing slash |
 | `BOOKWISE_APP_URL` | `http://localhost:8080` | Read by `docker-compose.yml` from your shell: the `APP_URL` it gives the container |
 | `APP_DEMO` | `false` | `true`: demo banner, sample catalog and the payment simulator |
-| `PAYMENT_SIMULATOR` | follows `APP_DEMO` | `true`/`false`: payment simulator on or off, whatever `APP_DEMO` says |
+| `PAYMENT_SIMULATOR` | follows `APP_DEMO` | `true`/`false`: payment simulator on or off, whatever `APP_DEMO` says. `true` stops the container on a real store (`APP_ENV=production`, `APP_DEMO=false`) |
 | `PAYMENT_SIMULATOR_STORE` | `storage/payment-simulator.json` | The simulator's state file |
 | `DB_WAIT_SECONDS` | `60` | How long the entrypoint waits for the database |
 | `DB_SSL_CA_PEM` / `DB_SSL_CA` | — | CA certificate text / file for TLS database connections |
@@ -462,9 +508,10 @@ These variables are specific to the container and `docker-compose.yml`. The appl
 | `BOOKWISE_SEED` | `false` | `true`: load the sample catalog into a new, empty database also outside demo mode |
 | `LOG_DIR` | `storage/logs` | Where `app.log`, `php-error.log` and `mail.log` are written; the first two are copied to the container output |
 | `MAIL_DRIVER` | `log` | `log` locally, `null` for a public demo, `sendgrid` for a real store |
-| `APP_ENV` | `production` | Must be `production` for live Stripe keys (the local Compose file uses `local`) |
+| `APP_ENV` | `production` | Must be `production` for live Stripe keys (the local Compose file uses `local`). With `production`, the payment simulator needs `APP_DEMO=true` |
 | `DB_NAME`, `DB_HOST`, `DB_PORT` | — | Shown in the start-up log (never `DB_PASS`) |
-| `STRIPE_SECRET_KEY`, `STRIPE_API_BASE` | — | Checked by the entrypoint: a live key stops a demo, and a set `STRIPE_API_BASE` is reported |
+| `STRIPE_SECRET_KEY`, `STRIPE_API_BASE` | — | Checked by the entrypoint: a live key stops a demo, and a set `STRIPE_API_BASE` is reported. Neither is used while the simulator is on |
+| `STRIPE_WEBHOOK_SECRET` | — | Only for a real store; the demo's webhook endpoint answers 404 and needs none |
 
 ## Checks and CI
 
@@ -474,11 +521,11 @@ The **Docker image** job in `.github/workflows/ci.yml` runs next to the PHP 8.1�
 2. It builds the image with `docker compose build`. The build fails if a PHP extension or a gd image format is missing, or if the Apache configuration is invalid.
 3. It starts `docker compose up` and waits until `/health.php` answers. Then it checks:
    - that the app runs as `www-data`;
-   - `tests/Docker/smoke.sh`: the home page with the 55 books, sign-up, add to cart, checkout to `pay.php`, the refused form without a CSRF token, the simulated payment, the paid confirmation on `success_pay.php`, and 404 for an unknown payment session.
+   - `tests/Docker/smoke.sh`: the home page with the 55 books, sign-up, add to cart, checkout to `pay.php`, the refused form without a CSRF token, the simulated payment, the paid confirmation on `success_pay.php`, the simulator's own 404 for an unknown payment session, and 404 from `stripe_webhook.php`.
      It also checks that `/.env`, `/composer.json`, `/vendor/autoload.php`, `/storage/logs/app.log`, `/storage/payment-simulator.json` and other private paths answer 403/404, and the security headers;
    - that the order is stored as `paid` in MySQL, and that the simulator's state file in `storage/` belongs to `www-data` and records the payment;
-   - that the container refuses the local-only administrator password with a public `APP_URL`;
-   - that a second container with `APP_DEMO=false` and `PORT=9090` serves the store without the payment page;
+   - that the container refuses the local-only administrator password with a public `APP_URL`, and `PAYMENT_SIMULATOR=true` on a real store (`APP_ENV=production`, `APP_DEMO=false`);
+   - that a second container with `APP_DEMO=false` and `PORT=9090` serves the store without the simulator: its `pay.php` answers 404 without the simulator's message (which the demo store shows for the same link), the application reports the simulator off, and `stripe_webhook.php` checks signatures again (400 for an unsigned request);
    - that `/health.php` answers 503 after the database is stopped.
 4. On failure it prints the container logs.
 
@@ -506,6 +553,8 @@ Locally, without Docker:
 | `DB_SSL_CA_PEM does not contain a PEM certificate` | The value is not the certificate text (for example a file name). Paste the certificate itself, or use `DB_SSL_CA` for a file path. |
 | `Giving up.` after 60 seconds, repeatedly | The database is unreachable. Check `DB_HOST`/`DB_PORT`, or raise `DB_WAIT_SECONDS`. |
 | `APP_DEMO=true must never be combined with a live Stripe key` | Remove the live key from the demo, or set `APP_DEMO=false` for a real store. |
+| `PAYMENT_SIMULATOR is on, but this is a real store` (container), or "Online payments are not available in this environment." with `Refusing the payment simulator on a real store` in `app.log` | `APP_DEMO=false` with `APP_ENV=production` but `PAYMENT_SIMULATOR=true` (written by `bin/setup.php`). Set `PAYMENT_SIMULATOR=false` for Stripe, or `APP_DEMO=true` for a demo. |
+| `The payment simulator cannot save …` in `app.log`, and checkout or the payment page fails | The folder of `PAYMENT_SIMULATOR_STORE` is not writable, or the disk is full (on alwaysdata: the 1 GB quota). The previous state is kept; make the folder writable or free some space, then try again. |
 | `Administrator not created: …` | `BOOKWISE_ADMIN_EMAIL` is not a valid address, or `BOOKWISE_ADMIN_PASSWORD` is shorter than 8 characters. Fix or remove both. |
 | The first page after a quiet period is slow | alwaysdata restarts the site's PHP processes after the idle time (30 minutes by default). |
 | `PORT must be a TCP port number` / Apache cannot bind | `PORT` must be a number from 1024 to 65535 (the container does not run as root). |
@@ -523,4 +572,5 @@ These points come from alwaysdata's and Tailscale's documentation as it could be
   alwaysdata's PHP documentation shows `memory_limit`, `post_max_size` and `upload_max_filesize` of 256M in an example `php.ini`; BookWise's own limits (2 MB for pictures, 5 MB for covers) are far lower either way.
 - **git on alwaysdata:** alwaysdata's own guides use git on their servers, but the documentation has no current version list. Check with `git --version`; without git, upload the project with SFTP instead.
 - **Environment variables on alwaysdata:** sites have an environment-variables setting (`FOO=bar` pairs), but whether PHP sites receive them was not confirmed. BookWise does not need it: `bin/setup.php` writes `.env`.
-- **Tailscale Funnel:** which forwarding headers Funnel adds (and so whether the container sees each visitor's address) is not documented. Funnel on Windows was not tried; the documentation only says it needs the Tailscale command-line tool.
+- **Tailscale Funnel:** which forwarding headers Funnel adds is not documented. Tailscale's source code sets `X-Forwarded-For` to the visitor's address and replaces any value the visitor sent; [(c)](#check-the-visitors-addresses-through-funnel) shows how to confirm it on your own setup.
+  Tailscale's documentation and its announcement of version 1.52 confirm that the current commands need Tailscale 1.52 or newer, that a foreground `tailscale funnel` ends with Ctrl+C, and that `--bg` survives reboots until `tailscale funnel reset`; they do not show the exact output of `tailscale funnel status`. Funnel on Windows was not tried.

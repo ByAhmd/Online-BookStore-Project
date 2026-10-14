@@ -135,7 +135,7 @@ final class DeploymentFilesTest extends TestCase
     public function testRenderIsGone(): void
     {
         self::assertFileDoesNotExist(dirname(__DIR__, 2) . '/render.yaml');
-        foreach (['README.md', 'docs/DEPLOYMENT.md', 'SECURITY.md', '.env.example', 'docker-compose.yml', 'Dockerfile', 'docker/entrypoint.sh', 'docker/apache/server.conf', 'docker/apache/ports.conf'] as $file) {
+        foreach (['README.md', 'docs/DEPLOYMENT.md', 'SECURITY.md', '.env.example', '.gitattributes', 'docker-compose.yml', 'Dockerfile', 'docker/entrypoint.sh', 'docker/apache/server.conf', 'docker/apache/ports.conf'] as $file) {
             self::assertDoesNotMatchRegularExpression('/\bRender\b|onrender|Aiven|RENDER_/', self::read($file), "$file still refers to Render or Aiven");
         }
     }

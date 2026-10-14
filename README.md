@@ -257,7 +257,7 @@ convenience, and variables already set in the real environment take precedence.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `APP_NAME` | `BookWise` | Name shown in page titles, the navigation bar and the footer |
-| `APP_ENV` | `production` | `local`, `testing` or `production`. Live Stripe keys are refused unless this is `production`. |
+| `APP_ENV` | `production` | `local`, `testing` or `production`. Live Stripe keys are refused unless this is `production`, and with `production` the payment simulator needs `APP_DEMO=true`. |
 | `APP_DEBUG` | `false` | Show exception details in the browser. **Never enable in production.** |
 | `APP_URL` | `http://localhost:8000` | Public URL of `public/` without a trailing slash. Used for Stripe return URLs and password-reset links. |
 | `APP_TIMEZONE` | `Asia/Riyadh` | PHP and database-session timezone |
@@ -269,11 +269,11 @@ convenience, and variables already set in the real environment take precedence.
 | `DB_NAME` | `bookwise` | Database name |
 | `DB_USER` / `DB_PASS` | `root` / *(empty)* | Database credentials |
 | `DB_SSL_CA` / `DB_SSL_CA_PEM` | — | TLS for hosted databases: path to the CA certificate, or the certificate text itself. The server certificate is then verified. |
-| `PAYMENT_SIMULATOR` | follows `APP_DEMO` | `true`: payments go to the built-in [payment simulator](#payments-the-simulator-and-stripe) instead of Stripe; `false`: always Stripe |
-| `PAYMENT_SIMULATOR_STORE` | `storage/payment-simulator.json` | The simulator's state file (relative paths start at the project root); must be writable |
+| `PAYMENT_SIMULATOR` | follows `APP_DEMO` | `true`: payments go to the built-in [payment simulator](#payments-the-simulator-and-stripe) instead of Stripe (refused on a real store: `APP_ENV=production` with `APP_DEMO=false`); `false`: always Stripe |
+| `PAYMENT_SIMULATOR_STORE` | `storage/payment-simulator.json` | The simulator's state file (relative paths start at the project root); its folder must be writable |
 | `STRIPE_SECRET_KEY` | — | Stripe secret key (`sk_test_…` for development). Not used while the simulator is on. |
-| `STRIPE_WEBHOOK_SECRET` | — | Signing secret of the webhook endpoint (`whsec_…`) |
-| `STRIPE_CURRENCY` | `sar` | ISO code of a **two-decimal** currency that book prices are charged in (zero- and three-decimal currencies such as JPY or KWD are refused) |
+| `STRIPE_WEBHOOK_SECRET` | — | Signing secret of the webhook endpoint (`whsec_…`). Not needed while the simulator is on: the endpoint then answers 404. |
+| `STRIPE_CURRENCY` | `sar` | ISO code of a **two-decimal** currency that book prices are charged in, also by the simulator (zero- and three-decimal currencies such as JPY or KWD are refused) |
 | `STRIPE_API_BASE` | — | **Tests only:** points the Stripe SDK at the local mock in `tests/Support` (ignored while the simulator is on) |
 | `MAIL_DRIVER` | `log` | `log` (write to `mail.log`), `smtp` (send through `SMTP_*`), `database` (demo inbox; only with `APP_DEMO=true`) or `null` (discard). See [Email](#email). |
 | `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | `no-reply@example.com` / `BookWise` | Sender of outgoing email; your provider must allow this address |
@@ -305,14 +305,15 @@ BookWise takes payments with Stripe Checkout. For demos and local development it
 ### The payment simulator
 
 - Turn it on with `PAYMENT_SIMULATOR=true`. It is on by default in demo mode (`APP_DEMO=true`); `PAYMENT_SIMULATOR=false` turns it off there.
+  A real store (`APP_ENV=production` with `APP_DEMO=false`) refuses it and takes no payments until `PAYMENT_SIMULATOR=false` is set, so a forgotten setting cannot give books away.
 - It runs **inside the application** (`src/payment_simulator.php`): the Stripe library still makes every request, but they are answered in the same PHP process.
   `php -S localhost:8000 -t public` is therefore enough to buy a book, and the same holds on any PHP host.
 - Checkout sends the customer to `pay.php`, the simulator's payment page in the store's own layout (English and Arabic). It shows the books and the total, never asks for card details, and offers four endings:
   **Pay** (paid), **Decline** (a declined card: nothing is charged and the page stays open for another try), **Slow payment** (the payment is confirmed about 15 seconds later, like a delayed payment method) and **Cancel**.
 - Everything else works exactly as with Stripe: the store verifies the payment when the customer returns, expires abandoned sessions at the next checkout and refunds paid orders from the admin order page.
-  Open sessions expire after one hour. The simulator sends no webhooks.
-- Its state is a JSON file, `PAYMENT_SIMULATOR_STORE` (default `storage/payment-simulator.json`), which the web server must be able to write. It holds no card data and no email addresses.
-- While it is on, the `STRIPE_*` keys are not used. A live Stripe key is never used in demo mode.
+  Open sessions expire after one hour. The simulator sends no webhooks, and `stripe_webhook.php` answers 404 while it is on.
+- Its state is a JSON file, `PAYMENT_SIMULATOR_STORE` (default `storage/payment-simulator.json`), saved in one step next to a `.lock` file; the web server must be able to write to its folder. It holds no card data and no email addresses.
+- While it is on, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_API_BASE` are not used; `STRIPE_CURRENCY` still sets the store's currency. A live Stripe key is never used in demo mode.
 
 More details are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#the-payment-simulator).
 

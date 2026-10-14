@@ -7,7 +7,6 @@ docker/**            text eol=lf
 Dockerfile           text eol=lf
 .dockerignore        text eol=lf
 docker-compose.yml   text eol=lf
-render.yaml          text eol=lf
 
 # Binary files: never convert line endings or show text diffs.
 *.png   binary
