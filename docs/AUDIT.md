@@ -12,7 +12,7 @@ Every page and handler was reviewed by tracing each feature from the form, throu
 
 | Area | Problem |
 | --- | --- |
-| Secrets | A Stripe secret key was hard-coded in three files, and a SendGrid API key in two. **Both must be revoked**, as they were distributed with the source. |
+| Secrets | A Stripe secret key was hard-coded in three files, and a SendGrid API key in two. **Both must be revoked**, as they were distributed with the source. (The owner can no longer revoke them; see the README's credential rotation note.) |
 | SQL injection | Login, sign-up, password reset and token lookup concatenated raw input into SQL. Login could be bypassed with a crafted email. |
 | Passwords | Unsalted MD5, plus a stored MD5 of the "confirm password" field. |
 | Payments | `success_pay.php` recorded sales and emptied the cart for anyone who opened the URL; no payment was ever verified. |
