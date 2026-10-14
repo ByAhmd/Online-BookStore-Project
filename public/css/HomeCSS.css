@@ -175,7 +175,10 @@
     scroll-snap-align: start;
 }
 
+/* position: relative keeps the absolutely positioned .sr-only labels inside the
+   horizontally scrolling row (otherwise they widen the whole page on phones). */
 .home-book-link {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
