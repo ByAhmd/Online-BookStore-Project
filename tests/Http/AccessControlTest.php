@@ -8,7 +8,9 @@ use BookWise\Tests\Support\HttpTestCase;
 
 /**
  * Who may see what: guests, customers, administrators, and one customer
- * against another customer's cart, payments and orders (IDOR).
+ * against another customer's cart, payments and orders (IDOR). Guests may
+ * browse the catalog and the book pages (GuestBrowsingTest); everything that
+ * belongs to an account needs one.
  */
 final class AccessControlTest extends HttpTestCase
 {
@@ -16,7 +18,7 @@ final class AccessControlTest extends HttpTestCase
     {
         $user = $this->createUser(self::uniqueEmail('intended'));
 
-        foreach (['Selected.php?id=13', 'cart.php', 'profilePage.php?section=orders', 'Explore_Page.php?genre=Crime&q=murder'] as $intended) {
+        foreach (['cart.php', 'profilePage.php?section=orders', 'cancel_pay.php'] as $intended) {
             $guest = $this->client();
             $this->assertRedirect($guest->get($intended), 'index.php?form=login', 303, "Guest GET $intended");
             $login = $this->logIn($guest, (string) $user['Eaddress'], self::DEFAULT_PASSWORD);

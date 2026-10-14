@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 require __DIR__ . '/../src/bootstrap.php';
 
-$user = require_user();
-$userId = (int) $user['id'];
-$userEmail = (string) $user['Eaddress'];
+// Guests may read the book page and its reviews; buying, favorites, reviews
+// and reactions need a customer account (their forms become sign-in links).
+$user = customer_or_guest();
 
 $bookId = parse_int($_GET['id'] ?? null);
 $book = $bookId !== null ? find_book($bookId) : null;
@@ -15,9 +15,11 @@ if ($book === null) {
 }
 $bookUrl = 'Selected.php?id=' . $bookId;
 $title = (string) $book['title'];
+// Sign-in links for guests bring them back to this book.
+$loginUrl = login_url($bookUrl);
 
 // Copies of this book already in the customer's cart.
-$quantityInCart = static function () use ($userId, $bookId): int {
+$quantityInCart = static function (int $userId) use ($bookId): int {
     foreach (cart_lines($userId) as $line) {
         if ($line['book_id'] === $bookId) {
             return $line['quantity'];
@@ -27,6 +29,13 @@ $quantityInCart = static function () use ($userId, $bookId): int {
 };
 
 if (is_post()) {
+    if ($user === null) {
+        // A guest, or a session that ended meanwhile: after signing in, back to this book.
+        remember_return_path($bookUrl);
+    }
+    $user = require_user();
+    $userId = (int) $user['id'];
+    $userEmail = (string) $user['Eaddress'];
     verify_csrf();
 
     switch (input_string($_POST, 'action', 32)) {
@@ -123,14 +132,15 @@ if (is_post()) {
     }
 }
 
-$isFavorite = is_favorite($userId, $bookId);
+$userId = $user !== null ? (int) $user['id'] : null;
+$isFavorite = $userId !== null && is_favorite($userId, $bookId);
 $soldCount = book_sales_count($bookId);
 $ratingSummary = book_rating_summary($bookId);
 $reviews = book_comments($bookId, $userId);
-$hasPurchased = user_has_purchased($userId, $bookId);
-$hasReviewed = user_has_reviewed($userEmail, $bookId);
+$hasPurchased = $userId !== null && user_has_purchased($userId, $bookId);
+$hasReviewed = $user !== null && user_has_reviewed((string) $user['Eaddress'], $bookId);
 $similarBooks = similar_books($book);
-$inCart = $quantityInCart();
+$inCart = $userId !== null ? $quantityInCart($userId) : 0;
 $coverUrl = image_url((string) $book['cover_image'], '');
 $stock = (int) $book['stock'];
 $stockStatus = book_stock_status($stock);
@@ -213,6 +223,9 @@ page_header($title, ['selected.css']);
                     <div class="add-to-cart-box" id="purchase">
                         <p class="book-price"><span class="sr-only"><?= e(t('shop.book.price_sr')) ?></span><?= e(format_money($book['price'])) ?></p>
                         <p class="stock-badge stock-<?= e($stockStatus) ?>" id="stock-status"><?= e(book_availability($stock)) ?></p>
+<?php if ($user === null): ?>
+                        <p class="guest-actions"><a class="btn btn-danger cart-button" href="<?= e($loginUrl) ?>"><?= e(t('shop.book.login_to_buy')) ?></a></p>
+<?php else: ?>
                         <form class="add-to-cart-form" method="post" action="<?= e($bookUrl) ?>" data-once>
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="add_to_cart">
@@ -229,6 +242,7 @@ page_header($title, ['selected.css']);
                             </div>
                             <button type="submit" class="btn btn-danger cart-button"<?= $orderable === 0 ? ' disabled aria-describedby="stock-note"' : '' ?>><?= e(t('shop.book.add_to_cart')) ?></button>
                         </form>
+<?php endif; ?>
 <?php if ($orderable === 0): ?>
                         <p class="stock-note" id="stock-note"><?= e(t('shop.book.out_of_stock_note')) ?></p>
 <?php endif; ?>
@@ -245,6 +259,14 @@ page_header($title, ['selected.css']);
 <?php endif; ?>
                     </div>
 
+<?php if ($user === null): ?>
+                    <p class="favorite-form" id="favorite">
+                        <a class="btn btn-danger favorite-button" href="<?= e($loginUrl) ?>">
+                            <span class="favorite-icon" aria-hidden="true">&#9825;</span>
+                            <?= e(t('shop.book.login_to_favorite')) ?>
+                        </a>
+                    </p>
+<?php else: ?>
                     <form class="favorite-form" id="favorite" method="post" action="<?= e($bookUrl) ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="toggle_favorite">
@@ -253,6 +275,7 @@ page_header($title, ['selected.css']);
                             <?= e(t($isFavorite ? 'shop.book.favorite_remove_button' : 'shop.book.favorite_add_button')) ?>
                         </button>
                     </form>
+<?php endif; ?>
 
                     <section class="book-description" aria-labelledby="description-title">
                         <h2 id="description-title"><?= e(t('shop.book.description_title')) ?></h2>
@@ -270,7 +293,9 @@ page_header($title, ['selected.css']);
             <div class="rating-comments-section">
                 <section class="rating" id="review" aria-labelledby="rate-title">
                     <h2 id="rate-title"><?= e(t('shop.book.rate_title')) ?></h2>
-<?php if (!$hasPurchased): ?>
+<?php if ($user === null): ?>
+                    <p class="review-note"><?= t_markup('shop.book.guest_review', ['login' => '<a href="' . e($loginUrl) . '">' . e(t('shop.book.guest_review_login')) . '</a>']) ?></p>
+<?php elseif (!$hasPurchased): ?>
                     <p class="review-note"><?= e(t('shop.book.purchase_to_review')) ?></p>
 <?php elseif ($hasReviewed): ?>
                     <p class="review-note"><?= e(t('shop.book.review_already')) ?></p>
@@ -334,6 +359,12 @@ page_header($title, ['selected.css']);
                                 <span class="sr-only"><?= e(t('shop.book.rated_sr', ['rating' => $rating])) ?></span>
                             </p>
                             <p class="review-text" dir="auto"><?= nl2br(e($review['comment'])) ?></p>
+<?php if ($user === null): ?>
+                            <p class="review-reactions review-tally">
+                                <span class="reaction-tally"><span aria-hidden="true">&#128077;</span> <span class="reaction-count"><?= $likes ?></span> <span class="sr-only"><?= e(tn('shop.book.likes_word', $likes)) ?></span></span>
+                                <span class="reaction-tally"><span aria-hidden="true">&#128078;</span> <span class="reaction-count"><?= $dislikes ?></span> <span class="sr-only"><?= e(tn('shop.book.dislikes_word', $dislikes)) ?></span></span>
+                            </p>
+<?php else: ?>
                             <form class="review-reactions" method="post" action="<?= e($bookUrl) ?>">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="react">
@@ -351,6 +382,7 @@ page_header($title, ['selected.css']);
                                     <span class="sr-only"><?= e(tn('shop.book.dislikes_word', $dislikes)) ?></span>
                                 </button>
                             </form>
+<?php endif; ?>
                         </li>
 <?php endforeach; ?>
                     </ul>

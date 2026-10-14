@@ -287,6 +287,24 @@ function require_user(): array
 }
 
 /**
+ * For pages that guests may browse too (the catalog and the book pages): the
+ * signed-in customer, or null for a guest. Administrators are sent to their
+ * dashboard, as on every other customer page. Actions on these pages still
+ * call require_user().
+ *
+ * @return array<string, mixed>|null
+ */
+function customer_or_guest(): ?array
+{
+    $user = current_user();
+    if ($user === null && is_admin()) {
+        flash('info', t('auth.guard.admin_shop'));
+        redirect('admin_dashboard.php');
+    }
+    return $user;
+}
+
+/**
  * Requires a signed-in administrator; everyone else gets 403 or the login form.
  *
  * @return array<string, mixed>
@@ -316,6 +334,28 @@ function remember_intended_url(): void
     $page = basename((string) parse_url($requestUri, PHP_URL_PATH));
     $query = (string) parse_url($requestUri, PHP_URL_QUERY);
     $_SESSION['intended'] = safe_redirect_path($page . ($query !== '' ? '?' . $query : ''), 'Home_Page.php');
+}
+
+/**
+ * Remembers $path as the page to return to after signing in, like
+ * remember_intended_url() does for guarded pages. Used by links such as
+ * "Log in to buy" (login_url()). Anything but a local page path
+ * (safe_redirect_path()) is ignored.
+ */
+function remember_return_path(mixed $path): void
+{
+    if (is_string($path) && $path !== '' && safe_redirect_path($path, '') === $path) {
+        $_SESSION['intended'] = $path;
+    }
+}
+
+/**
+ * The sign-in form, bringing the visitor back to $returnPath (a local page
+ * path such as "Selected.php?id=7") once they have signed in.
+ */
+function login_url(string $returnPath): string
+{
+    return 'index.php?' . http_build_query(['form' => 'login', 'return' => $returnPath]);
 }
 
 /**

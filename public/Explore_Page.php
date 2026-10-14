@@ -10,7 +10,8 @@ const EXPLORE_COVER_FALLBACK = 'imges/header.jpeg';
 const EXPLORE_COVER_SIZES = '(min-width: 600px) 240px, 50vw';
 const EXPLORE_QUERY_MAX_LENGTH = 100;
 
-$user = require_user();
+// Guests may browse and search the catalog; their Favorites tab asks them to log in.
+$user = customer_or_guest();
 
 $genres = list_genres();
 $genre = input_string($_GET, 'genre', 100);
@@ -18,16 +19,19 @@ if ($genre !== 'Favorites' && !in_array($genre, $genres, true)) {
     $genre = 'all';
 }
 $query = input_string($_GET, 'q', EXPLORE_QUERY_MAX_LENGTH);
+$favoritesLogin = $genre === 'Favorites' && $user === null;
 
-$listing = catalog_page(
-    $genre === 'Favorites' ? (int) $user['id'] : null,
-    $genre === 'all' || $genre === 'Favorites' ? null : $genre,
-    $query,
-    $_GET['page'] ?? null
-);
+$listing = $favoritesLogin
+    ? ['books' => [], 'pagination' => paginate(0, CATALOG_PAGE_SIZE, 1)]
+    : catalog_page(
+        $genre === 'Favorites' && $user !== null ? (int) $user['id'] : null,
+        $genre === 'all' || $genre === 'Favorites' ? null : $genre,
+        $query,
+        $_GET['page'] ?? null
+    );
 $books = $listing['books'];
 $pagination = $listing['pagination'];
-$summary = catalog_summary($genre, $query, $pagination);
+$summary = $favoritesLogin ? t('shop.explore.favorites_login') : catalog_summary($genre, $query, $pagination);
 
 $exploreUrl = static function (string $tabGenre, string $q, int $page = 1): string {
     $params = ['genre' => $tabGenre];
@@ -130,6 +134,12 @@ page_header(t('shop.explore.title'), ['explore.css']);
                     </li>
 <?php endforeach; ?>
                 </ul>
+<?php elseif ($favoritesLogin): ?>
+                <div class="empty-state explore-empty">
+                    <p class="explore-empty-title"><?= e(t('shop.explore.favorites_guest_title')) ?></p>
+                    <p><?= e(t('shop.explore.favorites_guest_text')) ?></p>
+                    <a class="btn" href="<?= e(login_url($exploreUrl('Favorites', $query))) ?>"><?= e(t('shop.explore.favorites_guest_login')) ?></a>
+                </div>
 <?php elseif ($query !== ''): ?>
                 <div class="empty-state explore-empty">
                     <p class="explore-empty-title"><?= e(t('shop.explore.no_match_title')) ?></p>

@@ -318,6 +318,10 @@ return [
         'retry' => 'Try again',
         'pager_label' => 'Result pages',
         'favorites_login' => 'Please log in as a customer to see your favorites.',
+        // The Favorites tab for guests.
+        'favorites_guest_title' => 'Your favorites are kept in your account',
+        'favorites_guest_text' => 'Log in to see the books you saved, or to start a list of your own.',
+        'favorites_guest_login' => 'Log in to see your favorites',
         'method_not_allowed' => 'Method not allowed. Use GET.',
     ],
 
@@ -366,6 +370,12 @@ return [
         'favorite_removed' => 'Removed ":title" from your favorites.',
         'favorite_add_button' => 'Add to Favorites',
         'favorite_remove_button' => 'Remove from Favorites',
+        // Guests see links to the sign-in form instead of the forms; they come back to this book.
+        'login_to_buy' => 'Log in to buy',
+        'login_to_favorite' => 'Log in to save favorites',
+        // :login is a link labelled with guest_review_login.
+        'guest_review' => ':login and buy this book to review it.',
+        'guest_review_login' => 'Log in',
         'review_not_purchased' => 'Only readers who bought this book can review it.',
         'review_already' => "You've already reviewed this book.",
         'review_rating_error' => 'Please choose a rating from 1 to 5 stars.',

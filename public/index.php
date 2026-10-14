@@ -11,6 +11,11 @@ if (current_admin() !== null) {
     redirect('admin_dashboard.php');
 }
 
+// "Log in to buy" and similar links: come back to that page after signing in.
+if (isset($_GET['return'])) {
+    remember_return_path($_GET['return']);
+}
+
 $verificationRequired = email_verification_required();
 $isDemo = (bool) config('app.demo');
 $appName = (string) config('app.name', 'BookWise');

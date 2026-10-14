@@ -14,12 +14,17 @@ use BookWise\Tests\Support\HttpTestCase;
  */
 final class PageContractTest extends HttpTestCase
 {
-    /** Pages that require a signed-in customer. */
-    private const CUSTOMER_PAGES = [
+    /** Shop pages that guests may browse too (administrators are sent to their dashboard). */
+    private const BROWSING_PAGES = [
         'Explore_Page.php',
         'Explore_Page.php?genre=Mystery',
         'Explore_Page.php?genre=Favorites',
         'Selected.php?id=7',
+    ];
+
+    /** Pages that require a signed-in customer (and the browsing pages, which customers use too). */
+    private const CUSTOMER_PAGES = [
+        ...self::BROWSING_PAGES,
         'cart.php',
         'profilePage.php',
         'profilePage.php?section=orders',
@@ -41,7 +46,10 @@ final class PageContractTest extends HttpTestCase
         $this->assertHtmlPage($guest->get('reset_form.php'), 404);
         $this->assertHtmlPage($guest->get('reset_form.php?token=' . str_repeat('ab', 32)), 404);
 
-        foreach ([...self::CUSTOMER_PAGES, ...self::ADMIN_PAGES, 'checkout.php', 'order.php?id=1'] as $path) {
+        foreach (self::BROWSING_PAGES as $path) {
+            $this->assertHtmlPage($guest->get($path));
+        }
+        foreach ([...array_diff(self::CUSTOMER_PAGES, self::BROWSING_PAGES), ...self::ADMIN_PAGES, 'checkout.php', 'order.php?id=1'] as $path) {
             $this->assertRedirect($guest->get($path), 'index.php?form=login', 303, "Guest GET $path");
         }
 

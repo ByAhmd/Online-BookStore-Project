@@ -7,7 +7,8 @@ declare(strict_types=1);
  *
  * GET fetch_books.php?genre=<all|Favorites|genre>&q=<search>&page=<n>
  * Unknown genres are treated as "all" and page numbers are clamped, exactly
- * like Explore_Page.php. Texts (summary, availability) are in the visitor's
+ * like Explore_Page.php. Guests may use it too; only Favorites needs a
+ * signed-in customer (401 otherwise, and the page then asks them to log in). Texts (summary, availability) are in the visitor's
  * language. Each book carries its cover URL (cover_image) and the srcset of
  * the cover's WebP copies (cover_webp_srcset), so explore.js builds the same
  * <picture> as the page.

@@ -308,7 +308,8 @@
                 signal: controller ? controller.signal : undefined,
             });
             if (response.status === 401) {
-                // Signed out meanwhile: the full page sends the visitor to the login form.
+                // Favorites of a guest (or of a visitor signed out meanwhile): the
+                // full page explains that they are kept in the account and links to the login form.
                 window.location.assign(pageUrl(genre, q, page));
                 return;
             }

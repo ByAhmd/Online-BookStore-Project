@@ -82,7 +82,7 @@ final class SecurityHeadersTest extends HttpTestCase
         $responses = [
             $guest->get('Home_Page.php'),
             $guest->get('index.php?form=login'),
-            $guest->get('Explore_Page.php'),                        // redirect
+            $guest->get('cart.php'),                                // redirect
             $guest->get('Register.php'),                            // 405 error page
             $guest->post('reset_password.php', ['email' => 'a@example.com']), // 419 error page
             $guest->get('fetch_books.php?genre=Mystery'),           // JSON
