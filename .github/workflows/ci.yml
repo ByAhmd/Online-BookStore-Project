@@ -133,11 +133,21 @@ jobs:
           echo "$output"
           grep -q 'not a local address' <<<"$output"
 
+      - name: A real store refuses the payment simulator
+        run: |
+          if output="$(docker compose run --rm --no-deps -T -e APP_ENV=production -e APP_DEMO=false -e PAYMENT_SIMULATOR=true app 2>&1)"; then
+            echo "the container started a real store with the payment simulator on" >&2
+            exit 1
+          fi
+          echo "$output"
+          grep -q 'Set PAYMENT_SIMULATOR=false' <<<"$output"
+
       - name: Without APP_DEMO there is no payment simulator (and PORT is honoured)
         run: |
           docker compose run -d --no-deps --name bookwise-real -p 8081:9090 \
             -e PORT=9090 -e APP_DEMO=false -e APP_URL=http://localhost:8081 \
-            -e STRIPE_SECRET_KEY=sk_test_not_a_real_key -e BOOKWISE_ADMIN_EMAIL= -e BOOKWISE_ADMIN_PASSWORD= \
+            -e STRIPE_SECRET_KEY=sk_test_not_a_real_key -e STRIPE_WEBHOOK_SECRET=whsec_not_a_real_secret \
+            -e BOOKWISE_ADMIN_EMAIL= -e BOOKWISE_ADMIN_PASSWORD= \
             app
           for attempt in $(seq 1 60); do
             curl -fsS --max-time 5 http://localhost:8081/health.php && break
@@ -146,9 +156,25 @@ jobs:
           echo
           curl -fsS --max-time 5 http://localhost:8081/health.php
           echo
-          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 'http://localhost:8081/pay.php?session=cs_test_x')"
+          # pay.php also answers 404 for an unknown session while the simulator is on,
+          # so the two are told apart by the simulator's own message, which the demo
+          # store (port 8080) shows and the store without APP_DEMO must not.
+          code="$(curl -s -o /tmp/pay-demo.html -w '%{http_code}' --max-time 5 'http://localhost:8080/pay.php?session=cs_test_x')"
+          echo "pay.php with APP_DEMO: HTTP $code"
+          test "$code" = 404
+          grep -q 'This payment link is not valid.' /tmp/pay-demo.html
+          code="$(curl -s -o /tmp/pay-real.html -w '%{http_code}' --max-time 5 'http://localhost:8081/pay.php?session=cs_test_x')"
           echo "pay.php without APP_DEMO: HTTP $code"
           test "$code" = 404
+          if grep -q 'This payment link is not valid.' /tmp/pay-real.html; then
+            echo "the payment simulator must be off without APP_DEMO" >&2
+            exit 1
+          fi
+          # The application agrees, and a Stripe webhook is processed again (400: unsigned).
+          docker exec bookwise-real php -r 'define("BOOKWISE_NO_SESSION", true); require "src/bootstrap.php"; exit(payment_simulator_enabled() ? 1 : 0);'
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -X POST --data '{}' http://localhost:8081/stripe_webhook.php)"
+          echo "stripe_webhook.php without APP_DEMO: HTTP $code"
+          test "$code" = 400
           if curl -s --max-time 5 http://localhost:8081/Home_Page.php | grep -q 'demo-banner'; then
             echo "the demo banner must not be shown without APP_DEMO" >&2
             exit 1

@@ -9,7 +9,8 @@
 #   2. reports how payments are taken. In demo mode (APP_DEMO=true) the
 #      application's built-in payment simulator answers them in-process
 #      (PAYMENT_SIMULATOR), so nothing needs to be set up here. A live Stripe
-#      key is refused in demo mode;
+#      key is refused in demo mode, and the simulator on a real store
+#      (APP_ENV=production without APP_DEMO);
 #   3. waits for the database (up to DB_WAIT_SECONDS, default 60);
 #   4. runs "php bin/install.php": the schema for an empty database (plus the
 #      sample catalog in demo mode or with BOOKWISE_SEED=true), pending
@@ -77,15 +78,20 @@ check_admin_password() {
     if [[ "$APP_URL" =~ ^https?://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/|$) ]]; then
         return 0
     fi
-    die "BOOKWISE_ADMIN_PASSWORD is the local-only password from docker-compose.yml, but APP_URL (${APP_URL}) is not a local address. Choose a password of your own, or leave BOOKWISE_ADMIN_PASSWORD empty."
+    die "BOOKWISE_ADMIN_PASSWORD is the local-only password from docker-compose.yml, but APP_URL (${APP_URL}) is not a local address. Set BOOKWISE_ADMIN_PASSWORD to a password of your own (see docs/DEPLOYMENT.md)."
 }
 
 # Payments are the application's business: with the payment simulator on
 # (PAYMENT_SIMULATOR, which defaults to APP_DEMO) it answers them in-process
-# and the Stripe settings are not used. This only reports which one is used,
-# and refuses a live Stripe key in demo mode, which must never take real money.
+# and the Stripe settings are not used. This reports which one is used, and
+# refuses the two combinations the application refuses too: a live Stripe key
+# in demo mode, which must never take real money, and the simulator on a real
+# store (APP_ENV=production without APP_DEMO), where anyone could "pay" with it.
 report_payments() {
     local simulator="${PAYMENT_SIMULATOR:-${APP_DEMO:-false}}"
+    if is_true "$simulator" && ! is_true "${APP_DEMO:-false}" && [[ "${APP_ENV:-production}" == production ]]; then
+        die "PAYMENT_SIMULATOR is on, but this is a real store (APP_ENV=production, APP_DEMO=false), where anyone could \"pay\" without paying. Set PAYMENT_SIMULATOR=false to take payments with Stripe, or APP_DEMO=true for a demo."
+    fi
     if is_true "${APP_DEMO:-false}"; then
         case "${STRIPE_SECRET_KEY:-}" in
             sk_live_* | rk_live_*)

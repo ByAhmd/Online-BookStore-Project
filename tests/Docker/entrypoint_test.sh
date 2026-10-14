@@ -119,6 +119,9 @@ for url in https://my-pc.example-tailnet.ts.net http://192.168.1.20:8080 http://
     assert_eq 1 "$CONFIG_STATUS" "the local-only password is refused on ${url}"
 done
 assert_contains "not a local address" "$CONFIG_LOG" "the refusal is explained"
+assert_contains "Set BOOKWISE_ADMIN_PASSWORD to a password of your own" "$CONFIG_LOG" "the refusal says how to fix it"
+# docker-compose.yml turns an empty value back into the placeholder, so "leave it empty" would not help.
+assert_not_contains "empty" "$CONFIG_LOG" "the refusal does not suggest an empty password"
 assert_not_contains "local-admin-password" "$CONFIG_LOG" "the password is not printed"
 configure APP_URL=https://my-pc.example-tailnet.ts.net BOOKWISE_ADMIN_PASSWORD=a-password-of-my-own
 assert_eq 0 "$CONFIG_STATUS" "a password of one's own is accepted on a public address"
@@ -142,8 +145,20 @@ assert_eq 0 "$CONFIG_STATUS" "demo with Stripe test mode: succeeds"
 assert_contains "Payments: Stripe Checkout" "$CONFIG_LOG" "demo with PAYMENT_SIMULATOR=false: payments go to Stripe"
 assert_eq sk_test_provided123 "$(value STRIPE_SECRET_KEY)" "demo: a provided test key is kept"
 
-configure APP_DEMO=false PAYMENT_SIMULATOR=on
-assert_contains "built-in payment simulator" "$CONFIG_LOG" "PAYMENT_SIMULATOR=on also works without demo mode"
+configure APP_ENV=local APP_DEMO=false PAYMENT_SIMULATOR=on
+assert_eq 0 "$CONFIG_STATUS" "local development: PAYMENT_SIMULATOR=on works without demo mode"
+assert_contains "built-in payment simulator" "$CONFIG_LOG" "local development: the simulator takes the payments"
+
+# A demo set up with bin/setup.php has PAYMENT_SIMULATOR=true; leaving demo mode must switch it off too.
+for production in APP_ENV=production APP_ENV=; do
+    configure "$production" APP_DEMO=false PAYMENT_SIMULATOR=true STRIPE_SECRET_KEY=sk_live_realStore456
+    assert_eq 1 "$CONFIG_STATUS" "real store (${production}): the simulator is refused"
+done
+assert_contains "Set PAYMENT_SIMULATOR=false" "$CONFIG_LOG" "real store: the refusal says how to fix it"
+assert_not_contains "Payments:" "$CONFIG_LOG" "real store: no payment mode is reported"
+assert_not_contains sk_live_realStore456 "$CONFIG_LOG" "real store: the key is not printed"
+configure APP_ENV=production APP_DEMO=true PAYMENT_SIMULATOR=true
+assert_eq 0 "$CONFIG_STATUS" "a demo in production may use the simulator"
 
 for live in sk_live_doNotUse987 rk_live_doNotUse987; do
     configure APP_DEMO=true STRIPE_SECRET_KEY="$live"

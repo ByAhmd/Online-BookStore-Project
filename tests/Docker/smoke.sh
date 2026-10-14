@@ -13,7 +13,8 @@
 # Checks: /health.php, the home page with the sample catalog, sign-up, add to
 # cart, checkout on the payment simulator's page (public/pay.php) to the paid
 # confirmation, that the payment page needs its CSRF token and refuses unknown
-# sessions, that private files are not served, and the security headers.
+# sessions, that the Stripe webhook is closed, that private files are not
+# served, and the security headers.
 
 set -euo pipefail
 
@@ -226,7 +227,14 @@ pass "the order is confirmed as paid"
 
 request GET 'pay.php?session=cs_test_unknown'
 expect_status 404
+# The simulator's own message (English or Arabic), not the 404 of a store without the simulator.
+grep -Eq 'This payment link is not valid|رابط الدفع هذا غير صالح' "$BODY" \
+    || fail "the 404 for an unknown session does not come from the payment simulator"
 pass "the payment page answers 404 for unknown sessions"
+
+request POST stripe_webhook.php -H 'Content-Type: application/json' -H 'Stripe-Signature: t=1,v1=0' --data '{}'
+expect_status 404
+pass "Stripe webhooks are not accepted while the simulator takes the payments (404)"
 
 # --- Private files -------------------------------------------------------------
 for path in .env .htaccess composer.json composer.lock vendor/autoload.php storage/logs/app.log \
