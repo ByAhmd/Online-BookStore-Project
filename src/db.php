@@ -106,7 +106,7 @@ function db_one(string $sql, array $params = []): ?array
  */
 function db_all(string $sql, array $params = []): array
 {
-    return db_run($sql, $params)->fetchAll();
+    return array_values(db_run($sql, $params)->fetchAll());
 }
 
 /**

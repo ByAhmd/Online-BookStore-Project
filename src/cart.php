@@ -72,7 +72,15 @@ function cart_total_minor(array $lines): int
  */
 function cart_unavailable_lines(array $lines): array
 {
-    return array_values(array_filter($lines, static fn (array $line): bool => !$line['available']));
+    $unavailable = [];
+    foreach ($lines as $index => $line) {
+        if (!$line['available']) {
+            // $lines[$index] keeps the caller's line type; the check above
+            // narrows $line to array{available: false} for static analysis.
+            $unavailable[] = $lines[$index];
+        }
+    }
+    return $unavailable;
 }
 
 /**

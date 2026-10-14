@@ -45,7 +45,7 @@ function genre_label(string $genre): string
  */
 function list_genres(): array
 {
-    return array_map('strval', db_run('SELECT DISTINCT genre FROM books ORDER BY genre')->fetchAll(PDO::FETCH_COLUMN));
+    return array_values(array_map('strval', db_run('SELECT DISTINCT genre FROM books ORDER BY genre')->fetchAll(PDO::FETCH_COLUMN)));
 }
 
 /**

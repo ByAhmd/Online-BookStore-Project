@@ -61,11 +61,11 @@ function db_constraint_exists(string $table, string $name): bool
  */
 function db_foreign_keys(string $table): array
 {
-    return array_map('strval', db_run(
+    return array_values(array_map('strval', db_run(
         "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_TYPE = 'FOREIGN KEY'",
         [$table]
-    )->fetchAll(PDO::FETCH_COLUMN));
+    )->fetchAll(PDO::FETCH_COLUMN)));
 }
 
 /* ---------------------------------------------------------------------
@@ -226,7 +226,7 @@ function ensure_migrations_table(): void
  */
 function applied_migrations(): array
 {
-    return array_map('strval', db_run('SELECT version FROM schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN));
+    return array_values(array_map('strval', db_run('SELECT version FROM schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN)));
 }
 
 /**

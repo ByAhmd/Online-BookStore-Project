@@ -57,7 +57,7 @@ $toggle = static function (string $inputId): string {
         . '</button>';
 };
 
-page_header($panels[$active], ['sign.css'], ['bodyClass' => 'auth-page']);
+page_header(t('auth.panels.' . $active), ['sign.css'], ['bodyClass' => 'auth-page']);
 ?>
         <div class="auth-shell">
             <div class="auth-card" data-i18n-mismatch="<?= e(t('auth.js.password_mismatch')) ?>" data-i18n-too-long="<?= e(t('auth.js.password_too_long')) ?>">

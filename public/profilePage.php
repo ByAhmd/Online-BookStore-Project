@@ -247,7 +247,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                                 <a class="profile-menu-link<?= $key === 'delete' ? ' profile-menu-danger' : '' ?>" href="profilePage.php?section=<?= e($key) ?>" data-section="<?= e($key) ?>" data-title="<?= e($info['label'] . ' · ' . $appName) ?>"<?= $key === $section ? ' aria-current="page"' : '' ?>>
 <?php if ($info['icon'] !== null): ?>
                                     <img src="<?= e($info['icon']) ?>" alt="" width="32" height="32">
-<?php else: ?>
+<?php elseif (isset($menuIcons[$key])): ?>
                                     <?= $menuIcons[$key] . "\n" ?>
 <?php endif; ?>
                                     <span><?= e($info['label']) ?></span>
