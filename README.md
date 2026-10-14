@@ -78,7 +78,7 @@ page architecture is unchanged; there is no framework.
 
 **Everywhere**
 - English and Arabic interface with a language switch in the header, Arabic plural forms, Arabic dates, amounts and genre names, and a mirrored right-to-left layout.
-- Optional demo mode (`APP_DEMO=true`) for a public showcase: a banner, and a built-in payment simulator instead of Stripe.
+- Optional demo mode (`APP_DEMO=true`) for a public showcase: a banner, a built-in payment simulator instead of Stripe, and optionally a demo inbox that shows the store's emails instead of sending them.
 
 ## Technology stack
 
@@ -87,12 +87,13 @@ page architecture is unchanged; there is no framework.
 | Language | PHP ≥ 8.1 (tested on 8.2 and 8.4; CI covers 8.1–8.4) |
 | Database | MySQL ≥ 8.0.16 or MariaDB ≥ 10.4 (InnoDB, utf8mb4), accessed with PDO prepared statements |
 | Payments | [Stripe Checkout](https://stripe.com/docs/payments/checkout) via `stripe/stripe-php` 16.x |
-| Email | SendGrid (`sendgrid/sendgrid` 8.x), or a local log file for development |
+| Email | Any SMTP server through PHPMailer (`phpmailer/phpmailer` 7.x), a demo inbox stored in the database, or a local log file for development |
 | Frontend | Server-rendered HTML, plain CSS and vanilla JavaScript (no build step), Google Fonts (Quicksand) |
 | Tooling | Composer, PHPUnit 10, PHPStan 2 (level 6), GitHub Actions |
 
 Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 `gd` is recommended (it re-encodes uploaded avatars, which strips metadata and embedded payloads).
+`openssl` is needed to send email over SMTP with TLS.
 
 ## Project structure
 
@@ -111,7 +112,7 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 │   ├── migrations.php      Schema migration runner
 │   ├── db.php env.php helpers.php mailer.php uploads.php
 │   └── views/              Shared header (navigation), footer and error page
-├── lang/en/  lang/ar/      Interface text, one file per area (common, auth, account, shop, admin)
+├── lang/en/  lang/ar/      Interface text, one file per area (common, auth, account, shop, admin, mail)
 ├── database/
 │   ├── schema.sql          Latest database schema (fresh installs)
 │   ├── seed.sql            Sample catalog: 55 books with stock, no user data
@@ -250,7 +251,7 @@ convenience, and variables already set in the real environment take precedence.
 | `APP_URL` | `http://localhost:8000` | Public URL of `public/` without a trailing slash. Used for Stripe return URLs and password-reset links. |
 | `APP_TIMEZONE` | `Asia/Riyadh` | PHP and database-session timezone |
 | `APP_DEFAULT_LOCALE` | `en` | Interface language for visitors who have not chosen one: `en` or `ar` |
-| `APP_DEMO` | `false` | Public demo mode: shows a banner; meant to be used with the payment simulator ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)) |
+| `APP_DEMO` | `false` | Public demo mode: shows a banner; meant to be used with the payment simulator ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
 | `REQUIRE_EMAIL_VERIFICATION` | `true` | New customers must confirm their email address before signing in. Needs working email in production. |
 | `LOG_DIR` | `storage/logs` | Directory for `app.log`, `php-error.log` and `mail.log` (relative paths start at the project root) |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `3306` | Database server |
@@ -261,9 +262,12 @@ convenience, and variables already set in the real environment take precedence.
 | `STRIPE_WEBHOOK_SECRET` | — | Signing secret of the webhook endpoint (`whsec_…`) |
 | `STRIPE_CURRENCY` | `sar` | ISO code of a **two-decimal** currency that book prices are charged in (zero- and three-decimal currencies such as JPY or KWD are refused) |
 | `STRIPE_API_BASE` | — | **Tests only:** points the Stripe SDK at the local mock in `tests/Support` |
-| `MAIL_DRIVER` | `log` | `log` (write to `mail.log`), `sendgrid`, or `null` (discard) |
-| `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | `no-reply@example.com` / `BookWise` | Sender of outgoing email |
-| `SENDGRID_API_KEY` | — | Needed when `MAIL_DRIVER=sendgrid` |
+| `MAIL_DRIVER` | `log` | `log` (write to `mail.log`), `smtp` (send through `SMTP_*`), `database` (demo inbox; only with `APP_DEMO=true`) or `null` (discard). See [Email](#email). |
+| `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | `no-reply@example.com` / `BookWise` | Sender of outgoing email; your provider must allow this address |
+| `SMTP_HOST` / `SMTP_PORT` | — / `587` | SMTP server for `MAIL_DRIVER=smtp`. Use port `2525` where a host blocks 587 and the provider offers it. |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | — | SMTP sign-in; leave `SMTP_USERNAME` empty for a server without authentication. The password is never logged. |
+| `SMTP_ENCRYPTION` | `tls` | `tls` (STARTTLS, required before signing in), `ssl` (TLS from the start, usually port 465) or `none` (only for a test server on your own machine) |
+| `SMTP_TIMEOUT` | `10` | Seconds to wait for the SMTP server before the email counts as failed |
 | `BOOKWISE_ADMIN_PASSWORD` | — | Optional; used by `bin/create-admin.php`, and with `BOOKWISE_ADMIN_EMAIL` by `bin/install.php` |
 
 The container adds a few settings of its own (`PORT`, `DB_WAIT_SECONDS`, `BOOKWISE_ADMIN_EMAIL` and others); they are listed in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#container-settings-reference).
@@ -324,11 +328,26 @@ Two customers can still pay for the last copy at the same moment; the second ord
 
 ## Email
 
-- `MAIL_DRIVER=log` (default) writes every email, including password-reset and verification links, to `storage/logs/mail.log`. Nothing is sent.
-- `MAIL_DRIVER=sendgrid` sends through SendGrid. It needs `SENDGRID_API_KEY` and a verified sender (`MAIL_FROM_ADDRESS`).
-- `MAIL_DRIVER=null` discards every email (the public demo uses this, with `REQUIRE_EMAIL_VERIFICATION=false`).
-
 The app sends, in the customer's language: the email-verification (or welcome) email, a notice when someone tries to sign up with an existing address, the password-reset email, a password-changed notice and an account-deleted confirmation.
+Every email has a plain-text and an HTML part. `MAIL_DRIVER` decides where it goes:
+
+- **`log`** (default) writes every email, including password-reset and verification links, to `storage/logs/mail.log`. Nothing is sent. For local development only.
+- **`smtp`** sends through any SMTP server, using [PHPMailer](https://github.com/PHPMailer/PHPMailer). Most email providers offer SMTP; copy the server, port and sign-in from their settings into `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME` and `SMTP_PASSWORD`, and set `MAIL_FROM_ADDRESS` to an address the provider lets you send from.
+  - `SMTP_ENCRYPTION=tls` (the default) requires STARTTLS: if the server does not offer it, the email fails before the password is sent.
+    `ssl` uses TLS from the start (usually port 465). `none` is only for a test server on your own machine, such as [Mailpit](https://mailpit.axllent.org/).
+  - Port 587 is the standard. Some hosts block it; many providers also accept port 2525.
+  - Messages are encoded as UTF-8, so Arabic subjects, names and text arrive intact.
+  - A server that does not answer makes the email fail after `SMTP_TIMEOUT` seconds (10 by default), so a page never hangs on it.
+    Failures are logged in `app.log` as `Email delivery failed` (never with the password); visitors see the usual answer.
+- **`database`** is the **demo inbox**, for a public demo without an email provider. It only works with `APP_DEMO=true`; otherwise every email fails and an error is logged.
+  Emails are stored in the `demo_mail` table instead of being sent, deleted after 48 hours, and shown on `inbox.php` (the **Inbox** link in the header).
+  - A browser sees only the emails of the account it is logged in to, and of the accounts it created by signing up in the same browser session.
+    Signing up with an address that already has an account, or asking for a password reset or a new confirmation link for it, never makes that account's emails readable.
+    Nobody can therefore read another person's confirmation or reset links. An administrator sees only the emails sent to their own address.
+  - When an address is registered again after its account was deleted, the emails left over from the deleted account are removed first.
+  - Emails are shown as plain text, in their own language and text direction. Only links to the store (`APP_URL`) are clickable; the HTML part is stored but never displayed.
+  - The demo banner and the notes on the password reset and confirmation pages point to the inbox.
+- **`null`** discards every email. Use it with `REQUIRE_EMAIL_VERIFICATION=false`, or new customers can never confirm their address.
 
 ## Database migrations
 
@@ -393,7 +412,7 @@ The suites are:
 
 - **unit:** pure functions.
 - **integration:** domain code against a real database.
-- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, checkout, refunds, webhooks, password reset and change, account deletion, uploads, admin pages and the Arabic interface.
+- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, checkout, refunds, webhooks, password reset and change, account deletion, uploads, admin pages, the demo inbox and the Arabic interface.
 - **deploy:** checks of the Docker and Render files (line endings, configuration, the entrypoint's database check). The image itself is built and smoke-tested by the CI's Docker job.
 
 Stripe is never contacted by the tests. `tests/Support/stripe_mock_router.php` is a small local stand-in
@@ -406,6 +425,8 @@ php -S 127.0.0.1:12111 tests/Support/stripe_mock_router.php
 ```
 
 The mock shows a "Pay (simulate success)" / "Cancel" page in place of Stripe's hosted checkout. Use it for local testing only.
+
+No email leaves the machine either: the SMTP tests talk to a small local server, `tests/Support/fake_smtp_server.php`, which only records the conversation.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs `composer validate`, `composer audit`, lint, PHPStan and all test suites.
 It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job builds the Docker image and smoke-tests the running container.
@@ -434,12 +455,15 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job
   - Files get random names and are re-encoded with GD, so only decoded pixels are stored.
   - `public/uploads/.htaccess` prevents script execution on Apache.
 - **Input encoding:** text that is not valid UTF-8 is rejected as empty input rather than reaching the database.
+- **Demo inbox:** a browser reads only the emails of the account it is logged in to and of the accounts it created by signing up; typing an address into a form never shows its emails (see [Email](#email)).
+  Messages are escaped, link only to the store, and are sent with `Cache-Control: no-store`.
 - **Secrets:** read only from the environment. `.env` is git-ignored, and `.env.example` contains placeholders only.
 - **Headers:** `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` and HSTS when served over HTTPS.
 
-> **Credential rotation:** earlier, unpublished versions of this project contained a hard-coded Stripe test secret key and a SendGrid API key in their source files.
-> Those keys must be considered compromised and revoked in the Stripe and SendGrid dashboards.
-> They are not present anywhere in this repository.
+> **Credential rotation:** the original project's source files contained a hard-coded Stripe test secret key and a SendGrid API key.
+> Neither key is in this repository or its history, and the owner can no longer revoke them.
+> Stripe and SendGrid both receive GitHub's secret-scanning reports and usually disable keys that leak that way.
+> Keep the original project files private. BookWise itself uses neither key: Stripe keys come from the environment, and email goes through SMTP.
 
 ## Deployment checklist
 
@@ -453,7 +477,7 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job
 - On **nginx** or any server that ignores `.htaccess`, deny PHP execution under `/uploads/` in the server config, for example:
   `location ^~ /uploads/ { location ~ \.php$ { deny all; } }`
 - Configure the Stripe webhook endpoint and secret. Use live keys only in production.
-- Configure SendGrid (or switch `src/mailer.php` to your provider) and set `MAIL_FROM_ADDRESS` to a verified sender.
+- Configure email with `MAIL_DRIVER=smtp` and the `SMTP_*` settings of your provider, and set `MAIL_FROM_ADDRESS` to an address it lets you send from.
 - Rotate logs. `storage/logs/mail.log` contains reset links when `MAIL_DRIVER=log`, so never use that driver in production.
 
 ## Known limitations
@@ -465,6 +489,8 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job
   A payment that does not match its order is marked `failed` and logged as `MANUAL REVIEW REQUIRED` in `app.log`.
 - **Login throttling** counts attempts per IP address. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server (the Docker image does this for Render).
 - **No sign-up rate limit:** only verification and sign-up notice emails are limited, to one per account every few minutes.
+- **The demo inbox reveals registered addresses:** after signing up, a confirmation email appears in the browser's inbox only when the address was new.
+  The sign-up page itself still gives the same answer either way. This only applies to a demo with `MAIL_DRIVER=database`, which holds no real accounts.
 - **The free live demo** sleeps after 15 minutes without visitors (the first request then takes about a minute) and loses uploaded images on every restart. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#limits-of-the-free-demo).
 - **The original database could not be fully recovered:** the original repository shipped raw MariaDB data files instead of an SQL export.
   The table definitions and the 55-book catalog were recovered from them and form `schema.sql`/`seed.sql`.
