@@ -13,23 +13,20 @@ $userId = (int) $user['id'];
 $cartId = parse_int($_POST['cart_id'] ?? null);
 $quantity = parse_int($_POST['quantity'] ?? null, 1, CART_MAX_QUANTITY);
 
-// Only the customer's own lines are visible here; cart_set_quantity() re-checks ownership.
-$line = null;
-foreach ($cartId !== null ? cart_lines($userId) : [] as $candidate) {
-    if ($candidate['cart_id'] === $cartId) {
-        $line = $candidate;
-        break;
-    }
-}
+// cart_update_quantity() only touches the customer's own line and never sets
+// more copies than are in stock.
+$result = $cartId !== null ? cart_update_quantity($userId, $cartId, $quantity ?? 0) : null;
 
-if ($line === null) {
-    flash('error', 'That item is no longer in your cart.');
-} elseif ($quantity === null) {
-    flash('error', 'Choose a quantity between 1 and ' . CART_MAX_QUANTITY . '.');
-} elseif (!cart_set_quantity($userId, $cartId, $quantity)) {
-    flash('error', 'That item is no longer in your cart.');
+if ($result === null || $result['status'] === 'missing') {
+    flash('error', t('shop.cart.line_missing'));
+} elseif ($result['status'] === 'invalid') {
+    flash('error', t('shop.cart.quantity_error', ['max' => CART_MAX_QUANTITY]));
+} elseif ($result['status'] === 'out_of_stock') {
+    flash('error', t('shop.cart.out_of_stock', ['title' => $result['title']]));
+} elseif ($result['status'] === 'capped') {
+    flash('info', tn('shop.cart.capped', $result['quantity'], ['title' => $result['title']]));
 } else {
-    flash('success', sprintf('Updated “%s” to %d %s.', $line['title'], $quantity, $quantity === 1 ? 'copy' : 'copies'));
+    flash('success', tn('shop.cart.updated', $result['quantity'], ['title' => $result['title']]));
 }
 
 redirect('cart.php');

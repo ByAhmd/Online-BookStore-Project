@@ -126,6 +126,37 @@ final class StripeMock
     }
 
     /**
+     * Refunds a payment directly on the mock, as staff would in the Stripe
+     * Dashboard (BookWise only hears about it through a webhook).
+     *
+     * @return array<string, mixed> The refund
+     */
+    public function refundPayment(string $paymentIntent, ?int $amount = null): array
+    {
+        $form = ['payment_intent' => $paymentIntent];
+        if ($amount !== null) {
+            $form['amount'] = $amount;
+        }
+        $response = $this->call('POST', '/v1/refunds', $form);
+        if ($response['status'] !== 200) {
+            throw new RuntimeException("Mock could not refund $paymentIntent: " . json_encode($response['body']));
+        }
+        return $response['body'];
+    }
+
+    /**
+     * Refunds the mock knows, newest first (optionally of one payment intent).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function refunds(?string $paymentIntent = null): array
+    {
+        $query = 'limit=100' . ($paymentIntent !== null ? '&payment_intent=' . rawurlencode($paymentIntent) : '');
+        $data = $this->call('GET', '/v1/refunds?' . $query)['body']['data'] ?? [];
+        return is_array($data) ? array_values($data) : [];
+    }
+
+    /**
      * @return array<string, mixed>|null The mock's stored session
      */
     public function session(string $sessionId): ?array

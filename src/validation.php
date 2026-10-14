@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 /**
  * Server-side validation rules shared by all forms. Each validator returns an
- * error message, or null when the value is acceptable.
+ * error message in the visitor's language (shop.validation.* and
+ * admin.validation.*), or null when the value is acceptable.
  */
 
 const PASSWORD_MIN_LENGTH = 8;
@@ -13,6 +14,7 @@ const NAME_MAX_LENGTH = 100;
 const COMMENT_MAX_LENGTH = 2000;
 const BOOK_PRICE_MIN = 1.00;
 const BOOK_PRICE_MAX = 10000.00;
+const BOOK_STOCK_MAX = 100000;
 
 /** Payment preferences a customer may pick. Card details are entered on Stripe only. */
 const PAYMENT_PREFERENCES = ['Credit / Debit Card', 'Apple Pay', 'Google Pay', 'Mada'];
@@ -28,10 +30,10 @@ function normalize_email(string $email): string
 function validate_email(string $email): ?string
 {
     if ($email === '') {
-        return 'Please enter your email address.';
+        return t('shop.validation.email_required');
     }
     if (strlen($email) > 255 || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-        return 'Please enter a valid email address.';
+        return t('shop.validation.email_invalid');
     }
     return null;
 }
@@ -39,13 +41,13 @@ function validate_email(string $email): ?string
 function validate_person_name(string $name): ?string
 {
     if ($name === '') {
-        return 'Please enter your name.';
+        return t('shop.validation.name_required');
     }
     if (mb_strlen($name) > NAME_MAX_LENGTH) {
-        return 'Name must be ' . NAME_MAX_LENGTH . ' characters or fewer.';
+        return t('shop.validation.name_too_long', ['max' => NAME_MAX_LENGTH]);
     }
     if (preg_match('/[\x00-\x1F\x7F<>]/u', $name)) {
-        return 'Name contains characters that are not allowed.';
+        return t('shop.validation.name_invalid');
     }
     return null;
 }
@@ -53,13 +55,13 @@ function validate_person_name(string $name): ?string
 function validate_new_password(string $password, string $confirmation): ?string
 {
     if (mb_strlen($password) < PASSWORD_MIN_LENGTH) {
-        return 'Password must be at least ' . PASSWORD_MIN_LENGTH . ' characters long.';
+        return t('shop.validation.password_too_short', ['min' => PASSWORD_MIN_LENGTH]);
     }
     if (strlen($password) > PASSWORD_MAX_BYTES) {
-        return 'Password must be at most ' . PASSWORD_MAX_BYTES . ' bytes long.';
+        return t('shop.validation.password_too_long', ['max' => PASSWORD_MAX_BYTES]);
     }
     if (!hash_equals($password, $confirmation)) {
-        return 'Passwords do not match.';
+        return t('shop.validation.password_mismatch');
     }
     return null;
 }
@@ -74,24 +76,28 @@ function validate_date_of_birth(string $date): ?string
     }
     $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
     if ($parsed === false || $parsed->format('Y-m-d') !== $date) {
-        return 'Please enter a valid date of birth.';
+        return t('shop.validation.dob_invalid');
     }
     if ($parsed > new DateTimeImmutable('today') || (int) $parsed->format('Y') < 1900) {
-        return 'Date of birth must be a past date after 1900.';
+        return t('shop.validation.dob_range');
     }
     return null;
 }
 
-function validate_genre_name(string $genre, string $label = 'Genre'): ?string
+/**
+ * A catalog genre name. $label names the field in messages (default: "Genre").
+ */
+function validate_genre_name(string $genre, ?string $label = null): ?string
 {
+    $label ??= t('admin.validation.labels.genre');
     if ($genre === '') {
-        return "$label is required.";
+        return t('admin.validation.required', ['label' => $label]);
     }
     if (mb_strlen($genre) > 100 || !preg_match('/^[\p{L}\p{N}][\p{L}\p{N} &\'\-]*$/uD', $genre)) {
-        return "$label may only contain letters, numbers, spaces, '&', apostrophes and hyphens (max 100 characters).";
+        return t('admin.validation.genre_invalid', ['label' => $label]);
     }
     if (in_array(mb_strtolower($genre), RESERVED_GENRE_NAMES, true)) {
-        return "\"$genre\" is reserved. Please choose a different $label name.";
+        return t('admin.validation.genre_reserved', ['genre' => $genre, 'label' => $label]);
     }
     return null;
 }
@@ -103,13 +109,13 @@ function validate_genre_name(string $genre, string $label = 'Genre'): ?string
 function validate_favorite_genre(string $genre): ?string
 {
     if ($genre === '') {
-        return 'Favorite genre is required.';
+        return t('shop.validation.favorite_genre_required');
     }
     if (mb_strlen($genre) > 100) {
-        return 'Favorite genre must be 100 characters or fewer.';
+        return t('shop.validation.favorite_genre_too_long');
     }
     if (preg_match('/[\x00-\x1F\x7F<>]/u', $genre)) {
-        return 'Favorite genre contains characters that are not allowed.';
+        return t('shop.validation.favorite_genre_invalid');
     }
     return null;
 }
@@ -121,16 +127,16 @@ function validate_rating(mixed $rating): ?int
 
 /**
  * Validates a cover image reference: an existing image under public/imges or
- * public/uploads, or an absolute https URL (the Content-Security-Policy
- * blocks plain-http images).
+ * public/uploads/covers (uploaded covers), or an absolute https URL (the
+ * Content-Security-Policy blocks plain-http images).
  */
 function validate_cover_image(string $value): ?string
 {
     if ($value === '') {
-        return 'Cover image is required.';
+        return t('admin.validation.cover_required');
     }
     if (strlen($value) > 255) {
-        return 'Cover image path must be 255 characters or fewer.';
+        return t('admin.validation.cover_too_long');
     }
     if (preg_match('#^[a-z][a-z0-9+.\-]*:#i', $value)) {
         $parts = parse_url($value);
@@ -139,29 +145,31 @@ function validate_cover_image(string $value): ?string
             || filter_var($value, FILTER_VALIDATE_URL) === false
             || empty($parts['host'])
         ) {
-            return 'Cover image URLs must start with https:// and be valid.';
+            return t('admin.validation.cover_url');
         }
         return null;
     }
     if (
         str_contains($value, '..')
-        || !preg_match('#^(imges|uploads)/[A-Za-z0-9 _\-./]+\.(png|jpe?g|gif|webp)$#iD', $value)
+        || !preg_match('#^(imges/|uploads/covers/)[A-Za-z0-9 _\-./]+\.(png|jpe?g|gif|webp)$#iD', $value)
     ) {
-        return 'Cover image must be a path like "imges/All_section/book.png" or an https:// URL.';
+        return t('admin.validation.cover_path');
     }
     if (!is_file(base_path('public/' . $value))) {
-        return 'No image exists at "' . $value . '" (paths are case-sensitive).';
+        return t('admin.validation.cover_missing', ['path' => $value]);
     }
     return null;
 }
 
 /**
- * Validates and normalizes the admin book form.
+ * Validates and normalizes the admin book form. When $coverUploaded is true a
+ * cover file accompanies the form and replaces the cover_image field, which
+ * is then not validated (the caller stores the upload and fills in its path).
  *
  * @param array<string, mixed> $input
  * @return array{0: array<string, string>, 1: array<string, string>} [clean values, errors by field]
  */
-function validate_book_input(array $input): array
+function validate_book_input(array $input, bool $coverUploaded = false): array
 {
     $book = [
         'title' => input_string($input, 'title', 300),
@@ -169,15 +177,17 @@ function validate_book_input(array $input): array
         'genre' => input_string($input, 'genre', 150),
         'description' => input_string($input, 'description', 6000),
         'price' => input_string($input, 'price', 20),
+        'stock' => input_string($input, 'stock', 20),
         'cover_image' => input_string($input, 'cover_image', 300),
     ];
     $errors = [];
 
-    foreach (['title' => 'Title', 'author' => 'Author'] as $field => $label) {
+    foreach (['title', 'author'] as $field) {
+        $label = t('admin.validation.labels.' . $field);
         if ($book[$field] === '') {
-            $errors[$field] = "$label is required.";
+            $errors[$field] = t('admin.validation.required', ['label' => $label]);
         } elseif (mb_strlen($book[$field]) > 255) {
-            $errors[$field] = "$label must be 255 characters or fewer.";
+            $errors[$field] = t('admin.validation.too_long', ['label' => $label, 'max' => 255]);
         }
     }
 
@@ -186,20 +196,30 @@ function validate_book_input(array $input): array
     }
 
     if ($book['description'] === '') {
-        $errors['description'] = 'Description is required.';
+        $errors['description'] = t('admin.validation.required', ['label' => t('admin.validation.labels.description')]);
     } elseif (mb_strlen($book['description']) > 5000) {
-        $errors['description'] = 'Description must be 5000 characters or fewer.';
+        $errors['description'] = t('admin.validation.too_long', ['label' => t('admin.validation.labels.description'), 'max' => 5000]);
     }
 
     if (!preg_match('/^\d{1,5}(\.\d{1,2})?$/D', $book['price'])) {
-        $errors['price'] = 'Price must be a number with at most two decimals.';
+        $errors['price'] = t('admin.validation.price_format');
     } elseif ((float) $book['price'] < BOOK_PRICE_MIN || (float) $book['price'] > BOOK_PRICE_MAX) {
-        $errors['price'] = sprintf('Price must be between %.2f and %.2f.', BOOK_PRICE_MIN, BOOK_PRICE_MAX);
+        $errors['price'] = t('admin.validation.price_range', [
+            'min' => number_format(BOOK_PRICE_MIN, 2, '.', ''),
+            'max' => number_format(BOOK_PRICE_MAX, 2, '.', ''),
+        ]);
     } else {
         $book['price'] = number_format((float) $book['price'], 2, '.', '');
     }
 
-    if (($error = validate_cover_image($book['cover_image'])) !== null) {
+    if (!preg_match('/^\d{1,6}$/D', $book['stock']) || (int) $book['stock'] > BOOK_STOCK_MAX) {
+        $errors['stock'] = t('admin.validation.stock', ['max' => BOOK_STOCK_MAX]);
+    } else {
+        $book['stock'] = (string) (int) $book['stock'];
+    }
+
+    // An uploaded file replaces whatever the path field says.
+    if (!$coverUploaded && ($error = validate_cover_image($book['cover_image'])) !== null) {
         $errors['cover_image'] = $error;
     }
 

@@ -26,6 +26,7 @@ final class AdminTest extends HttpTestCase
             'genre' => 'Mystery',
             'description' => "A book about tests.\nSecond paragraph.",
             'price' => '24.5',
+            'stock' => '12',
             'cover_image' => 'imges/All_section/dark.png',
         ];
     }
@@ -177,14 +178,14 @@ final class AdminTest extends HttpTestCase
         self::assertSame(1, $document->count($row));
         self::assertSame('Order Owner', $document->text($row . '//span[@class="customer-name"]'));
         self::assertSame((string) $user['Eaddress'], $document->text($row . '//span[@class="customer-email"]'));
-        self::assertSame(['#' . $orderId, 'Order Owner ' . $user['Eaddress'], '2', 'SAR 39.98', 'paid'], array_slice($document->texts($row . '/*'), 0, 5));
+        self::assertSame(['#' . $orderId, 'Order Owner ' . $user['Eaddress'], '2', 'SAR 39.98', 'Paid'], array_slice($document->texts($row . '/*'), 0, 5));
         self::assertSame(['Books', '55', 'Genres', '8', 'Paid orders', '1', 'Revenue', 'SAR 39.98'], $document->texts('//section[' . HtmlDocument::hasClass('admin-stats') . ']//p'));
 
         // Stored orders keep their own currency; revenue is never summed across currencies.
         db_run('UPDATE orders SET currency = ? WHERE id = ?', ['usd', $orderId]);
         $this->purchase($customer, [51 => 1]);
         $document = $this->assertHtmlPage($admin->get('admin_dashboard.php'));
-        self::assertSame(['2', 'USD 39.98', 'paid'], array_slice($document->texts($row . '/*'), 2, 3));
+        self::assertSame(['2', 'USD 39.98', 'Paid'], array_slice($document->texts($row . '/*'), 2, 3));
         self::assertSame(['Books', '55', 'Genres', '8', 'Paid orders', '2', 'Revenue', 'SAR 19.99 USD 39.98'], $document->texts('//section[' . HtmlDocument::hasClass('admin-stats') . ']//p'));
         self::assertSame(['SAR 19.99', 'USD 39.98'], $document->texts('//span[' . HtmlDocument::hasClass('stat-figure') . ']'));
     }
@@ -216,7 +217,7 @@ final class AdminTest extends HttpTestCase
         self::assertCount(7, $cells, 'The admin still sees the order');
         self::assertSame('#' . $orderId, $cells[0]);
         self::assertStringStartsWith('History Keeper ', $cells[1]);
-        self::assertSame(['2', 'SAR 39.98', 'paid'], array_slice($cells, 2, 3));
+        self::assertSame(['2', 'SAR 39.98', 'Paid'], array_slice($cells, 2, 3));
     }
 
     public function testBookTextIsEscapedEverywhere(): void

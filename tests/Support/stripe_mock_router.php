@@ -15,6 +15,8 @@ declare(strict_types=1);
  *   GET  /v1/checkout/sessions/{id}            retrieve a session
  *   POST /v1/checkout/sessions/{id}/expire     expire an open session
  *   POST /v1/refunds                           refund a paid session's payment intent
+ *                                              (a repeated Idempotency-Key returns the first refund)
+ *   GET  /v1/refunds?payment_intent=pi_...     list refunds, newest first (optionally of one payment intent)
  *   GET  /v1/refunds/{id}                      retrieve a refund
  * Simulated hosted checkout page:
  *   GET  /pay/{id}                             shows Pay / Cancel buttons
@@ -174,6 +176,16 @@ if (str_starts_with($path, '/v1/')) {
     }
 
     if ($method === 'POST' && $path === '/v1/refunds') {
+        // Like Stripe: retrying with the same Idempotency-Key replays the first result.
+        $idempotencyKey = (string) ($_SERVER['HTTP_IDEMPOTENCY_KEY'] ?? '');
+        if ($idempotencyKey !== '') {
+            foreach ($refunds as $existing) {
+                if (($existing['idempotency_key'] ?? null) === $idempotencyKey) {
+                    mock_json(200, $existing);
+                    return true;
+                }
+            }
+        }
         $intent = (string) ($_POST['payment_intent'] ?? '');
         $sessionId = null;
         foreach ($sessions as $id => $session) {
@@ -207,10 +219,30 @@ if (str_starts_with($path, '/v1/')) {
             'status' => 'succeeded',
             'metadata' => $_POST['metadata'] ?? new stdClass(),
             'created' => time(),
+            'idempotency_key' => $idempotencyKey !== '' ? $idempotencyKey : null,
         ];
         $sessions[$sessionId]['amount_refunded'] = $alreadyRefunded + $amount;
         $save();
         mock_json(200, $refunds[$refundId]);
+        return true;
+    }
+
+    if ($method === 'GET' && $path === '/v1/refunds') {
+        $intent = isset($_GET['payment_intent']) ? (string) $_GET['payment_intent'] : null;
+        $limit = max(1, min(100, (int) ($_GET['limit'] ?? 10)));
+        $matching = array_values(array_filter(
+            $refunds,
+            static fn (array $refund): bool => $intent === null || ($refund['payment_intent'] ?? null) === $intent
+        ));
+        // Newest first; refunds created in the same second keep their creation order reversed.
+        $matching = array_reverse($matching);
+        usort($matching, static fn (array $a, array $b): int => (int) $b['created'] <=> (int) $a['created']);
+        mock_json(200, [
+            'object' => 'list',
+            'url' => '/v1/refunds',
+            'has_more' => count($matching) > $limit,
+            'data' => array_slice($matching, 0, $limit),
+        ]);
         return true;
     }
 

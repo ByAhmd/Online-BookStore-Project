@@ -141,13 +141,14 @@ final class CheckoutFlowTest extends HttpTestCase
         // The purchase shows up in the order history, on the book page and for staff.
         $orders = $customer->get('profilePage.php?section=orders');
         $this->assertPageText('Order #' . $orderId, $orders);
-        self::assertSame(['paid'], $orders->document()->texts('//span[' . HtmlDocument::hasClass('status-badge') . ']'));
+        // The profile page renders status labels (common.status.*), so compare case-insensitively.
+        self::assertSame(['paid'], array_map('strtolower', $orders->document()->texts('//span[' . HtmlDocument::hasClass('status-badge') . ']')));
         $this->assertPageText('Sold: 3 times', $this->bookPage($customer, self::ESABELLA));
         [$admin] = $this->signedInAdmin();
         $dashboard = $admin->get('admin_dashboard.php');
         $row = '//table[' . HtmlDocument::hasClass('orders-table') . ']//tr[th[normalize-space()="#' . $orderId . '"]]';
         self::assertSame('Paying Reader', $dashboard->document()->text($row . '//span[@class="customer-name"]'));
-        self::assertSame('paid', $dashboard->document()->text($row . '//span[' . HtmlDocument::hasClass('status-badge') . ']'));
+        self::assertSame('Paid', $dashboard->document()->text($row . '//span[' . HtmlDocument::hasClass('status-badge') . ']'));
     }
 
     public function testEmptyCartCannotBeCheckedOut(): void

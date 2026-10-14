@@ -14,11 +14,11 @@ $state = $result['state'];
 $order = $result['order'];
 
 $orderMoney = static function (string|int|float $amount) use ($order): string {
-    $currency = strtoupper((string) ($order['currency'] ?? config('stripe.currency')));
-    return $currency . ' ' . number_format((float) $amount, 2);
+    return format_money($amount, (string) ($order['currency'] ?? config('stripe.currency')));
 };
 
 $items = $state === 'paid' && $order !== null ? order_items((int) $order['id']) : [];
+$refunded = $state === 'paid' && ($order['status'] ?? null) === 'refunded';
 
 $paidAt = null;
 if ($state === 'paid' && !empty($order['paid_at'])) {
@@ -29,15 +29,8 @@ if ($state === 'paid' && !empty($order['paid_at'])) {
     }
 }
 
-$titles = [
-    'paid' => 'Payment received',
-    'processing' => 'Confirming payment',
-    'unpaid' => 'Payment not completed',
-    'invalid' => 'Payment not found',
-    'error' => 'Payment status unavailable',
-    'review' => 'Payment under review',
-];
-$pageTitle = $titles[$state];
+$pageTitle = t('shop.result.titles.' . $state);
+$orderNumber = $order !== null ? '<strong>#' . (int) $order['id'] . '</strong>' : '';
 
 if ($state === 'invalid') {
     http_response_code(404);
@@ -52,20 +45,29 @@ page_header($pageTitle, ['checkout.css']);
             <section class="card result-card result-<?= e($state) ?>" aria-labelledby="result-title">
 <?php if ($state === 'paid' && $order !== null): ?>
                 <span class="result-icon" aria-hidden="true">&#10003;</span>
-                <h1 id="result-title" class="result-title">Thank you! Your payment was received.</h1>
+                <h1 id="result-title" class="result-title"><?= e(t('shop.result.paid_heading')) ?></h1>
                 <p class="result-lead">
-                    Order <strong>#<?= (int) $order['id'] ?></strong> is confirmed<?php if ($paidAt !== null): ?>,
-                    paid on <time datetime="<?= e($paidAt->format('c')) ?>"><?= e($paidAt->format('j M Y, H:i')) ?></time><?php endif; ?>.
+<?php if ($paidAt !== null): ?>
+                    <?= t_markup('shop.result.paid_lead_on', [
+                        'order' => $orderNumber,
+                        'date' => '<time datetime="' . e($paidAt->format('c')) . '">' . e(display_date($paidAt, true)) . '</time>',
+                    ]) ?>
+<?php else: ?>
+                    <?= t_markup('shop.result.paid_lead', ['order' => $orderNumber]) ?>
+<?php endif; ?>
                 </p>
+<?php if ($refunded): ?>
+                <p class="result-note result-refunded"><?= e(t('shop.result.refunded_note')) ?></p>
+<?php endif; ?>
 
 <?php if ($items !== []): ?>
                 <table class="order-table">
-                    <caption class="sr-only">Books in order #<?= (int) $order['id'] ?></caption>
+                    <caption class="sr-only"><?= e(t('shop.result.items_caption', ['id' => (int) $order['id']])) ?></caption>
                     <thead>
                         <tr>
-                            <th scope="col">Book</th>
-                            <th scope="col" class="num">Qty</th>
-                            <th scope="col" class="num">Total</th>
+                            <th scope="col"><?= e(t('shop.result.col_book')) ?></th>
+                            <th scope="col" class="num"><?= e(t('shop.result.col_qty')) ?></th>
+                            <th scope="col" class="num"><?= e(t('shop.result.col_total')) ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -76,11 +78,11 @@ page_header($pageTitle, ['checkout.css']);
                         <tr>
                             <td>
 <?php if ($item['book_id'] !== null): ?>
-                                <a class="order-book" href="Selected.php?id=<?= (int) $item['book_id'] ?>"><?= e($item['title']) ?></a>
+                                <a class="order-book" href="Selected.php?id=<?= (int) $item['book_id'] ?>" dir="auto"><?= e($item['title']) ?></a>
 <?php else: ?>
-                                <span class="order-book"><?= e($item['title']) ?></span>
+                                <span class="order-book" dir="auto"><?= e($item['title']) ?></span>
 <?php endif; ?>
-                                <span class="order-unit"><?= e($orderMoney((string) $item['unit_price'])) ?> each</span>
+                                <span class="order-unit"><?= e(t('shop.result.each', ['price' => $orderMoney((string) $item['unit_price'])])) ?></span>
                             </td>
                             <td class="num"><?= $quantity ?></td>
                             <td class="num"><?= e($orderMoney(minor_to_decimal($lineMinor))) ?></td>
@@ -89,70 +91,72 @@ page_header($pageTitle, ['checkout.css']);
                     </tbody>
                     <tfoot>
                         <tr>
-                            <th scope="row" colspan="2">Total paid</th>
+                            <th scope="row" colspan="2"><?= e(t('shop.result.total_paid')) ?></th>
                             <td class="num"><?= e($orderMoney((string) $order['total_amount'])) ?></td>
                         </tr>
                     </tfoot>
                 </table>
 <?php endif; ?>
 
-                <p class="result-note">Your books are now in your purchase history, and you can rate and review them.</p>
+<?php if (!$refunded): ?>
+                <p class="result-note"><?= e(t('shop.result.paid_note')) ?></p>
+<?php endif; ?>
                 <div class="result-actions">
-                    <a class="btn btn-secondary" href="profilePage.php?section=orders">View my orders</a>
-                    <a class="btn btn-pay" href="Explore_Page.php">Continue exploring</a>
+                    <a class="btn btn-secondary" href="profilePage.php?section=orders"><?= e(t('shop.result.view_orders')) ?></a>
+                    <a class="btn btn-pay" href="Explore_Page.php"><?= e(t('shop.result.continue')) ?></a>
                 </div>
 
 <?php elseif ($state === 'processing'): ?>
                 <span class="result-icon" aria-hidden="true">&hellip;</span>
-                <h1 id="result-title" class="result-title">We're confirming your payment&hellip;</h1>
-                <p class="result-lead">Stripe has received your payment details and is still processing them. This usually takes a few moments.</p>
-                <p class="result-note">There is no need to pay again. Refresh this page to check, or find the order in your history once it is confirmed.</p>
+                <h1 id="result-title" class="result-title"><?= e(t('shop.result.processing_heading')) ?></h1>
+                <p class="result-lead"><?= e(t('shop.result.processing_lead')) ?></p>
+                <p class="result-note"><?= e(t('shop.result.processing_note')) ?></p>
                 <div class="result-actions">
-                    <a class="btn btn-pay" href="success_pay.php?session_id=<?= e(rawurlencode($sessionId)) ?>">Refresh status</a>
-                    <a class="btn btn-secondary" href="profilePage.php?section=orders">View my orders</a>
+                    <a class="btn btn-pay" href="success_pay.php?session_id=<?= e(rawurlencode($sessionId)) ?>"><?= e(t('shop.result.refresh')) ?></a>
+                    <a class="btn btn-secondary" href="profilePage.php?section=orders"><?= e(t('shop.result.view_orders')) ?></a>
                 </div>
 
 <?php elseif ($state === 'unpaid'): ?>
                 <span class="result-icon" aria-hidden="true">&#10005;</span>
-                <h1 id="result-title" class="result-title">Payment not completed</h1>
-                <p class="result-lead">Your payment wasn't completed. You have not been charged.</p>
-                <p class="result-note">Your cart is saved, so you can try again whenever you are ready.</p>
+                <h1 id="result-title" class="result-title"><?= e(t('shop.result.unpaid_heading')) ?></h1>
+                <p class="result-lead"><?= e(t('shop.result.unpaid_lead')) ?></p>
+                <p class="result-note"><?= e(t('shop.result.unpaid_note')) ?></p>
                 <div class="result-actions">
-                    <a class="btn btn-pay" href="cart.php">Back to cart</a>
-                    <a class="btn btn-secondary" href="Explore_Page.php">Continue exploring</a>
+                    <a class="btn btn-pay" href="cart.php"><?= e(t('shop.result.back_to_cart')) ?></a>
+                    <a class="btn btn-secondary" href="Explore_Page.php"><?= e(t('shop.result.continue')) ?></a>
                 </div>
 
 <?php elseif ($state === 'review'): ?>
                 <span class="result-icon" aria-hidden="true">!</span>
-                <h1 id="result-title" class="result-title">Payment under review</h1>
-                <p class="result-lead">We received a payment for this checkout, but it doesn't match your order, so we haven't confirmed it automatically.</p>
+                <h1 id="result-title" class="result-title"><?= e(t('shop.result.review_heading')) ?></h1>
+                <p class="result-lead"><?= e(t('shop.result.review_lead')) ?></p>
                 <p class="result-note">
-                    Our team has been notified and will reconcile it with Stripe. Please don't pay again.
+                    <?= e(t('shop.result.review_note')) ?>
 <?php if ($order !== null): ?>
-                    Mention order <strong>#<?= (int) $order['id'] ?></strong> if you contact us.
+                    <?= t_markup('shop.result.review_mention', ['order' => $orderNumber]) ?>
 <?php endif; ?>
                 </p>
                 <div class="result-actions">
-                    <a class="btn btn-secondary" href="profilePage.php?section=orders">View my orders</a>
+                    <a class="btn btn-secondary" href="profilePage.php?section=orders"><?= e(t('shop.result.view_orders')) ?></a>
                 </div>
 
 <?php elseif ($state === 'error'): ?>
                 <span class="result-icon" aria-hidden="true">!</span>
-                <h1 id="result-title" class="result-title">Payment status unavailable</h1>
-                <p class="result-lead">We couldn't confirm your payment right now. If you were charged, your order will update automatically — please check your orders shortly.</p>
+                <h1 id="result-title" class="result-title"><?= e(t('shop.result.error_heading')) ?></h1>
+                <p class="result-lead"><?= e(t('shop.result.error_lead')) ?></p>
                 <div class="result-actions">
-                    <a class="btn btn-pay" href="success_pay.php?session_id=<?= e(rawurlencode($sessionId)) ?>">Try again</a>
-                    <a class="btn btn-secondary" href="profilePage.php?section=orders">View my orders</a>
+                    <a class="btn btn-pay" href="success_pay.php?session_id=<?= e(rawurlencode($sessionId)) ?>"><?= e(t('shop.result.try_again')) ?></a>
+                    <a class="btn btn-secondary" href="profilePage.php?section=orders"><?= e(t('shop.result.view_orders')) ?></a>
                 </div>
 
 <?php else: ?>
                 <span class="result-icon" aria-hidden="true">?</span>
-                <h1 id="result-title" class="result-title">Payment not found</h1>
-                <p class="result-lead">We couldn't find that payment.</p>
-                <p class="result-note">The link may be incomplete, or the payment belongs to a different account. Your orders and cart are unchanged.</p>
+                <h1 id="result-title" class="result-title"><?= e(t('shop.result.invalid_heading')) ?></h1>
+                <p class="result-lead"><?= e(t('shop.result.invalid_lead')) ?></p>
+                <p class="result-note"><?= e(t('shop.result.invalid_note')) ?></p>
                 <div class="result-actions">
-                    <a class="btn btn-pay" href="cart.php">Go to cart</a>
-                    <a class="btn btn-secondary" href="profilePage.php?section=orders">View my orders</a>
+                    <a class="btn btn-pay" href="cart.php"><?= e(t('shop.result.go_to_cart')) ?></a>
+                    <a class="btn btn-secondary" href="profilePage.php?section=orders"><?= e(t('shop.result.view_orders')) ?></a>
                 </div>
 <?php endif; ?>
             </section>

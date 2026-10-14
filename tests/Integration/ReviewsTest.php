@@ -48,21 +48,19 @@ final class ReviewsTest extends DatabaseTestCase
         $comments = book_comments(self::BOOK, $fan);
 
         self::assertCount(2, $comments);
-        $byAuthor = array_column($comments, null, 'author_name');
-        $names = array_keys($byAuthor);
-        sort($names);
-        self::assertSame(['Reader', 'Visible Name'], $names);
-        $mine = $byAuthor['Visible Name'];
+        $byComment = array_column($comments, null, 'comment');
+        $mine = $byComment["Line one\n<b>bold?</b>"];
         self::assertSame(['id', 'comment', 'rating', 'created_at', 'author_name', 'likes', 'dislikes', 'my_reaction'], array_keys($mine));
-        self::assertSame("Line one\n<b>bold?</b>", $mine['comment'], 'Stored raw; escaping happens on output');
+        self::assertSame('Visible Name', $mine['author_name']);
         self::assertSame([5, 1, 1, 'like'], [(int) $mine['rating'], (int) $mine['likes'], (int) $mine['dislikes'], $mine['my_reaction']]);
-        self::assertSame('Reader', $byAuthor['Reader']['author_name'], 'Reviews of deleted accounts are anonymous');
+        // The page shows these as an anonymous reader, in the visitor's language.
+        self::assertNull($byComment['Orphaned review']['author_name'], 'Reviews of deleted accounts are anonymous');
 
         foreach ([$fan, null] as $viewer) {
             $flat = json_encode(book_comments(self::BOOK, $viewer), JSON_THROW_ON_ERROR);
             self::assertStringNotContainsString('@example.com', $flat, 'Author emails are never returned');
         }
-        self::assertNull(array_column(book_comments(self::BOOK, null), 'my_reaction', 'author_name')['Visible Name'], 'Guests have no reaction');
+        self::assertNull(array_column(book_comments(self::BOOK, null), 'my_reaction', 'comment')["Line one\n<b>bold?</b>"], 'Guests have no reaction');
     }
 
     public function testReactionsToggleSwitchAndUndo(): void

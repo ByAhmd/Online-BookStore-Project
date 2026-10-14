@@ -292,6 +292,24 @@ final class ValidationTest extends TestCase
         self::assertStringStartsWith('No image exists at', (string) validate_cover_image('imges/All_section/does-not-exist.png'));
     }
 
+    public function testUploadedCoversAreAcceptedButOtherUploadsAreNot(): void
+    {
+        $name = bin2hex(random_bytes(16)) . '.png';
+        $cover = BASE_PATH . '/public/uploads/covers/' . $name;
+        $avatar = BASE_PATH . '/public/uploads/avatars/' . $name;
+        file_put_contents($cover, 'placeholder');
+        file_put_contents($avatar, 'placeholder');
+        try {
+            self::assertNull(validate_cover_image('uploads/covers/' . $name));
+            self::assertIsString(validate_cover_image('uploads/avatars/' . $name), 'Profile pictures are not book covers');
+            self::assertIsString(validate_cover_image('uploads/covers/../avatars/' . $name));
+            self::assertStringStartsWith('No image exists at', (string) validate_cover_image('uploads/covers/' . str_repeat('0', 32) . '.png'));
+        } finally {
+            unlink($cover);
+            unlink($avatar);
+        }
+    }
+
     /* -----------------------------------------------------------------
      * Admin book form
      * --------------------------------------------------------------- */
@@ -308,13 +326,14 @@ final class ValidationTest extends TestCase
             'genre' => 'Mystery',
             'description' => "Line one.\nLine two.",
             'price' => '19.99',
+            'stock' => '12',
             'cover_image' => self::SEED_COVER,
         ];
     }
 
     public function testValidBookInputIsTrimmedAndNormalized(): void
     {
-        [$book, $errors] = validate_book_input(self::bookInput(['price' => ' 19.9 ']));
+        [$book, $errors] = validate_book_input(self::bookInput(['price' => ' 19.9 ', 'stock' => ' 007 ']));
 
         self::assertSame([], $errors);
         self::assertSame([
@@ -323,8 +342,68 @@ final class ValidationTest extends TestCase
             'genre' => 'Mystery',
             'description' => "Line one.\nLine two.",
             'price' => '19.90',
+            'stock' => '7',
             'cover_image' => self::SEED_COVER,
         ], $book);
+    }
+
+    /**
+     * @return iterable<string, array{0: string, 1: string|null}>
+     */
+    public static function stocks(): iterable
+    {
+        yield 'zero (sold out)' => ['0', '0'];
+        yield 'one' => ['1', '1'];
+        yield 'leading zeros' => ['0012', '12'];
+        yield 'maximum' => ['100000', '100000'];
+        yield 'above maximum' => ['100001', null];
+        yield 'seven digits' => ['1000000', null];
+        yield 'negative' => ['-1', null];
+        yield 'decimal' => ['2.5', null];
+        yield 'exponent' => ['1e3', null];
+        yield 'text' => ['many', null];
+        yield 'empty' => ['', null];
+    }
+
+    #[DataProvider('stocks')]
+    public function testBookStock(string $stock, ?string $normalized): void
+    {
+        [$book, $errors] = validate_book_input(self::bookInput(['stock' => $stock]));
+
+        if ($normalized === null) {
+            self::assertSame(['stock'], array_keys($errors));
+            self::assertSame('Stock must be a whole number from 0 to 100000.', $errors['stock']);
+        } else {
+            self::assertSame([], $errors);
+            self::assertSame($normalized, $book['stock']);
+        }
+    }
+
+    public function testAnUploadedCoverReplacesThePathField(): void
+    {
+        [$book, $errors] = validate_book_input(self::bookInput(['cover_image' => '']), true);
+        self::assertSame([], $errors, 'No path is needed when a file is uploaded');
+        self::assertSame('', $book['cover_image']);
+
+        [, $errors] = validate_book_input(self::bookInput(['cover_image' => 'javascript:alert(1)']), true);
+        self::assertSame([], $errors, 'The path field is ignored (and replaced) when a file is uploaded');
+
+        [, $errors] = validate_book_input(self::bookInput(['cover_image' => '']));
+        self::assertSame(['cover_image'], array_keys($errors));
+    }
+
+    public function testMessagesFollowTheActiveLanguage(): void
+    {
+        use_locale('ar');
+        try {
+            self::assertSame('يُرجى إدخال بريدك الإلكتروني.', validate_email(''));
+            self::assertSame('حقل العنوان مطلوب.', validate_book_input(self::bookInput(['title' => '']))[1]['title']);
+            self::assertSame('يجب أن يكون المخزون عددًا صحيحًا من 0 إلى 100000.', validate_book_input(self::bookInput(['stock' => 'x']))[1]['stock']);
+            self::assertSame('الاسم «All» محجوز. يُرجى اختيار اسم آخر لحقل التصنيف.', validate_genre_name('All'));
+        } finally {
+            use_locale(null);
+        }
+        self::assertSame('Please enter your email address.', validate_email(''));
     }
 
     /**
@@ -379,10 +458,11 @@ final class ValidationTest extends TestCase
             'cover_image' => '../.env',
         ]);
 
-        self::assertSame(['title', 'author', 'genre', 'description', 'price', 'cover_image'], array_keys($errors));
+        self::assertSame(['title', 'author', 'genre', 'description', 'price', 'stock', 'cover_image'], array_keys($errors));
         self::assertSame('Title is required.', $errors['title']);
         self::assertSame('Author is required.', $errors['author']);
         self::assertSame('Description is required.', $errors['description']);
+        self::assertSame('Stock must be a whole number from 0 to 100000.', $errors['stock']);
     }
 
     public function testBookLengthLimits(): void
@@ -406,7 +486,7 @@ final class ValidationTest extends TestCase
     {
         [$book, $errors] = validate_book_input([]);
 
-        self::assertSame(['title', 'author', 'genre', 'description', 'price', 'cover_image'], array_keys($errors));
+        self::assertSame(['title', 'author', 'genre', 'description', 'price', 'stock', 'cover_image'], array_keys($errors));
         self::assertSame('', $book['title']);
     }
 }

@@ -6,13 +6,16 @@ namespace BookWise\Tests\Integration;
 
 use BookWise\Tests\Support\CheckoutTestCase;
 use BookWise\Tests\Support\IsolatedPhp;
+use BookWise\Tests\Support\StockFixtures;
 use CheckoutException;
 
 final class CheckoutTest extends CheckoutTestCase
 {
-    private const BIOLOGY = 7;      // 5.50
-    private const ESABELLA = 51;    // 19.99
-    private const FORBIDDEN = 58;   // 4.99
+    use StockFixtures;
+
+    private const BIOLOGY = 7;      // 5.50, 24 in stock
+    private const ESABELLA = 51;    // 19.99, 24 in stock
+    private const FORBIDDEN = 58;   // 4.99, 17 in stock
 
     public function testStartCheckoutCreatesAPendingOrderAndAMatchingSession(): void
     {
@@ -48,7 +51,7 @@ final class CheckoutTest extends CheckoutTestCase
     public function testSessionRequestUsesIntegerMinorUnitsAndSafeRedirects(): void
     {
         $this->setEnv('APP_URL', 'https://shop.example.com/');
-        $tenCents = $this->insertBook(['title' => 'Float Trap', 'price' => '0.10']);
+        $tenCents = $this->insertStockedBook(['title' => 'Float Trap', 'price' => '0.10']);
         $user = $this->customerWithCart([$tenCents => 3, self::ESABELLA => 1]);
 
         $order = $this->checkout($user)[1];
@@ -79,7 +82,7 @@ final class CheckoutTest extends CheckoutTestCase
 
     public function testLongTitlesAreTruncatedForStripe(): void
     {
-        $book = $this->insertBook(['title' => str_repeat('L', 255)]);
+        $book = $this->insertStockedBook(['title' => str_repeat('L', 255)]);
         $user = $this->customerWithCart([$book => 1]);
 
         $this->checkout($user);
@@ -171,7 +174,7 @@ final class CheckoutTest extends CheckoutTestCase
 
     public function testFreeBooksCannotBeCheckedOut(): void
     {
-        $free = $this->insertBook(['price' => '0.00']);
+        $free = $this->insertStockedBook(['price' => '0.00']);
         $user = $this->customerWithCart([$free => 2]);
 
         try {
@@ -185,7 +188,7 @@ final class CheckoutTest extends CheckoutTestCase
 
     public function testTotalsBelowStripesMinimumChargeAreRefusedBeforeCallingStripe(): void
     {
-        $cheap = $this->insertBook(['price' => '1.99']);
+        $cheap = $this->insertStockedBook(['price' => '1.99']);
         $user = $this->customerWithCart([$cheap => 1]);
 
         try {
@@ -213,6 +216,58 @@ final class CheckoutTest extends CheckoutTestCase
         }
         self::assertSame(0, $this->countRows('orders'));
         self::assertSame([], $this->stripe->http->requests('POST', self::CREATE_SESSION));
+    }
+
+    public function testStockIsCheckedForEveryLineBeforeCharging(): void
+    {
+        $user = $this->customerWithCart([self::ESABELLA => 3, self::BIOLOGY => 2, self::FORBIDDEN => 1]);
+        $this->setStock(self::ESABELLA, 2);
+        $this->setStock(self::BIOLOGY, 0);
+
+        try {
+            start_checkout($user);
+            self::fail('Expected CheckoutException');
+        } catch (CheckoutException $e) {
+            self::assertSame(
+                'There are not enough copies of these books in stock: “Esabella”, “Biology”. Please lower the quantities or remove the books from your cart, then try again.',
+                $e->getMessage()
+            );
+        }
+        self::assertSame(0, $this->countRows('orders'), 'No order is created');
+        self::assertSame([], $this->stripe->http->requests('POST', self::CREATE_SESSION), 'Stripe is never asked to charge');
+
+        // One book short names just that book; with enough copies checkout goes ahead.
+        $this->setStock(self::BIOLOGY, 5);
+        try {
+            start_checkout($user);
+            self::fail('Expected CheckoutException');
+        } catch (CheckoutException $e) {
+            self::assertSame(
+                'There are not enough copies of “Esabella” in stock. Please lower the quantity or remove the book from your cart, then try again.',
+                $e->getMessage()
+            );
+        }
+        $this->setStock(self::ESABELLA, 3);
+        self::assertSame(3 * 1999 + 2 * 550 + 499, (int) $this->checkout($user)[1]['amount_minor']);
+    }
+
+    public function testStockMessagesAreTranslated(): void
+    {
+        $user = $this->customerWithCart([self::ESABELLA => 3]);
+        $this->setStock(self::ESABELLA, 1);
+
+        use_locale('ar');
+        try {
+            start_checkout($user);
+            self::fail('Expected CheckoutException');
+        } catch (CheckoutException $e) {
+            self::assertSame(
+                'لا تتوفر نسخ كافية من «Esabella» في المخزون. يُرجى تقليل الكمية أو إزالة الكتاب من سلتك ثم المحاولة مرة أخرى.',
+                $e->getMessage()
+            );
+        } finally {
+            use_locale(null);
+        }
     }
 
     public function testLiveKeyIsRefusedOutsideProductionBeforeAnyOrderIsCreated(): void

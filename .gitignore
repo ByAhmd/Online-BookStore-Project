@@ -11,6 +11,8 @@
 !/storage/logs/.gitkeep
 /public/uploads/avatars/*
 !/public/uploads/avatars/.gitkeep
+/public/uploads/covers/*
+!/public/uploads/covers/.gitkeep
 *.log
 
 # Test and analysis caches

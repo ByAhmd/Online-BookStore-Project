@@ -6,6 +6,7 @@ namespace BookWise\Tests\Integration;
 
 use BookWise\Tests\Support\DatabaseTestCase;
 use PDOException;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 final class BooksTest extends DatabaseTestCase
 {
@@ -95,6 +96,105 @@ final class BooksTest extends DatabaseTestCase
         self::assertCount(1, search_books(null, '', 0));
         self::assertCount(1, search_books(null, '', -10));
         self::assertCount(self::SEED_BOOK_COUNT, search_books(null, '', 100000));
+    }
+
+    /* -----------------------------------------------------------------
+     * Pagination and stock
+     * --------------------------------------------------------------- */
+
+    public function testCatalogPagesSplitTheOrderedListWithoutGapsOrRepeats(): void
+    {
+        $all = array_column(search_books(), 'id');
+        self::assertSame(self::SEED_BOOK_COUNT, count_books());
+
+        $pages = [];
+        foreach ([1, 2, 3] as $page) {
+            $listing = catalog_page(null, null, '', (string) $page);
+            self::assertSame(['page' => $page, 'pages' => 3, 'per_page' => CATALOG_PAGE_SIZE, 'total' => self::SEED_BOOK_COUNT, 'offset' => ($page - 1) * CATALOG_PAGE_SIZE], $listing['pagination']);
+            $pages[] = array_column($listing['books'], 'id');
+        }
+        self::assertSame([24, 24, 7], array_map('count', $pages));
+        self::assertSame($all, array_merge(...$pages));
+
+        self::assertSame(16, count_books('Romantic'));
+        self::assertSame(count(search_books(null, 'olivia')), count_books(null, 'olivia'));
+        self::assertSame(1, catalog_page(null, 'Romantic', '', '5')['pagination']['pages']);
+    }
+
+    /**
+     * @return iterable<string, array{0: mixed, 1: int}>
+     */
+    public static function requestedPages(): iterable
+    {
+        yield 'missing' => [null, 1];
+        yield 'first' => ['1', 1];
+        yield 'middle' => ['2', 2];
+        yield 'last' => ['3', 3];
+        yield 'past the end' => ['4', 3];
+        yield 'far past the end' => ['99999999999999999999', 3];
+        yield 'zero' => ['0', 1];
+        yield 'negative' => ['-2', 1];
+        yield 'plus sign' => ['+2', 2];
+        yield 'padded' => [' 02 ', 2];
+        yield 'decimal' => ['2.5', 1];
+        yield 'text' => ['two', 1];
+        yield 'array' => [['2'], 1];
+        yield 'integer' => [2, 2];
+        yield 'integer past the end' => [40, 3];
+    }
+
+    #[DataProvider('requestedPages')]
+    public function testPageNumbersAreClampedToTheValidRange(mixed $requested, int $expected): void
+    {
+        self::assertSame($expected, paginate(55, 24, $requested)['page']);
+    }
+
+    public function testPaginationOfAnEmptyListHasOnePage(): void
+    {
+        self::assertSame(['page' => 1, 'pages' => 1, 'per_page' => 20, 'total' => 0, 'offset' => 0], paginate(0, 20, '7'));
+        self::assertSame([], catalog_page(null, null, 'no-such-book-anywhere', '3')['books']);
+    }
+
+    public function testPagerItemsKeepTheEndsAndTheNeighbourhood(): void
+    {
+        self::assertSame([1], pager_items(1, 1));
+        self::assertSame([1, 2, 3], pager_items(2, 3));
+        self::assertSame([1, 2, 3, null, 10], pager_items(1, 10));
+        self::assertSame([1, null, 4, 5, 6, 7, 8, null, 10], pager_items(6, 10));
+        self::assertSame([1, null, 8, 9, 10], pager_items(10, 10));
+    }
+
+    public function testFavoritesArePaginatedToo(): void
+    {
+        $user = (int) $this->createUser()['id'];
+        foreach ([7, 8, 9] as $bookId) {
+            toggle_favorite($user, $bookId);
+        }
+        self::assertSame(3, count_favorite_books($user));
+        $page = catalog_page($user, null, '', '2', 2);
+        self::assertSame(2, $page['pagination']['page']);
+        self::assertCount(1, $page['books']);
+    }
+
+    public function testStockStatusAndAvailabilityLabels(): void
+    {
+        self::assertSame(['out', 'out', 'low', 'low', 'in', 'in'], array_map('book_stock_status', [-1, 0, 1, STOCK_LOW_THRESHOLD, STOCK_LOW_THRESHOLD + 1, 1000]));
+        self::assertSame('Out of stock', book_availability(0));
+        self::assertSame('Only 1 left', book_availability(1));
+        self::assertSame('Only 5 left', book_availability(5));
+        self::assertSame('In stock', book_availability(6));
+
+        use_locale('ar');
+        try {
+            self::assertSame('نفدت الكمية', book_availability(0));
+            self::assertSame('تبقّت نسخة واحدة فقط', book_availability(1));
+            self::assertSame('تبقّت نسختان فقط', book_availability(2));
+            self::assertSame('تبقّت 4 نسخ فقط', book_availability(4));
+            self::assertSame('متوفر', book_availability(40));
+        } finally {
+            use_locale(null);
+        }
+        self::assertSame(24, find_book(self::BIOLOGY)['stock'], 'The seed gives every book some copies');
     }
 
     public function testSimilarBooksShareTheGenreAndExcludeTheBook(): void
@@ -227,18 +327,20 @@ final class BooksTest extends DatabaseTestCase
             'genre' => 'Science',
             'description' => 'Fresh.',
             'price' => '12.5',
+            'stock' => '7',
             'cover_image' => 'imges/All_section/biology.png',
         ]);
         self::assertSame([], $errors);
 
         $id = create_book($clean);
         self::assertGreaterThan(61, $id);
-        self::assertSame(['A Brand New Book', '12.50'], [find_book($id)['title'], find_book($id)['price']]);
+        self::assertSame(['A Brand New Book', '12.50', 7], [find_book($id)['title'], find_book($id)['price'], find_book($id)['stock']]);
         self::assertSame(self::SEED_BOOK_COUNT + 1, book_count());
 
         $clean['title'] = 'Renamed Book';
+        $clean['stock'] = '0';
         self::assertTrue(update_book($id, $clean));
-        self::assertSame('Renamed Book', find_book($id)['title']);
+        self::assertSame(['Renamed Book', 0], [find_book($id)['title'], find_book($id)['stock']]);
         self::assertFalse(update_book(999999, $clean), 'Unknown book');
         self::assertSame(self::SEED_BOOK_COUNT + 1, book_count());
     }

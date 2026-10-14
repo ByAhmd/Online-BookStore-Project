@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace BookWise\Tests\Http;
 
 use BookWise\Tests\Support\HtmlDocument;
+use BookWise\Tests\Support\HttpClient;
 use BookWise\Tests\Support\HttpResponse;
 use BookWise\Tests\Support\HttpTestCase;
+use BookWise\Tests\Support\StockFixtures;
 
 /**
  * Home page, Explore page (genre tabs, search) and the fetch_books.php JSON API.
  */
 final class CatalogTest extends HttpTestCase
 {
+    use StockFixtures;
+
     /**
      * Expected books computed in PHP (not with SQL LIKE), sorted by title like the pages.
      *
@@ -38,6 +42,28 @@ final class CatalogTest extends HttpTestCase
         foreach ($page->document()->elements('//ul[' . HtmlDocument::hasClass('explore-grid') . ']//a[' . HtmlDocument::hasClass('explore-card-link') . ']') as $link) {
             self::assertSame(1, preg_match('/^Selected\.php\?id=(\d+)$/', $link->getAttribute('href'), $match));
             $ids[] = (int) $match[1];
+        }
+        return $ids;
+    }
+
+    /**
+     * Book ids of every result page, following the pager's "Next" links
+     * (24 books per page) the way a visitor without JavaScript would.
+     *
+     * @return list<int>
+     */
+    private function allResultIds(HttpClient $client, string $url): array
+    {
+        $ids = [];
+        for ($pages = 0; $url !== null; $pages++) {
+            self::assertLessThan(10, $pages, 'The pager must end');
+            $page = $client->get($url);
+            $this->assertStatus(200, $page);
+            $pageIds = self::resultIds($page);
+            self::assertLessThanOrEqual(CATALOG_PAGE_SIZE, count($pageIds));
+            $ids = array_merge($ids, $pageIds);
+            $next = $page->document()->first('//nav[' . HtmlDocument::hasClass('pager') . ']//a[' . HtmlDocument::hasClass('pager-next') . ']');
+            $url = $next?->getAttribute('href');
         }
         return $ids;
     }
@@ -80,8 +106,9 @@ final class CatalogTest extends HttpTestCase
 
         $all = $customer->get('Explore_Page.php');
         $document = $this->assertHtmlPage($all);
-        self::assertSame(self::expectedIds(null, ''), self::resultIds($all));
-        self::assertSame('Showing ' . self::SEED_BOOK_COUNT . ' books in all genres.', $document->text('//*[@id="explore-status"]'));
+        self::assertSame(array_slice(self::expectedIds(null, ''), 0, CATALOG_PAGE_SIZE), self::resultIds($all), 'The first page of 24');
+        self::assertSame('Showing 1–24 of ' . self::SEED_BOOK_COUNT . ' books in all genres.', $document->text('//*[@id="explore-status"]'));
+        self::assertSame(self::expectedIds(null, ''), $this->allResultIds($customer, 'Explore_Page.php'), 'Every book, page after page');
         $tabs = $document->elements('//nav[' . HtmlDocument::hasClass('genre-tabs') . ']//a');
         self::assertSame(['all', ...list_genres(), 'Favorites'], array_map(static fn ($a): string => $a->getAttribute('data-genre'), $tabs));
         self::assertSame(['All'], $document->texts('//nav[' . HtmlDocument::hasClass('genre-tabs') . ']//a[@aria-current="page"]'));
@@ -99,7 +126,7 @@ final class CatalogTest extends HttpTestCase
         // Unknown genres fall back to "all" instead of an empty or broken page.
         $unknown = $customer->get('Explore_Page.php?genre=' . rawurlencode("Nope' OR 1=1 -- "));
         $this->assertHtmlPage($unknown);
-        self::assertSame(self::expectedIds(null, ''), self::resultIds($unknown));
+        self::assertSame(array_slice(self::expectedIds(null, ''), 0, CATALOG_PAGE_SIZE), self::resultIds($unknown));
 
         // Favorites tab: empty, then the customer's favorites only.
         $favorites = $customer->get('Explore_Page.php?genre=Favorites');
@@ -121,7 +148,7 @@ final class CatalogTest extends HttpTestCase
         foreach (['Olivia', 'olivia wilson', 'THE', 'Love', "Daughter of The Moon"] as $query) {
             $page = $customer->get('Explore_Page.php?q=' . rawurlencode($query));
             $this->assertHtmlPage($page);
-            self::assertSame(self::expectedIds(null, $query), self::resultIds($page), "Search for \"$query\"");
+            self::assertSame(self::expectedIds(null, $query), $this->allResultIds($customer, 'Explore_Page.php?q=' . rawurlencode($query)), "Search for \"$query\"");
             self::assertSame($query, $page->document()->first('//input[@id="explore-q"]')?->getAttribute('value'));
         }
         self::assertSame(self::expectedIds('Romantic', 'Olivia'), self::resultIds($customer->get('Explore_Page.php?genre=Romantic&q=Olivia')));
@@ -153,30 +180,52 @@ final class CatalogTest extends HttpTestCase
         $this->assertStatus(200, $all);
         self::assertStringStartsWith('application/json', $all->contentType());
         $data = $all->json();
-        self::assertSame(['books', 'count', 'genre', 'q', 'truncated'], array_keys($data));
+        self::assertSame(['books', 'count', 'genre', 'q', 'page', 'per_page', 'total', 'pages', 'summary'], array_keys($data));
         self::assertSame('all', $data['genre']);
         self::assertSame('', $data['q']);
-        self::assertFalse($data['truncated']);
-        self::assertSame(self::SEED_BOOK_COUNT, $data['count']);
-        self::assertCount(self::SEED_BOOK_COUNT, $data['books']);
-        self::assertSame(self::expectedIds(null, ''), array_column($data['books'], 'id'));
+        self::assertSame([1, CATALOG_PAGE_SIZE, self::SEED_BOOK_COUNT, 3], [$data['page'], $data['per_page'], $data['total'], $data['pages']]);
+        self::assertSame(CATALOG_PAGE_SIZE, $data['count'], 'count is the number of books on this page');
+        self::assertCount(CATALOG_PAGE_SIZE, $data['books']);
+        self::assertSame(array_slice(self::expectedIds(null, ''), 0, CATALOG_PAGE_SIZE), array_column($data['books'], 'id'));
+        self::assertSame('Showing 1–24 of 55 books in all genres.', $data['summary']);
 
         $first = $data['books'][0];
-        self::assertSame(['id', 'title', 'author', 'genre', 'price', 'price_display', 'cover_image', 'url'], array_keys($first));
+        self::assertSame(['id', 'title', 'author', 'genre', 'price', 'price_display', 'cover_image', 'url', 'stock_status', 'availability'], array_keys($first));
         $book = find_book($first['id']);
         self::assertNotNull($book);
         self::assertSame($book['title'], $first['title']);
         self::assertSame($book['price'], $first['price']);
         self::assertSame('SAR ' . number_format((float) $book['price'], 2), $first['price_display']);
         self::assertSame('Selected.php?id=' . $first['id'], $first['url']);
+        self::assertSame(book_stock_status((int) $book['stock']), $first['stock_status']);
+        self::assertSame(book_availability((int) $book['stock']), $first['availability']);
         foreach ($data['books'] as $row) {
             self::assertIsInt($row['id']);
             self::assertMatchesRegularExpression('/^\d+\.\d{2}$/', $row['price']);
             self::assertMatchesRegularExpression('#^(imges|uploads)/#', $row['cover_image']);
+            self::assertContains($row['stock_status'], ['in', 'low', 'out']);
         }
+
+        // Every page in turn, and page numbers outside the range are clamped.
+        $pages = [];
+        foreach ([1, 2, 3] as $number) {
+            $page = $guest->get('fetch_books.php?page=' . $number)->json();
+            self::assertSame($number, $page['page']);
+            $pages[] = array_column($page['books'], 'id');
+        }
+        self::assertSame(self::expectedIds(null, ''), array_merge(...$pages));
+        self::assertSame('Showing 49–55 of 55 books in all genres.', $guest->get('fetch_books.php?page=3')->json()['summary']);
+        foreach (['99' => 3, '0' => 1, '-4' => 1, 'abc' => 1, '2.5' => 1] as $requested => $expected) {
+            $clamped = $guest->get('fetch_books.php?page=' . rawurlencode((string) $requested))->json();
+            self::assertSame($expected, $clamped['page'], "page=$requested");
+            self::assertSame($pages[$expected - 1], array_column($clamped['books'], 'id'));
+        }
+        self::assertSame(1, $guest->get('fetch_books.php?page[]=2')->json()['page']);
 
         $mystery = $guest->get('fetch_books.php?genre=Mystery')->json();
         self::assertSame('Mystery', $mystery['genre']);
+        self::assertSame([1, 1], [$mystery['page'], $mystery['pages']]);
+        self::assertSame('Showing 14 books in Mystery.', $mystery['summary']);
         self::assertSame(self::expectedIds('Mystery', ''), array_column($mystery['books'], 'id'));
         self::assertSame(['Mystery'], array_values(array_unique(array_column($mystery['books'], 'genre'))));
 

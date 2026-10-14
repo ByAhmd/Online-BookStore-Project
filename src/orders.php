@@ -3,18 +3,23 @@
 declare(strict_types=1);
 
 /**
- * Orders and Stripe Checkout.
+ * Orders, Stripe Checkout and refunds.
  *
  * Flow:
- *  1. start_checkout() snapshots the cart into a `pending` order (trusted DB
- *     prices) and creates a Stripe Checkout Session for exactly that amount.
+ *  1. start_checkout() checks the stock of every cart line, snapshots the cart
+ *     into a `pending` order (trusted DB prices) and creates a Stripe Checkout
+ *     Session for exactly that amount.
  *  2. The customer pays on Stripe's hosted page.
  *  3. The order is marked `paid` only by fulfill_order(), using the session
  *     as retrieved from Stripe's API: when the customer returns to
  *     success_pay.php, or when a signature-verified webhook notifies us.
  *     Visiting success_pay.php without a genuinely paid session changes nothing.
  *  4. fulfill_order() locks the order row, so the success page and webhook can
- *     race safely: sales rows and cart removal happen exactly once.
+ *     race safely: sales rows, the stock decrement and cart removal happen
+ *     exactly once.
+ *  5. refund_order() (admin) or a confirmed charge.refunded webhook marks a
+ *     paid order `refunded`, removes its sales rows and puts the copies back
+ *     in stock, again exactly once.
  */
 
 /** A checkout problem whose message is safe to show to the customer. */
@@ -22,8 +27,16 @@ final class CheckoutException extends RuntimeException
 {
 }
 
+/** A refund problem whose message is safe to show to staff. */
+final class RefundException extends RuntimeException
+{
+}
+
 const CHECKOUT_SESSION_TTL_SECONDS = 3600; // Stripe allows 30 minutes to 24 hours.
+/** Statuses mark_order_status() may set (refunds go through apply_order_refund()). */
 const ORDER_STATUSES = ['pending', 'paid', 'canceled', 'expired', 'failed'];
+/** Every order status, in the order the admin filter lists them. */
+const ORDER_STATUS_FILTERS = ['pending', 'paid', 'refunded', 'canceled', 'expired', 'failed'];
 /**
  * Smallest order total sent to Stripe, in minor units. Stripe rejects charges
  * below roughly USD 0.50; for SAR the minimum is 2.00.
@@ -47,18 +60,18 @@ function stripe_client(): \Stripe\StripeClient
 
     $key = config('stripe.secret_key');
     if (!is_string($key) || $key === '') {
-        throw new CheckoutException('Online payments are not configured yet. Please try again later.');
+        throw new CheckoutException(t_safe('shop.checkout.not_configured'));
     }
     // Guard against accidentally charging real cards from a development setup:
     // outside production only test-mode secret or restricted keys are accepted.
     if (config('app.env') !== 'production' && !preg_match('/^(sk|rk)_test_/', $key)) {
         app_log('error', 'Refusing to use a non-test Stripe key outside APP_ENV=production');
-        throw new CheckoutException('Online payments are not available in this environment.');
+        throw new CheckoutException(t_safe('shop.checkout.not_available'));
     }
     $currency = (string) config('stripe.currency');
     if (!preg_match('/^[a-z]{3}$/D', $currency) || in_array($currency, NON_TWO_DECIMAL_CURRENCIES, true)) {
         app_log('error', 'STRIPE_CURRENCY must be a three-letter code of a two-decimal currency', ['currency' => $currency]);
-        throw new CheckoutException('Online payments are not configured correctly. Please try again later.');
+        throw new CheckoutException(t_safe('shop.checkout.misconfigured'));
     }
 
     $options = ['api_key' => $key];
@@ -84,16 +97,16 @@ function stripe_client(): \Stripe\StripeClient
 function create_pending_order(int $userId, array $lines): array
 {
     if ($lines === []) {
-        throw new CheckoutException('Your cart is empty.');
+        throw new CheckoutException(t_safe('shop.checkout.empty_cart'));
     }
     foreach ($lines as $line) {
         if ($line['quantity'] < 1 || $line['quantity'] > CART_MAX_QUANTITY) {
-            throw new CheckoutException('Please choose a quantity between 1 and ' . CART_MAX_QUANTITY . ' for each book.');
+            throw new CheckoutException(t_safe('shop.checkout.quantity_range', ['max' => CART_MAX_QUANTITY]));
         }
     }
     $amountMinor = cart_total_minor($lines);
     if ($amountMinor < CHECKOUT_MIN_TOTAL_MINOR) {
-        throw new CheckoutException('The minimum order total is ' . format_minor(CHECKOUT_MIN_TOTAL_MINOR) . '. Please add another book.');
+        throw new CheckoutException(t_safe('shop.checkout.minimum_total', ['amount' => format_minor(CHECKOUT_MIN_TOTAL_MINOR)]));
     }
     $currency = (string) config('stripe.currency');
 
@@ -141,14 +154,15 @@ function order_items(int $orderId): array
 }
 
 /**
- * A customer's orders, newest first, each with its items.
+ * A customer's orders, newest first, each with its items. Refunded orders
+ * keep status 'refunded' (label: common.status.refunded) and refunded_at.
  *
  * @return list<array<string, mixed>>
  */
 function user_orders(int $userId, int $limit = 20): array
 {
     $orders = db_all(
-        'SELECT id, status, currency, total_amount, created_at, paid_at FROM orders
+        'SELECT id, status, currency, total_amount, created_at, paid_at, refunded_at FROM orders
          WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ' . max(1, min($limit, 100)),
         [$userId]
     );
@@ -159,21 +173,100 @@ function user_orders(int $userId, int $limit = 20): array
 }
 
 /**
- * Recent orders for the admin dashboard.
+ * Columns for admin order lists. customer_name and customer_email are NULL
+ * when the customer has deleted their account.
+ */
+const ADMIN_ORDER_COLUMNS = 'o.id, o.status, o.currency, o.total_amount, o.created_at, o.paid_at, o.refunded_at, o.user_id,
+                u.name AS customer_name, u.Eaddress AS customer_email,
+                (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi WHERE oi.order_id = o.id) AS item_count';
+
+/**
+ * Recent orders for the admin dashboard (including those of deleted accounts).
  *
  * @return list<array<string, mixed>>
  */
 function recent_orders(int $limit = 20): array
 {
     return db_all(
-        'SELECT o.id, o.status, o.currency, o.total_amount, o.created_at, o.paid_at,
-                u.name AS customer_name, u.Eaddress AS customer_email,
-                (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi WHERE oi.order_id = o.id) AS item_count
+        'SELECT ' . ADMIN_ORDER_COLUMNS . '
          FROM orders o
-         JOIN users u ON u.id = o.user_id
+         LEFT JOIN users u ON u.id = o.user_id
          ORDER BY o.created_at DESC, o.id DESC
          LIMIT ' . max(1, min($limit, 100))
     );
+}
+
+/**
+ * One page of the admin order list, newest first. $status is one of
+ * ORDER_STATUS_FILTERS (anything else means all); $query matches an order
+ * number ("42" or "#42") or part of the customer's email address.
+ *
+ * @return array{orders: list<array<string, mixed>>, pagination: array{page: int, pages: int, per_page: int, total: int, offset: int}}
+ */
+function admin_order_list(string $status, string $query, mixed $page, int $perPage = ADMIN_PAGE_SIZE): array
+{
+    $where = [];
+    $params = [];
+    if (in_array($status, ORDER_STATUS_FILTERS, true)) {
+        $where[] = 'o.status = ?';
+        $params[] = $status;
+    }
+    if ($query !== '') {
+        $like = '%' . addcslashes($query, '%_\\') . '%';
+        if (preg_match('/^#?(\d{1,10})$/D', $query, $m)) {
+            $where[] = '(o.id = ? OR u.Eaddress LIKE ?)';
+            $params[] = (int) $m[1];
+        } else {
+            $where[] = 'u.Eaddress LIKE ?';
+        }
+        $params[] = $like;
+    }
+    $sqlWhere = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
+
+    $total = (int) db_value('SELECT COUNT(*) FROM orders o LEFT JOIN users u ON u.id = o.user_id' . $sqlWhere, $params);
+    $pagination = paginate($total, $perPage, $page);
+    $orders = db_all(
+        'SELECT ' . ADMIN_ORDER_COLUMNS . '
+         FROM orders o
+         LEFT JOIN users u ON u.id = o.user_id' . $sqlWhere . '
+         ORDER BY o.created_at DESC, o.id DESC
+         LIMIT ' . $pagination['per_page'] . ' OFFSET ' . $pagination['offset'],
+        $params
+    );
+    return ['orders' => $orders, 'pagination' => $pagination];
+}
+
+/**
+ * An order with its customer (NULL name/email for deleted accounts) and
+ * items, for the admin detail page.
+ *
+ * @return array<string, mixed>|null
+ */
+function admin_order_detail(int $orderId): ?array
+{
+    $order = db_one(
+        'SELECT o.*, u.name AS customer_name, u.Eaddress AS customer_email
+         FROM orders o LEFT JOIN users u ON u.id = o.user_id
+         WHERE o.id = ?',
+        [$orderId]
+    );
+    if ($order === null) {
+        return null;
+    }
+    $order['items'] = order_items($orderId);
+    return $order;
+}
+
+/**
+ * True when staff can refund the order from the admin page.
+ *
+ * @param array<string, mixed> $order
+ */
+function order_is_refundable(array $order): bool
+{
+    return ($order['status'] ?? null) === 'paid'
+        && is_string($order['stripe_payment_intent'] ?? null)
+        && $order['stripe_payment_intent'] !== '';
 }
 
 /**
@@ -210,7 +303,7 @@ function start_checkout(array $user): string
     // so concurrent requests can never leave two payable sessions behind.
     $lock = 'bookwise-checkout-' . (int) $user['id'];
     if ((int) db_value('SELECT GET_LOCK(?, 15)', [$lock]) !== 1) {
-        throw new CheckoutException('Another checkout is already in progress for your account. Please wait a moment and try again.');
+        throw new CheckoutException(t_safe('shop.checkout.in_progress'));
     }
     try {
         return start_checkout_locked($user);
@@ -229,14 +322,23 @@ function start_checkout_locked(array $user): string
     $settled = settle_pending_orders($userId);
     if ($settled['unresolved']) {
         // An earlier session might still be payable; never open a second one alongside it.
-        throw new CheckoutException('We could not verify your previous checkout, so a new payment was not started. You have not been charged twice. Please try again in a few minutes.');
+        throw new CheckoutException(t_safe('shop.checkout.unresolved'));
     }
     $lines = cart_lines($userId);
     if ($lines === []) {
         if ($settled['paid_session'] !== null) {
             return 'success_pay.php?session_id=' . rawurlencode($settled['paid_session']);
         }
-        throw new CheckoutException('Your cart is empty.');
+        throw new CheckoutException(t_safe('shop.checkout.empty_cart'));
+    }
+    // Stock is checked here, not reserved: a book that sells out while the
+    // customer pays is still delivered (see fulfill_order()).
+    $unavailable = cart_unavailable_lines($lines);
+    if ($unavailable !== []) {
+        $titles = array_map(static fn (array $line): string => t('shop.checkout.quoted_title', ['title' => $line['title']]), $unavailable);
+        throw new CheckoutException(tn('shop.checkout.insufficient_stock', count($titles), [
+            'titles' => implode(t('shop.checkout.title_separator'), $titles),
+        ]));
     }
 
     $stripe = stripe_client();
@@ -280,7 +382,7 @@ function start_checkout_locked(array $user): string
             'http_status' => $e->getHttpStatus(),
             'message' => $e->getMessage(),
         ]);
-        throw new CheckoutException('We could not start the payment right now. Your card has not been charged. Please try again.');
+        throw new CheckoutException(t_safe('shop.checkout.start_failed'));
     }
 
     $amountTotal = isset($session->amount_total) ? (int) $session->amount_total : null;
@@ -291,7 +393,7 @@ function start_checkout_locked(array $user): string
             'amount_total' => $amountTotal,
             'expected' => (int) $order['amount_minor'],
         ]);
-        throw new CheckoutException('We could not start the payment right now. Your card has not been charged. Please try again.');
+        throw new CheckoutException(t_safe('shop.checkout.start_failed'));
     }
 
     $stored = db_run(
@@ -305,7 +407,7 @@ function start_checkout_locked(array $user): string
         } catch (\Stripe\Exception\ApiErrorException $e) {
             app_log('error', 'Could not expire an orphaned Checkout Session', ['order_id' => $orderId, 'message' => $e->getMessage()]);
         }
-        throw new CheckoutException('We could not start the payment right now. Your card has not been charged. Please try again.');
+        throw new CheckoutException(t_safe('shop.checkout.start_failed'));
     }
     return $session->url;
 }
@@ -395,6 +497,9 @@ function flag_order_for_review(int $orderId): void
 /**
  * Marks an order paid if — and only if — the given Stripe Checkout Session
  * belongs to it and reports a completed payment of exactly the order amount.
+ * Records the sales, takes the copies out of stock (never below zero: the
+ * customer has paid, so an oversold book is logged for staff and the order is
+ * still fulfilled) and removes the purchased copies from the cart.
  * Idempotent and safe under concurrency (the order row is locked).
  *
  * @return 'paid'|'already_paid'|'unpaid'|'mismatch'|'unknown_order'
@@ -406,7 +511,7 @@ function fulfill_order(int $orderId, \Stripe\StripeObject $session): string
         if ($order === null) {
             return 'unknown_order';
         }
-        if ($order['status'] === 'paid') {
+        if ($order['status'] === 'paid' || $order['status'] === 'refunded') {
             return 'already_paid';
         }
 
@@ -454,6 +559,35 @@ function fulfill_order(int $orderId, \Stripe\StripeObject $session): string
              WHERE oi.order_id = ? AND oi.book_id IS NOT NULL',
             [$order['user_id'], $orderId]
         );
+
+        // Take the copies out of stock. The book rows are locked first (in id
+        // order) so the oversell check sees the stock the update changes.
+        $stocked = db_all(
+            'SELECT b.id, b.stock, oi.quantity
+             FROM order_items oi
+             JOIN books b ON b.id = oi.book_id
+             WHERE oi.order_id = ?
+             ORDER BY b.id
+             FOR UPDATE',
+            [$orderId]
+        );
+        foreach ($stocked as $row) {
+            if ((int) $row['stock'] < (int) $row['quantity']) {
+                app_log('warning', 'OVERSOLD: a paid order needs more copies than are in stock; restock or contact the customer', [
+                    'order_id' => $orderId,
+                    'book_id' => (int) $row['id'],
+                    'stock' => (int) $row['stock'],
+                    'quantity' => (int) $row['quantity'],
+                ]);
+            }
+        }
+        db_run(
+            'UPDATE books b
+             JOIN order_items oi ON oi.book_id = b.id AND oi.order_id = ?
+             SET b.stock = GREATEST(b.stock - oi.quantity, 0)',
+            [$orderId]
+        );
+
         // Remove the paid copies from the cart, keeping any copies added after checkout started.
         db_run(
             'DELETE c FROM cart c
@@ -489,7 +623,7 @@ function confirm_checkout_return(int $userId, string $sessionId): array
     if ($order === null) {
         return ['state' => 'invalid', 'order' => null];
     }
-    if ($order['status'] === 'paid') {
+    if ($order['status'] === 'paid' || $order['status'] === 'refunded') {
         return ['state' => 'paid', 'order' => $order];
     }
 
@@ -515,6 +649,131 @@ function confirm_checkout_return(int $userId, string $sessionId): array
 }
 
 /* ---------------------------------------------------------------------
+ * Refunds
+ * ------------------------------------------------------------------- */
+
+/**
+ * Refunds a paid order in full through Stripe, then records it locally (see
+ * apply_order_refund()). Safe to repeat: an order that is already refunded
+ * is left alone, and the Stripe request carries an idempotency key, so a
+ * double click never refunds twice.
+ *
+ * @return 'refunded'|'already_refunded'
+ * @throws RefundException with a message that is safe to show to staff; nothing was changed
+ */
+function refund_order(int $orderId): string
+{
+    $order = find_order($orderId);
+    if ($order === null) {
+        throw new RefundException(t_safe('admin.refund.not_found'));
+    }
+    if ($order['status'] === 'refunded') {
+        return 'already_refunded';
+    }
+    if ($order['status'] !== 'paid') {
+        throw new RefundException(t_safe('admin.refund.not_paid'));
+    }
+    if (!order_is_refundable($order)) {
+        throw new RefundException(t_safe('admin.refund.no_payment'));
+    }
+    $paymentIntent = (string) $order['stripe_payment_intent'];
+
+    try {
+        $stripe = stripe_client();
+        try {
+            $refund = $stripe->refunds->create([
+                'payment_intent' => $paymentIntent,
+                'metadata' => ['order_id' => (string) $orderId],
+            ], [
+                'idempotency_key' => 'bookwise-refund-' . $orderId . '-' . substr(hash('sha256', $orderId . '|' . $paymentIntent . '|' . $order['amount_minor']), 0, 24),
+            ]);
+            $status = (string) ($refund->status ?? '');
+            if (!in_array($status, ['succeeded', 'pending'], true)) {
+                app_log('error', 'Stripe did not accept the refund', ['order_id' => $orderId, 'refund' => $refund->id ?? null, 'status' => $status]);
+                throw new RefundException(t_safe('admin.refund.failed'));
+            }
+            $refundId = (string) $refund->id;
+        } catch (\Stripe\Exception\InvalidRequestException $e) {
+            // Refunded elsewhere already (e.g. in the Stripe Dashboard): record it if Stripe confirms it.
+            $refundId = $e->getStripeCode() === 'charge_already_refunded'
+                ? confirmed_full_refund($paymentIntent, (int) $order['amount_minor'], (string) $order['currency'])
+                : null;
+            if ($refundId === null) {
+                throw $e;
+            }
+        }
+    } catch (\Stripe\Exception\ApiErrorException | CheckoutException $e) {
+        app_log('error', 'Stripe refund failed', [
+            'order_id' => $orderId,
+            'stripe_code' => $e instanceof \Stripe\Exception\ApiErrorException ? $e->getStripeCode() : null,
+            'message' => $e->getMessage(),
+        ]);
+        throw new RefundException(t_safe('admin.refund.failed'));
+    }
+
+    return apply_order_refund($orderId, $refundId, $paymentIntent) ? 'refunded' : 'already_refunded';
+}
+
+/**
+ * Records a full refund of a paid order exactly once: status refunded,
+ * refunded_at and the Stripe refund id, the order's sales rows removed (the
+ * books no longer count as sold or reviewable through this order) and the
+ * copies put back in stock. Returns false when the order is not (or no longer)
+ * a paid order with this payment intent.
+ */
+function apply_order_refund(int $orderId, string $refundId, string $paymentIntent): bool
+{
+    return db_transaction(static function () use ($orderId, $refundId, $paymentIntent): bool {
+        $order = db_one('SELECT id, status, stripe_payment_intent FROM orders WHERE id = ? FOR UPDATE', [$orderId]);
+        if ($order === null || $order['status'] !== 'paid' || $order['stripe_payment_intent'] !== $paymentIntent) {
+            return false;
+        }
+        db_run(
+            "UPDATE orders SET status = 'refunded', refunded_at = NOW(), stripe_refund_id = ? WHERE id = ?",
+            [$refundId, $orderId]
+        );
+        db_run('DELETE FROM sales WHERE order_id = ?', [$orderId]);
+        db_run(
+            'UPDATE books b
+             JOIN order_items oi ON oi.book_id = b.id AND oi.order_id = ?
+             SET b.stock = b.stock + oi.quantity',
+            [$orderId]
+        );
+        app_log('info', 'Order refunded', ['order_id' => $orderId, 'refund' => $refundId]);
+        return true;
+    });
+}
+
+/**
+ * Asks Stripe whether the payment intent has been refunded in full: the
+ * succeeded refunds in the order's currency must add up to the order amount.
+ * Returns the newest such refund's id, or null.
+ *
+ * @throws \Stripe\Exception\ApiErrorException
+ */
+function confirmed_full_refund(string $paymentIntent, int $amountMinor, string $currency): ?string
+{
+    $refunds = stripe_client()->refunds->all(['payment_intent' => $paymentIntent, 'limit' => 100]);
+    $total = 0;
+    $newest = null;
+    $newestCreated = -1;
+    foreach ($refunds as $refund) {
+        if (($refund->status ?? null) !== 'succeeded' || strtolower((string) ($refund->currency ?? '')) !== strtolower($currency)) {
+            continue;
+        }
+        if (($refund->payment_intent ?? null) !== $paymentIntent) {
+            continue;
+        }
+        $total += (int) ($refund->amount ?? 0);
+        if ((int) ($refund->created ?? 0) >= $newestCreated) {
+            $newestCreated = (int) ($refund->created ?? 0);
+            $newest = (string) $refund->id;
+        }
+    }
+    return $total >= $amountMinor && $amountMinor > 0 ? $newest : null;
+}
+
+/* ---------------------------------------------------------------------
  * Webhooks
  * ------------------------------------------------------------------- */
 
@@ -536,6 +795,10 @@ function handle_stripe_webhook(string $payload, string $signatureHeader): int
         return 400;
     }
 
+    if ($event->type === 'charge.refunded') {
+        return handle_charge_refunded_event($event);
+    }
+
     $session = $event->data->object ?? null;
     if (!$session instanceof \Stripe\StripeObject || !str_starts_with($event->type, 'checkout.session.')) {
         return 200; // Not an event this application uses.
@@ -551,7 +814,7 @@ function handle_stripe_webhook(string $payload, string $signatureHeader): int
         app_log('warning', 'Webhook session does not match a known order', ['event' => $event->id, 'order_id' => $orderId]);
         return 200;
     }
-    if ($order['status'] === 'paid') {
+    if ($order['status'] === 'paid' || $order['status'] === 'refunded') {
         return 200; // Final state: retries and late events change nothing.
     }
 
@@ -577,5 +840,60 @@ function handle_stripe_webhook(string $payload, string $signatureHeader): int
     } elseif ($event->type === 'checkout.session.async_payment_failed' && ($current->status ?? null) === 'complete') {
         mark_order_status($orderId, 'failed');
     }
+    return 200;
+}
+
+/**
+ * charge.refunded: a charge was refunded (for example in the Stripe
+ * Dashboard). A full refund of a paid order's payment is recorded with the
+ * same bookkeeping as refund_order(), exactly once. Like the checkout events,
+ * the payload is only a notification: the refund is confirmed through the
+ * Stripe API before anything changes, so a forged event cannot refund an
+ * order. Partial refunds are left to staff.
+ */
+function handle_charge_refunded_event(\Stripe\Event $event): int
+{
+    $charge = $event->data->object ?? null;
+    if (!$charge instanceof \Stripe\StripeObject) {
+        return 200;
+    }
+    $paymentIntent = $charge->payment_intent ?? null;
+    if ($paymentIntent instanceof \Stripe\StripeObject) {
+        $paymentIntent = $paymentIntent->id ?? null;
+    }
+    if (!is_string($paymentIntent) || !preg_match('/^pi_[A-Za-z0-9_]{1,250}$/D', $paymentIntent)) {
+        app_log('warning', 'charge.refunded without a payment intent', ['event' => $event->id]);
+        return 200;
+    }
+    $amount = (int) ($charge->amount ?? 0);
+    if ($amount <= 0 || (int) ($charge->amount_refunded ?? 0) < $amount) {
+        app_log('info', 'Partial refund left for manual handling', ['event' => $event->id, 'payment_intent' => $paymentIntent]);
+        return 200;
+    }
+
+    $order = db_one('SELECT id, status, currency, amount_minor FROM orders WHERE stripe_payment_intent = ?', [$paymentIntent]);
+    if ($order === null) {
+        app_log('warning', 'charge.refunded for a payment that is not a BookWise order', ['event' => $event->id]);
+        return 200;
+    }
+    if ($order['status'] !== 'paid') {
+        if ($order['status'] !== 'refunded') {
+            app_log('warning', 'charge.refunded for an order that is not paid', ['event' => $event->id, 'order_id' => (int) $order['id'], 'status' => $order['status']]);
+        }
+        return 200; // Already refunded: retries and duplicates change nothing.
+    }
+
+    try {
+        $refundId = confirmed_full_refund($paymentIntent, (int) $order['amount_minor'], (string) $order['currency']);
+    } catch (\Stripe\Exception\ApiErrorException | CheckoutException $e) {
+        app_log('error', 'Could not confirm a refund with Stripe; Stripe will retry the webhook', ['event' => $event->id, 'message' => $e->getMessage()]);
+        return 503;
+    }
+    if ($refundId === null) {
+        app_log('warning', 'charge.refunded not confirmed by the Stripe API; order unchanged', ['event' => $event->id, 'order_id' => (int) $order['id']]);
+        return 200;
+    }
+
+    apply_order_refund((int) $order['id'], $refundId, $paymentIntent);
     return 200;
 }

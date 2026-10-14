@@ -4,21 +4,23 @@ declare(strict_types=1);
 
 require __DIR__ . '/../src/bootstrap.php';
 
-$teamMembers = ['Ahmed Musaed', 'Nawaf Alzahrani', 'Hasan Alharbi', 'Salman Alfakih', 'Diffallah Noman'];
+// Team member names are part of the translation, so they can be written in each language.
+$teamMembers = translation_entry('shop.about.team', current_locale()) ?? translation_entry('shop.about.team', 'en');
+$teamMembers = is_array($teamMembers) ? array_values(array_filter($teamMembers, 'is_string')) : [];
 
-page_header('About Us', ['about.css']);
+page_header(t('shop.about.title'), ['about.css']);
 ?>
     <div class="page-container about-page">
         <article class="about-card">
-            <h1 class="about-title">About Us</h1>
+            <h1 class="about-title"><?= e(t('shop.about.title')) ?></h1>
 
             <section aria-labelledby="about-project">
-                <h2 id="about-project">Welcome to Our Project</h2>
-                <p>We are a group of Computer Science students at King Faisal University. This project is part of our "Fundamentals of Web Programming" course, supervised by <strong>Dr. Khaled Riad.</strong> It represents our combined effort to learn and showcase essential web development concepts.</p>
+                <h2 id="about-project"><?= e(t('shop.about.project_heading')) ?></h2>
+                <p><?= t_markup('shop.about.project_text', ['supervisor' => '<strong>' . e(t('shop.about.supervisor')) . '</strong>']) ?></p>
             </section>
 
             <section aria-labelledby="about-team">
-                <h2 id="about-team">Meet the Team</h2>
+                <h2 id="about-team"><?= e(t('shop.about.team_heading')) ?></h2>
                 <ul class="about-team" role="list">
 <?php foreach ($teamMembers as $member): ?>
                     <li class="about-member"><strong><?= e($member) ?></strong></li>
@@ -27,11 +29,11 @@ page_header('About Us', ['about.css']);
             </section>
 
             <section aria-labelledby="about-university">
-                <h2 id="about-university">Our University</h2>
-                <p>This project was developed at <strong>King Faisal University</strong>. We are proud to represent our institution and apply the knowledge we’ve gained to create meaningful projects.</p>
+                <h2 id="about-university"><?= e(t('shop.about.university_heading')) ?></h2>
+                <p><?= t_markup('shop.about.university_text', ['university' => '<strong>' . e(t('shop.about.university')) . '</strong>']) ?></p>
             </section>
 
-            <p class="about-credit">&copy; 2024 King Faisal University - Fundamentals of Web Programming</p>
+            <p class="about-credit"><?= e(t('shop.about.credit')) ?></p>
         </article>
     </div>
 <?php

@@ -5,8 +5,10 @@ declare(strict_types=1);
 /**
  * JSON catalog listing used by the Explore page.
  *
- * GET fetch_books.php?genre=<all|Favorites|genre>&q=<search>
- * Unknown genres are treated as "all", exactly like Explore_Page.php.
+ * GET fetch_books.php?genre=<all|Favorites|genre>&q=<search>&page=<n>
+ * Unknown genres are treated as "all" and page numbers are clamped, exactly
+ * like Explore_Page.php. Texts (summary, availability) are in the visitor's
+ * language.
  */
 
 require __DIR__ . '/../src/bootstrap.php';
@@ -16,7 +18,7 @@ const FETCH_COVER_FALLBACK = 'imges/header.jpeg';
 
 if (!in_array(request_method(), ['GET', 'HEAD'], true)) {
     header('Allow: GET, HEAD');
-    json_response(['error' => 'Method not allowed. Use GET.'], 405);
+    json_response(['error' => t('shop.explore.method_not_allowed')], 405);
 }
 
 $genres = list_genres();
@@ -26,20 +28,21 @@ if ($genre !== 'Favorites' && !in_array($genre, $genres, true)) {
 }
 $query = input_string($_GET, 'q', 100);
 
+$favoritesOf = null;
 if ($genre === 'Favorites') {
     $user = current_user();
     if ($user === null) {
-        json_response(['error' => 'Please log in as a customer to see your favorites.'], 401);
+        json_response(['error' => t('shop.explore.favorites_login')], 401);
     }
-    $rows = favorite_books((int) $user['id'], $query);
-    $truncated = false;
-} else {
-    $rows = search_books($genre === 'all' ? null : $genre, $query);
-    $truncated = count($rows) >= BOOK_LIST_LIMIT;
+    $favoritesOf = (int) $user['id'];
 }
+
+$listing = catalog_page($favoritesOf, $genre === 'all' || $genre === 'Favorites' ? null : $genre, $query, $_GET['page'] ?? null);
+$pagination = $listing['pagination'];
 
 $books = array_map(static function (array $row): array {
     $id = (int) $row['id'];
+    $stock = (int) $row['stock'];
     return [
         'id' => $id,
         'title' => (string) $row['title'],
@@ -49,13 +52,19 @@ $books = array_map(static function (array $row): array {
         'price_display' => format_money((string) $row['price']),
         'cover_image' => image_url((string) $row['cover_image'], FETCH_COVER_FALLBACK),
         'url' => 'Selected.php?id=' . $id,
+        'stock_status' => book_stock_status($stock),
+        'availability' => book_availability($stock),
     ];
-}, $rows);
+}, $listing['books']);
 
 json_response([
     'books' => $books,
     'count' => count($books),
     'genre' => $genre,
     'q' => $query,
-    'truncated' => $truncated,
+    'page' => $pagination['page'],
+    'per_page' => $pagination['per_page'],
+    'total' => $pagination['total'],
+    'pages' => $pagination['pages'],
+    'summary' => catalog_summary($genre, $query, $pagination),
 ]);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace BookWise\Tests\Integration;
 
 use BookWise\Tests\Support\CheckoutTestCase;
+use BookWise\Tests\Support\StockFixtures;
 use CheckoutException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Stripe\Checkout\Session;
@@ -14,6 +15,8 @@ use Stripe\Checkout\Session;
  */
 final class OrderFulfillmentTest extends CheckoutTestCase
 {
+    use StockFixtures;
+
     private const BIOLOGY = 7;      // 5.50
     private const BRIDGE = 8;       // 10.00
     private const ESABELLA = 51;    // 19.99
@@ -235,6 +238,49 @@ final class OrderFulfillmentTest extends CheckoutTestCase
         self::assertSame('paid', fulfill_order((int) $order['id'], self::sessionFor($order)));
         self::assertSame('paid', $this->reloadOrder((int) $order['id'])['status']);
         self::assertSame([self::ESABELLA => 1], $this->salesForOrder((int) $order['id']));
+    }
+
+    /* -----------------------------------------------------------------
+     * Stock
+     * --------------------------------------------------------------- */
+
+    public function testFulfilmentTakesTheCopiesOutOfStockExactlyOnce(): void
+    {
+        $esabella = $this->stockOf(self::ESABELLA);
+        $biology = $this->stockOf(self::BIOLOGY);
+        $user = $this->customerWithCart([self::ESABELLA => 2, self::BIOLOGY => 1]);
+        [$sessionId, $order] = $this->checkout($user);
+        self::assertSame([$esabella, $biology], [$this->stockOf(self::ESABELLA), $this->stockOf(self::BIOLOGY)], 'Starting checkout reserves nothing');
+
+        $this->stripe->pay($sessionId);
+        self::assertSame('paid', confirm_checkout_return((int) $user['id'], $sessionId)['state']);
+        self::assertSame([$esabella - 2, $biology - 1], [$this->stockOf(self::ESABELLA), $this->stockOf(self::BIOLOGY)]);
+
+        // Reloads, retries and webhooks for the paid order take nothing more.
+        confirm_checkout_return((int) $user['id'], $sessionId);
+        self::assertSame('already_paid', fulfill_order((int) $order['id'], self::sessionFor($order)));
+        self::assertSame([$esabella - 2, $biology - 1], [$this->stockOf(self::ESABELLA), $this->stockOf(self::BIOLOGY)]);
+    }
+
+    public function testAnOversoldBookIsStillFulfilledNeverGoesBelowZeroAndIsLogged(): void
+    {
+        $user = $this->customerWithCart([self::ESABELLA => 3, self::BIOLOGY => 1]);
+        [$sessionId, $order] = $this->checkout($user);
+        $this->setStock(self::ESABELLA, 1); // the last copies sold elsewhere while this customer paid
+        $biology = $this->stockOf(self::BIOLOGY);
+        $logFile = log_path('app.log');
+        clearstatcache(true, $logFile);
+        $logOffset = is_file($logFile) ? (int) filesize($logFile) : 0;
+
+        $this->stripe->pay($sessionId);
+        self::assertSame('paid', confirm_checkout_return((int) $user['id'], $sessionId)['state'], 'The customer has paid, so the order is fulfilled');
+
+        self::assertSame(0, $this->stockOf(self::ESABELLA), 'Stock never goes below zero');
+        self::assertSame($biology - 1, $this->stockOf(self::BIOLOGY));
+        self::assertSame([self::BIOLOGY => 1, self::ESABELLA => 3], $this->salesForOrder((int) $order['id']));
+        $log = (string) file_get_contents($logFile, false, null, $logOffset);
+        self::assertMatchesRegularExpression('/WARNING: OVERSOLD: .*"order_id":' . (int) $order['id'] . ',"book_id":' . self::ESABELLA . ',"stock":1,"quantity":3/', $log);
+        self::assertStringNotContainsString('"book_id":' . self::BIOLOGY . ',', $log, 'Books with enough copies are not reported');
     }
 
     public function testDeletedBooksAreSkippedWhenRecordingSales(): void

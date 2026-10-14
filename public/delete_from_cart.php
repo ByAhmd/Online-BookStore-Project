@@ -23,9 +23,9 @@ foreach ($cartId !== null ? cart_lines($userId) : [] as $line) {
 }
 
 if ($cartId !== null && $title !== null && cart_remove($userId, $cartId)) {
-    flash('success', sprintf('Removed “%s” from your cart.', $title));
+    flash('success', t('shop.cart.removed', ['title' => $title]));
 } else {
-    flash('error', 'That item is no longer in your cart.');
+    flash('error', t('shop.cart.line_missing'));
 }
 
 redirect('cart.php');
