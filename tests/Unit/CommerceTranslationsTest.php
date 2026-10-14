@@ -8,13 +8,13 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The shop and admin translation files: English and Arabic define the same
- * keys, keep the same :placeholders, Arabic plurals have every CLDR form,
- * and every literal key the code uses exists in both languages.
+ * Every translation file (lang/en/*.php and lang/ar/*.php): English and
+ * Arabic define the same keys, keep the same :placeholders, Arabic plurals
+ * have every CLDR form, and every literal shop and admin key the code uses
+ * exists in both languages.
  */
 final class CommerceTranslationsTest extends TestCase
 {
-    private const NAMESPACES = ['shop', 'admin'];
     private const PLURAL_FORMS = ['zero', 'one', 'two', 'few', 'many', 'other'];
 
     /**
@@ -67,13 +67,31 @@ final class CommerceTranslationsTest extends TestCase
     }
 
     /**
+     * The translation namespaces, one file each.
+     *
+     * @return list<string>
+     */
+    private static function files(string $locale): array
+    {
+        return array_map(static fn (string $file): string => basename($file, '.php'), glob(BASE_PATH . "/lang/$locale/*.php") ?: []);
+    }
+
+    /**
+     * Every namespace, so that a new translation file is checked too.
+     *
      * @return iterable<string, array{0: string}>
      */
     public static function namespaces(): iterable
     {
-        foreach (self::NAMESPACES as $namespace) {
+        foreach (self::files('en') as $namespace) {
             yield $namespace => [$namespace];
         }
+    }
+
+    public function testEnglishAndArabicHaveTheSameTranslationFiles(): void
+    {
+        self::assertContains('mail', self::files('en'), 'The scan finds the files');
+        self::assertSame(self::files('en'), self::files('ar'));
     }
 
     #[DataProvider('namespaces')]
