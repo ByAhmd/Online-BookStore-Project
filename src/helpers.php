@@ -481,6 +481,28 @@ function page_footer(array $scripts = []): void
 }
 
 /**
+ * URL of a file in public/ for a page to link, e.g. "css/common.css?v=1760486400"
+ * (the file's modification time). A changed file gets a new URL, so the web
+ * server lets browsers keep these URLs for a year (see public/.htaccess).
+ * Uploads keep their plain URL: their random names never get new contents,
+ * and they are cached only briefly. External URLs and missing files get no
+ * version. Path segments are percent-encoded, so the URL also works in srcset.
+ */
+function asset(string $path): string
+{
+    if ($path === '' || preg_match('#^(?:[a-z][a-z0-9+.\-]*:|//)#i', $path) === 1) {
+        return $path;
+    }
+    $url = implode('/', array_map('rawurlencode', explode('/', $path)));
+    if (str_starts_with($path, 'uploads/') || str_contains($path, '..')) {
+        return $url;
+    }
+    $file = base_path('public/' . $path);
+    $modified = is_file($file) ? filemtime($file) : false;
+    return $modified === false ? $url : $url . '?v=' . $modified;
+}
+
+/**
  * Returns a safe image URL for a stored cover/avatar path, falling back when
  * the referenced local file does not exist. External images must use https
  * (the Content-Security-Policy blocks plain http images).

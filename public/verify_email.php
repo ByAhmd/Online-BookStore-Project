@@ -120,7 +120,7 @@ page_header(t('auth.panels.verify'), ['sign.css'], ['bodyClass' => 'auth-page'])
                             <input class="auth-input" type="password" id="verify-password" name="password"
                                 autocomplete="current-password" maxlength="<?= PASSWORD_MAX_BYTES ?>" required autofocus<?= $passwordError !== null ? ' aria-invalid="true" aria-describedby="verify-password-error"' : '' ?>>
                             <button type="button" class="password-toggle" aria-controls="verify-password" aria-pressed="false" aria-label="<?= e(t('auth.show_password')) ?>" hidden>
-                                <img src="imges/eye.png" alt="" width="26" height="18">
+                                <img src="<?= e(asset('imges/eye.png')) ?>" alt="" width="26" height="18">
                             </button>
                         </div>
 <?php if ($passwordError !== null): ?>

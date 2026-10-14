@@ -39,9 +39,9 @@ $flashes = take_flashes();
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300..700&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="<?= e(asset('css/common.css')) ?>">
 <?php foreach ($styles as $style): ?>
-    <link rel="stylesheet" href="css/<?= e($style) ?>">
+    <link rel="stylesheet" href="<?= e(asset('css/' . $style)) ?>">
 <?php endforeach; ?>
 </head>
 <body class="<?= e($bodyClass) ?>">
@@ -80,13 +80,13 @@ $flashes = take_flashes();
 <?php if ($navUser !== null): ?>
                 <li>
                     <a class="cart-link" href="cart.php" aria-label="<?= e(tn('common.nav.cart', (int) $navCartCount)) ?>"<?= $navCurrent === 'cart.php' ? ' aria-current="page"' : '' ?>>
-                        <img src="imges/cart-icon.png" alt="" width="28" height="28">
+                        <img src="<?= e(asset('imges/cart-icon.png')) ?>" alt="" width="28" height="28">
                         <span class="cart-badge" aria-hidden="true"><?= (int) $navCartCount ?></span>
                     </a>
                 </li>
                 <li>
                     <a class="avatar-link" href="profilePage.php" title="<?= e(t('common.nav.my_profile')) ?>">
-                        <img class="nav-avatar" src="<?= e(avatar_url($navUser['profile_image'] ?? null)) ?>" alt="<?= e(t('common.nav.my_profile')) ?>" width="44" height="44">
+                        <img class="nav-avatar" src="<?= e(asset(avatar_url($navUser['profile_image'] ?? null))) ?>" alt="<?= e(t('common.nav.my_profile')) ?>" width="44" height="44">
                     </a>
                 </li>
 <?php endif; ?>

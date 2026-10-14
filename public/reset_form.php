@@ -55,7 +55,7 @@ $errorText = static function (string $id, ?string $error): string {
 };
 $toggle = static function (string $inputId): string {
     return '<button type="button" class="password-toggle" aria-controls="' . e($inputId) . '" aria-pressed="false" aria-label="' . e(t('auth.show_password')) . '" hidden>'
-        . '<img src="imges/eye.png" alt="" width="26" height="18">'
+        . '<img src="' . e(asset('imges/eye.png')) . '" alt="" width="26" height="18">'
         . '</button>';
 };
 

@@ -236,7 +236,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
             <div class="profile-shell">
                 <aside class="profile-side">
                     <a class="profile-back" href="Home_Page.php">
-                        <img src="imges/arrow.png" alt="" width="30" height="30">
+                        <img src="<?= e(asset('imges/arrow.png')) ?>" alt="" width="30" height="30">
                         <span class="sr-only"><?= e(t('account.back_home')) ?></span>
                     </a>
                     <h1 class="profile-side-title"><?= e(t('account.title')) ?></h1>
@@ -246,7 +246,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                             <li>
                                 <a class="profile-menu-link<?= $key === 'delete' ? ' profile-menu-danger' : '' ?>" href="profilePage.php?section=<?= e($key) ?>" data-section="<?= e($key) ?>" data-title="<?= e($info['label'] . ' · ' . $appName) ?>"<?= $key === $section ? ' aria-current="page"' : '' ?>>
 <?php if ($info['icon'] !== null): ?>
-                                    <img src="<?= e($info['icon']) ?>" alt="" width="32" height="32">
+                                    <img src="<?= e(asset($info['icon'])) ?>" alt="" width="32" height="32">
 <?php elseif (isset($menuIcons[$key])): ?>
                                     <?= $menuIcons[$key] . "\n" ?>
 <?php endif; ?>
@@ -258,7 +258,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                                 <form class="profile-signout" method="post" action="logout.php">
                                     <?= csrf_field() ?>
                                     <button type="submit" class="profile-menu-link">
-                                        <img src="imges/SignOut.png" alt="" width="32" height="32">
+                                        <img src="<?= e(asset('imges/SignOut.png')) ?>" alt="" width="32" height="32">
                                         <span><?= e(t('account.sign_out')) ?></span>
                                     </button>
                                 </form>
@@ -276,7 +276,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                             <input type="hidden" name="action" value="update_profile">
 
                             <div class="avatar-picker">
-                                <img id="avatar-preview" class="avatar-preview" src="<?= e(avatar_url($user['profile_image'] ?? null)) ?>" alt="<?= e(t('account.profile.avatar_alt')) ?>" width="160" height="160" data-avatar-preview>
+                                <img id="avatar-preview" class="avatar-preview" src="<?= e(asset(avatar_url($user['profile_image'] ?? null))) ?>" alt="<?= e(t('account.profile.avatar_alt')) ?>" width="160" height="160" data-avatar-preview>
                                 <p class="avatar-status" data-avatar-status aria-live="polite"></p>
                             </div>
 

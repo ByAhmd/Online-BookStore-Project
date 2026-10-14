@@ -7,3 +7,36 @@ Options -Indexes
 <FilesMatch "^\.">
     Require all denied
 </FilesMatch>
+
+# Browser caching of static files. PHP pages are never cached: they send
+# "Cache-Control: no-store" themselves.
+#  - Pages link CSS, scripts and images through asset(), which adds
+#    ?v=<modification time>: a changed file gets a new URL, so those URLs are
+#    kept for a year without asking the server again.
+#  - Uploads (uploads/) are kept for an hour, so a replaced or deleted
+#    picture does not linger.
+#  - Other static files (e.g. images referenced from CSS) are kept for a day.
+# docker/apache/site.conf repeats these rules for the Docker image.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(?i:css|js|png|jpe?g|gif|webp|svg|ico)$">
+        Header set Cache-Control "public, max-age=86400"
+        Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{QUERY_STRING} =~ /^v=[0-9]+$/"
+        Header set Cache-Control "public, max-age=3600" "expr=%{REQUEST_URI} =~ m#/uploads/#"
+    </FilesMatch>
+</IfModule>
+# Without mod_headers, mod_expires keeps every static file for an hour (it
+# cannot tell versioned URLs and uploads apart).
+<IfModule !mod_headers.c>
+    <IfModule mod_expires.c>
+        ExpiresActive On
+        ExpiresByType text/css "access plus 1 hour"
+        ExpiresByType text/javascript "access plus 1 hour"
+        ExpiresByType application/javascript "access plus 1 hour"
+        ExpiresByType image/png "access plus 1 hour"
+        ExpiresByType image/jpeg "access plus 1 hour"
+        ExpiresByType image/gif "access plus 1 hour"
+        ExpiresByType image/webp "access plus 1 hour"
+        ExpiresByType image/svg+xml "access plus 1 hour"
+        ExpiresByType image/x-icon "access plus 1 hour"
+    </IfModule>
+</IfModule>
