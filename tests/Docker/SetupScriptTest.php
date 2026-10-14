@@ -146,7 +146,7 @@ final class SetupScriptTest extends DatabaseTestCase
             'APP_DEBUG' => 'false',
             'APP_URL' => 'https://bookwise-demo.example.net',
             'APP_DEMO' => 'true',
-            'REQUIRE_EMAIL_VERIFICATION' => 'false',
+            'REQUIRE_EMAIL_VERIFICATION' => 'true',
             'LOG_DIR' => 'storage/logs',
             'DB_HOST' => (string) config('db.host'),
             'DB_PORT' => (string) config('db.port'),
@@ -156,7 +156,7 @@ final class SetupScriptTest extends DatabaseTestCase
             'PAYMENT_SIMULATOR' => 'true',
             'PAYMENT_SIMULATOR_STORE' => 'storage/payment-simulator.json',
             'STRIPE_SECRET_KEY' => '',
-            'MAIL_DRIVER' => 'null',
+            'MAIL_DRIVER' => 'database',
         ];
         $actual = array_intersect_key($settings, $expected);
         ksort($expected);

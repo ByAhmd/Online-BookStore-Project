@@ -12,8 +12,8 @@ declare(strict_types=1);
  *     answers;
  *  3. writes .env from .env.example with safe values for a public demo:
  *     production mode without error details, demo mode with the built-in
- *     payment simulator, no email (MAIL_DRIVER=null) and no email
- *     confirmation. The file is readable by its owner only;
+ *     payment simulator, and the demo inbox for its emails (MAIL_DRIVER=database)
+ *     with email confirmation on. The file is readable by its owner only;
  *  4. creates the tables and loads the sample catalog (bin/install.php
  *     --seed), or applies pending migrations to an existing BookWise database;
  *  5. optionally creates an administrator.
@@ -116,7 +116,7 @@ function setup_ask(string $question, string $default = '', bool $secret = false)
  * A value from --option=VALUE, else from the environment variable, else
  * asked for (unless --no-interaction), else $default.
  *
- * @param array<string, string|false> $options
+ * @param array<string, mixed> $options As returned by getopt()
  */
 function setup_value(array $options, string $option, string $variable, string $question, string $default, bool $interactive): string
 {
@@ -251,8 +251,8 @@ $values = [
     'LOG_DIR' => 'storage/logs',
     'APP_DEFAULT_LOCALE' => 'en',
     'APP_DEMO' => 'true',
-    // The demo sends no email, so new customers must be able to sign in without a confirmation link.
-    'REQUIRE_EMAIL_VERIFICATION' => 'false',
+    // The demo inbox shows the confirmation link, so the full sign-up flow can be tried.
+    'REQUIRE_EMAIL_VERIFICATION' => 'true',
     'DB_HOST' => $dbHost,
     'DB_PORT' => (string) (int) $dbPort,
     'DB_NAME' => $dbName,
@@ -269,10 +269,16 @@ $values = [
     // every request until the real one is set.
     'STRIPE_WEBHOOK_SECRET' => 'whsec_' . bin2hex(random_bytes(24)),
     'STRIPE_CURRENCY' => 'sar',
-    'MAIL_DRIVER' => 'null',
+    // Emails are kept in the database and shown on inbox.php instead of being sent.
+    'MAIL_DRIVER' => 'database',
     'MAIL_FROM_ADDRESS' => 'no-reply@example.com',
     'MAIL_FROM_NAME' => 'BookWise',
-    'SENDGRID_API_KEY' => '',
+    'SMTP_HOST' => '',
+    'SMTP_PORT' => '587',
+    'SMTP_USERNAME' => '',
+    'SMTP_PASSWORD' => '',
+    'SMTP_ENCRYPTION' => 'tls',
+    'SMTP_TIMEOUT' => '10',
 ];
 
 // From here on the application reads exactly these settings, whatever the

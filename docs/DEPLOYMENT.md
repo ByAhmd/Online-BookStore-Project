@@ -3,7 +3,7 @@
 This guide covers four setups:
 
 - **(a) Local store with Docker:** `docker compose up --build`, a MySQL container and simulated payments.
-- **(b) Free public demo on alwaysdata:** classic PHP hosting with MariaDB on [alwaysdata](https://www.alwaysdata.com)'s free plan, set up over SSH with `php bin/setup.php`. No Docker. Payments are simulated and no email is sent.
+- **(b) Free public demo on alwaysdata:** classic PHP hosting with MariaDB on [alwaysdata](https://www.alwaysdata.com)'s free plan, set up over SSH with `php bin/setup.php`. No Docker. Payments are simulated, and emails are shown in the site's demo inbox instead of being sent.
 - **(c) Presenting from your own PC:** the Docker store from (a), published for a while through [Tailscale Funnel](https://tailscale.com/kb/1223/funnel).
 - **(d) Real store:** real Stripe payments and real email.
 
@@ -278,7 +278,7 @@ It checks PHP, its extensions and the folders it writes to, then asks:
 
 Nothing changes until every answer is valid and the database answers. Then the script:
 
-- writes `~/bookwise/.env`, readable only by you, with the values of a public demo: `APP_ENV=production`, `APP_DEBUG=false`, `APP_DEMO=true`, `PAYMENT_SIMULATOR=true`, `MAIL_DRIVER=null` (no email) and `REQUIRE_EMAIL_VERIFICATION=false` (new customers can sign in at once);
+- writes `~/bookwise/.env`, readable only by you, with the values of a public demo: `APP_ENV=production`, `APP_DEBUG=false`, `APP_DEMO=true`, `PAYMENT_SIMULATOR=true`, `MAIL_DRIVER=database` (emails are kept for 48 hours and shown on the demo inbox page, `inbox.php`) and `REQUIRE_EMAIL_VERIFICATION=true` (new customers confirm their address with the link in the inbox);
 - creates the tables and loads the 55-book sample catalog (`php bin/install.php --seed`);
 - creates the administrator.
 
@@ -438,8 +438,9 @@ Starting from the Docker setup, or from a server prepared with `bin/setup.php`, 
    - Keep `STRIPE_CURRENCY` (default `sar`) or set another two-decimal currency.
    - Make sure `STRIPE_API_BASE` is **not** set.
 3. **Email:**
-   - Set `MAIL_DRIVER=sendgrid`, `SENDGRID_API_KEY`, `MAIL_FROM_ADDRESS` (a sender verified in SendGrid) and `MAIL_FROM_NAME`.
-     SendGrid is reached over HTTPS, so hosts that block outgoing SMTP do not affect it.
+   - Set `MAIL_DRIVER=smtp` and the `SMTP_*` settings of any email provider (for example Brevo or Mailjet, which have free plans): `SMTP_HOST`, `SMTP_PORT` (587, or 2525 where the host blocks 587), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_ENCRYPTION=tls` (`ssl` for port 465) and optionally `SMTP_TIMEOUT`.
+     Set `MAIL_FROM_ADDRESS` to an address the provider lets you send from, and `MAIL_FROM_NAME`.
+     The host must allow outgoing connections to the SMTP port; see the README's [Email](../README.md#email) section.
    - Turn email verification back on with `REQUIRE_EMAIL_VERIFICATION=true`, or remove the variable (true is the default).
 4. **Address:** set `APP_URL` to the public HTTPS address. It is used in Stripe return URLs and email links.
 5. **Persistent uploads:** profile pictures and uploaded book covers are stored in `public/uploads/`. With Docker the `uploads` volume keeps them; on a classic host they stay in the folder.
@@ -460,7 +461,7 @@ The free alwaysdata plan cannot be used for a store that makes money.
 - Not for profit, and only at `https://<account>.alwaysdata.net`.
 - After 30 minutes without visits (the default) the site's PHP processes stop; the next visit starts them again and is a little slower.
 - Backups are kept for 3 days.
-- No email is sent (`MAIL_DRIVER=null`): there are no password-reset or confirmation emails, and the password-reset form says so.
+- No email leaves the site (`MAIL_DRIVER=database`). Confirmation, password-reset and other emails appear in the demo inbox, and only in the browser that created the account (or for the signed-in customer), so visitors cannot read each other's links.
 - The visitors' addresses may all look the same to the store, see [step 9](#step-9-check-the-visitors-addresses).
 
 **The demo itself:**
@@ -508,7 +509,7 @@ These variables are specific to the container and `docker-compose.yml`. The appl
 | `BOOKWISE_ADMIN_EMAIL` / `BOOKWISE_ADMIN_PASSWORD` | — (Compose: `admin@bookwise.test` / `local-admin-password`) | Administrator created (or its password reset) at every start when both are set. `docker-compose.yml` reads `BOOKWISE_ADMIN_PASSWORD` from your shell. |
 | `BOOKWISE_SEED` | `false` | `true`: load the sample catalog into a new, empty database also outside demo mode |
 | `LOG_DIR` | `storage/logs` | Where `app.log`, `php-error.log` and `mail.log` are written; the first two are copied to the container output |
-| `MAIL_DRIVER` | `log` | `log` locally, `null` for a public demo, `sendgrid` for a real store |
+| `MAIL_DRIVER` | `log` | `log` locally, `database` (demo inbox) for a public demo, `smtp` for a real store |
 | `APP_ENV` | `production` | Must be `production` for live Stripe keys (the local Compose file uses `local`). With `production`, the payment simulator needs `APP_DEMO=true` |
 | `DB_NAME`, `DB_HOST`, `DB_PORT` | — | Shown in the start-up log (never `DB_PASS`) |
 | `STRIPE_SECRET_KEY`, `STRIPE_API_BASE` | — | Checked by the entrypoint: a live key stops a demo, and a set `STRIPE_API_BASE` is reported. Neither is used while the simulator is on |

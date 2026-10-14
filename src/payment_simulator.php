@@ -243,7 +243,7 @@ function payment_simulator_refresh(array &$state, int $now): void
 /**
  * Answers one Stripe API request.
  *
- * @param array<string, mixed> $params Query (GET) or form (POST) parameters as Stripe receives them: strings and nested arrays
+ * @param array<array-key, mixed> $params Query (GET) or form (POST) parameters as Stripe receives them: strings and nested arrays
  * @param array{store?: string|null, hosted_page_url?: callable(string): string, keep_customer_email?: bool} $options
  *        hosted_page_url builds the payment page address of a session (default: public/pay.php of APP_URL);
  *        keep_customer_email stores customer_email (only the test suites need it; the store keeps no emails here)
