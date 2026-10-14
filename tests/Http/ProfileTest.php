@@ -69,7 +69,7 @@ final class ProfileTest extends HttpTestCase
         $form = $page->document()->form('profilePage.php', ['action' => 'update_profile']);
         self::assertSame('multipart/form-data', $form->enctype);
         self::assertSame('Profile Reader', $form->field('name'));
-        self::assertSame('Unknown', $form->field('favorite_genre'));
+        self::assertSame('', $form->field('favorite_genre'), 'No favorite chosen yet: an empty field, not the stored marker');
 
         $response = $this->updateProfile($customer, ['name' => 'Renamed Reader', 'favorite_genre' => 'Science Fiction', 'date_of_birth' => '1990-05-17']);
         $this->assertRedirect($response, 'profilePage.php?section=account');
@@ -84,7 +84,6 @@ final class ProfileTest extends HttpTestCase
             [['name' => ''], 'name-error', 'Please enter your name.'],
             [['name' => '<script>x</script>'], 'name-error', 'Name contains characters that are not allowed.'],
             [['name' => str_repeat('n', 101)], 'name-error', 'Name must be 100 characters or fewer.'],
-            [['favorite_genre' => ''], 'favorite_genre-error', 'Favorite genre is required.'],
             [['favorite_genre' => '<b>'], 'favorite_genre-error', 'Favorite genre contains characters that are not allowed.'],
             [['favorite_genre' => "Drama\tNoir"], 'favorite_genre-error', 'Favorite genre contains characters that are not allowed.'],
             [['favorite_genre' => str_repeat('g', 101)], 'favorite_genre-error', 'Favorite genre must be 100 characters or fewer.'],
@@ -106,6 +105,12 @@ final class ProfileTest extends HttpTestCase
         // An empty date of birth clears it (the field is optional).
         $this->assertRedirect($this->updateProfile($customer, ['date_of_birth' => '']), 'profilePage.php?section=account');
         self::assertNull(find_user($userId)['date_of_birth']);
+
+        // So is the favorite genre: emptying it stores the "not chosen" marker, shown as an empty field.
+        $this->assertRedirect($this->updateProfile($customer, ['favorite_genre' => '']), 'profilePage.php?section=account');
+        self::assertSame(FAVORITE_GENRE_UNSET, find_user($userId)['favorite_genre']);
+        $form = $this->assertHtmlPage($customer->get('profilePage.php?section=account'))->form('profilePage.php', ['action' => 'update_profile']);
+        self::assertSame('', $form->field('favorite_genre'));
     }
 
     public function testFreeTextFavoriteGenresNeverBlockProfileUpdates(): void

@@ -1,6 +1,26 @@
 // Shared behaviour loaded on every page. Pages must not use inline scripts or
 // on* attributes (the Content-Security-Policy only allows same-origin files).
 document.addEventListener('DOMContentLoaded', () => {
+    // Language links switch the page as it is now. Some pages change their
+    // address in place (explore filters, sign-in tabs, profile sections), so
+    // the query string is taken from the current address just before use.
+    // Links the server pointed at another page (error pages) are left alone.
+    document.querySelectorAll('a.lang-switch[hreflang]').forEach((link) => {
+        const refresh = () => {
+            const target = new URL(link.href);
+            const here = window.location;
+            const samePage = target.pathname === here.pathname
+                || (here.pathname.endsWith('/') && target.pathname === `${here.pathname}index.php`);
+            if (!samePage) {
+                return;
+            }
+            const url = new URL(target.pathname + here.search, here.origin);
+            url.searchParams.set('lang', link.getAttribute('hreflang'));
+            link.href = url.href;
+        };
+        ['pointerenter', 'focus', 'click'].forEach((type) => link.addEventListener(type, refresh));
+    });
+
     // Dismissible flash messages. When the focused close button disappears with
     // its message, focus moves to the next remaining close button (or the
     // previous one after the last message), else to the main content.

@@ -367,6 +367,23 @@ final class AccountSecurityTest extends HttpTestCase
         $this->assertStatus(419, $customer->post('profilePage.php', ['action' => 'update_language', 'locale' => 'en']));
     }
 
+    public function testASignedOutSessionCannotChangeTheAccountLanguage(): void
+    {
+        [$customer, $user] = $this->signedInCustomer();
+        $userId = (int) $user['id'];
+        // A password change elsewhere signs this session out.
+        db_run('UPDATE users SET session_version = session_version + 1 WHERE id = ?', [$userId]);
+
+        $this->assertRedirect($customer->get('Home_Page.php?lang=ar'), 'Home_Page.php');
+        self::assertSame('ar', $customer->cookie(LOCALE_COOKIE), 'The visitor still gets the language');
+        self::assertSame('en', find_user_account($userId)['locale'] ?? null, 'The account is not changed');
+
+        // A valid session does store it.
+        [$current, $other] = $this->signedInCustomer();
+        $this->assertRedirect($current->get('Home_Page.php?lang=ar'), 'Home_Page.php');
+        self::assertSame('ar', find_user_account((int) $other['id'])['locale'] ?? null);
+    }
+
     public function testEmailsFollowTheAccountLanguageNotTheVisitors(): void
     {
         [$customer, $user] = $this->signedInCustomer();

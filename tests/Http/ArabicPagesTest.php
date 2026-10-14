@@ -89,6 +89,24 @@ final class ArabicPagesTest extends HttpTestCase
         self::assertContains('متوفر', $document->texts('//*[' . HtmlDocument::hasClass('stock-badge') . ']'));
     }
 
+    public function testTheLanguageSwitchStaysOnPagesThatCanBeOpenedAgain(): void
+    {
+        $guest = $this->client();
+        $switch = static fn (HtmlDocument $document): string => (string) $document->first('//a[' . HtmlDocument::hasClass('lang-switch') . '][@hreflang="ar"]')?->getAttribute('href');
+
+        // The site root is the sign-in page, not the home page.
+        self::assertSame('index.php?lang=ar', $switch($this->assertHtmlPage($guest->get('/'))));
+        self::assertSame('index.php?form=signup&lang=ar', $switch($this->assertHtmlPage($guest->get('index.php?form=signup'))));
+        $this->assertRedirect($guest->get('/?lang=ar'), 'index.php');
+        $guest->setCookie(LOCALE_COOKIE, 'en');
+
+        // An error shown for a form submission links to the home page: the
+        // action itself only accepts POST and would answer 405.
+        $this->assertHtmlPage($guest->get('index.php'));
+        $error = $this->assertHtmlPage($guest->post('Register.php', ['action' => 'login', 'email' => 'x@example.com', 'password' => 'whatever-1']), 419);
+        self::assertSame('Home_Page.php?lang=ar', $switch($error));
+    }
+
     public function testCustomerPagesInArabic(): void
     {
         [$customer] = $this->signedInCustomer('قارئة عربية');
@@ -103,7 +121,13 @@ final class ArabicPagesTest extends HttpTestCase
         self::assertSame('الصفحة 2', $explore->first('//nav[' . HtmlDocument::hasClass('pager') . ']//a[@data-page="2"][' . HtmlDocument::hasClass('pager-number') . ']')?->getAttribute('aria-label'));
         $root = $explore->first('//*[@data-explore]');
         self::assertSame(['جارٍ تحميل الكتب…', 'الصفحة :page', 'صفحات النتائج'], [$root?->getAttribute('data-i18n-loading'), $root?->getAttribute('data-i18n-page'), $root?->getAttribute('data-i18n-pager-label')]);
-        self::assertSame('عرض 16 كتابًا في Romantic.', $customer->get('Explore_Page.php?genre=Romantic')->document()->text('//*[@id="explore-status"]'));
+        $romantic = $customer->get('Explore_Page.php?genre=Romantic')->document();
+        self::assertSame('عرض 16 كتابًا في رومانسي.', $romantic->text('//*[@id="explore-status"]'));
+        // Genre names are shown in Arabic; links keep the stored name.
+        self::assertSame('رومانسي', $romantic->text('//a[@data-genre="Romantic"]'));
+        self::assertContains('غموض', $explore->texts('//nav[' . HtmlDocument::hasClass('genre-tabs') . ']//a'));
+        self::assertContains('رعب', $home->texts('//a[' . HtmlDocument::hasClass('genre-chip') . ']'));
+        self::assertStringContainsString('genre=Horror', (string) $home->first('//a[' . HtmlDocument::hasClass('genre-chip') . ' and normalize-space()="رعب"]')?->getAttribute('href'));
         $search = $this->assertArabicPage($customer->get('Explore_Page.php?q=love'), 'اكتشف قراءات جديدة');
         self::assertSame('عرض 6 كتب في جميع التصنيفات تطابق «love».', $search->text('//*[@id="explore-status"]'));
         $none = $this->assertArabicPage($customer->get('Explore_Page.php?q=zzz-nothing'), 'اكتشف قراءات جديدة');

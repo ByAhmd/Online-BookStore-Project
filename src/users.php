@@ -176,6 +176,9 @@ function remember_locale_cookie(string $locale): void
  * (the rules themselves live in validation.php)
  * ------------------------------------------------------------------- */
 
+/** Stored when a customer has not chosen a favorite genre (the column default); shown as an empty field. */
+const FAVORITE_GENRE_UNSET = 'Unknown';
+
 function favorite_genre_error(string $genre): ?string
 {
     if (validate_favorite_genre($genre) === null) {

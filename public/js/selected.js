@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (max > 0) {
             const update = () => {
                 const left = Math.max(0, max - textarea.value.length);
-                hint.textContent = fill(hint.dataset.i18nCounter, { left: left.toLocaleString(), max: max.toLocaleString() });
+                hint.textContent = fill(hint.dataset.i18nCounter, { left: left.toLocaleString('en-US'), max: max.toLocaleString('en-US') });
             };
             textarea.addEventListener('input', update);
             update();

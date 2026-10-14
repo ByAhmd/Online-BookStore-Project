@@ -41,7 +41,7 @@ $exploreUrl = static function (string $tabGenre, string $q, int $page = 1): stri
 // [value, label] pairs; a list keeps numeric-looking genre names as strings.
 $tabs = [['all', t('shop.explore.tab_all')]];
 foreach ($genres as $name) {
-    $tabs[] = [$name, $name];
+    $tabs[] = [$name, genre_label($name)];
 }
 $tabs[] = ['Favorites', t('shop.explore.tab_favorites')];
 

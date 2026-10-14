@@ -189,7 +189,7 @@ page_header($title, ['selected.css']);
                     <ul class="book-meta">
                         <li>
                             <span class="meta-label"><?= e(t('shop.book.genre_label')) ?></span>
-                            <a class="genre-link" href="Explore_Page.php?genre=<?= e(rawurlencode((string) $book['genre'])) ?>" dir="auto"><?= e($book['genre']) ?></a>
+                            <a class="genre-link" href="Explore_Page.php?genre=<?= e(rawurlencode((string) $book['genre'])) ?>" dir="auto"><?= e(genre_label((string) $book['genre'])) ?></a>
                         </li>
                         <li><span class="meta-label"><?= e(t('shop.book.sold_label')) ?></span> <?= e(tn('shop.book.sold_times', $soldCount)) ?></li>
                         <li class="book-rating">
@@ -355,7 +355,7 @@ page_header($title, ['selected.css']);
             <section class="similar-books" aria-labelledby="similar-title">
                 <h2 id="similar-title"><?= e(t('shop.book.similar_title')) ?></h2>
 <?php if ($similarBooks === []): ?>
-                <p class="empty-state"><?= t_markup('shop.book.no_similar', ['genre' => '<span dir="auto">' . e($book['genre']) . '</span>']) ?> <a href="Explore_Page.php"><?= e(t('shop.book.explore_catalog')) ?></a></p>
+                <p class="empty-state"><?= t_markup('shop.book.no_similar', ['genre' => '<span dir="auto">' . e(genre_label((string) $book['genre'])) . '</span>']) ?> <a href="Explore_Page.php"><?= e(t('shop.book.explore_catalog')) ?></a></p>
 <?php else: ?>
                 <ul class="similar-books-container">
 <?php foreach ($similarBooks as $similar): ?>

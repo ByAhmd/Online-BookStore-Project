@@ -31,9 +31,9 @@ if (is_post()) {
 
         $errors = array_filter([
             'name' => person_name_error($name),
-            // Free text: more permissive than catalog genre names, so legacy values
-            // such as "Sci-Fi/Fantasy" never block a profile or avatar update.
-            'favorite_genre' => favorite_genre_error($favoriteGenre),
+            // Optional free text: more permissive than catalog genre names, so legacy
+            // values such as "Sci-Fi/Fantasy" never block a profile or avatar update.
+            'favorite_genre' => $favoriteGenre === '' ? null : favorite_genre_error($favoriteGenre),
             'date_of_birth' => date_of_birth_error($dateOfBirth),
         ]);
         $input = ['name' => $name, 'favorite_genre' => $favoriteGenre, 'date_of_birth' => $dateOfBirth];
@@ -60,7 +60,7 @@ if (is_post()) {
         }
 
         try {
-            update_user_profile($userId, $name, $favoriteGenre, $dateOfBirth === '' ? null : $dateOfBirth, $newAvatar);
+            update_user_profile($userId, $name, $favoriteGenre !== '' ? $favoriteGenre : FAVORITE_GENRE_UNSET, $dateOfBirth === '' ? null : $dateOfBirth, $newAvatar);
         } catch (Throwable $e) {
             delete_uploaded_avatar($newAvatar);
             throw $e;
@@ -190,7 +190,8 @@ $orders = user_orders($userId);
 $appName = (string) config('app.name', 'BookWise');
 
 $nameValue = old('name', (string) $user['name']);
-$genreValue = old('favorite_genre', (string) ($user['favorite_genre'] ?? 'Unknown'));
+$storedGenre = (string) ($user['favorite_genre'] ?? '');
+$genreValue = old('favorite_genre', $storedGenre === FAVORITE_GENRE_UNSET ? '' : $storedGenre);
 $dobValue = old('date_of_birth', (string) ($user['date_of_birth'] ?? ''));
 $today = (new DateTimeImmutable('today'))->format('Y-m-d');
 
@@ -306,7 +307,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
 
                             <div class="form-field">
                                 <label for="favorite_genre"><?= e(t('account.profile.favorite_genre')) ?></label>
-                                <input type="text" id="favorite_genre" name="favorite_genre" class="form-control" dir="auto" value="<?= e($genreValue) ?>" required maxlength="100" list="genre-options" autocomplete="off"<?= $fieldAria('favorite_genre', 'favorite_genre-hint') ?>>
+                                <input type="text" id="favorite_genre" name="favorite_genre" class="form-control" dir="auto" value="<?= e($genreValue) ?>" maxlength="100" list="genre-options" autocomplete="off" placeholder="<?= e(t('account.profile.favorite_genre_placeholder')) ?>"<?= $fieldAria('favorite_genre', 'favorite_genre-hint') ?>>
                                 <datalist id="genre-options">
 <?php foreach ($genres as $genre): ?>
                                     <option value="<?= e($genre) ?>"></option>
@@ -414,7 +415,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
 <?php endforeach; ?>
                                 </ul>
 <?php endif; ?>
-                                <p class="order-total"><?= e(t('account.orders.total')) ?> <strong dir="ltr"><?= e(format_money((string) $order['total_amount'], (string) $order['currency'])) ?></strong></p>
+                                <p class="order-total"><?= e(t('account.orders.total')) ?> <strong dir="auto"><?= e(format_money((string) $order['total_amount'], (string) $order['currency'])) ?></strong></p>
                             </li>
 <?php endforeach; ?>
                         </ol>

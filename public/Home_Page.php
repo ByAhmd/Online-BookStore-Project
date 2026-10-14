@@ -83,7 +83,7 @@ page_header(t('shop.home.title'), ['HomeCSS.css']);
             <h2 id="home-genres-title" class="home-section-title"><?= e(t('shop.home.genres_title')) ?></h2>
             <ul class="genre-chips" role="list">
 <?php foreach ($genres as $genre): ?>
-                <li><a class="genre-chip" href="Explore_Page.php?genre=<?= e(rawurlencode($genre)) ?>" dir="auto"><?= e($genre) ?></a></li>
+                <li><a class="genre-chip" href="Explore_Page.php?genre=<?= e(rawurlencode($genre)) ?>" dir="auto"><?= e(genre_label($genre)) ?></a></li>
 <?php endforeach; ?>
             </ul>
         </section>

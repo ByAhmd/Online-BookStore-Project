@@ -349,4 +349,28 @@ return [
         'university' => 'King Faisal University',
         'credit' => '© 2024 King Faisal University - Fundamentals of Web Programming',
     ],
+
+    // Display names of common catalog genres (keys: lower case, other characters as _). Genres without an entry are shown as stored.
+    'genres' => [
+        'adventure' => 'Adventure',
+        'biography' => 'Biography',
+        'children' => 'Children',
+        'comedy' => 'Comedy',
+        'crime' => 'Crime',
+        'drama' => 'Drama',
+        'fantasy' => 'Fantasy',
+        'fiction' => 'Fiction',
+        'historical' => 'Historical',
+        'history' => 'History',
+        'horror' => 'Horror',
+        'mystery' => 'Mystery',
+        'non_fiction' => 'Non-Fiction',
+        'poetry' => 'Poetry',
+        'romance' => 'Romance',
+        'romantic' => 'Romantic',
+        'science' => 'Science',
+        'science_fiction' => 'Science Fiction',
+        'self_help' => 'Self-Help',
+        'thriller' => 'Thriller',
+    ],
 ];

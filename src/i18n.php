@@ -116,35 +116,52 @@ function handle_locale_switch(): void
             'samesite' => 'Lax',
         ]);
         $_COOKIE[LOCALE_COOKIE] = $locale;
-        $userId = $_SESSION['user_id'] ?? null;
-        if (is_int($userId)) {
-            try {
-                db_run('UPDATE users SET locale = ? WHERE id = ?', [$locale, $userId]);
-            } catch (Throwable $e) {
-                app_log('warning', 'Could not store language preference: ' . $e->getMessage());
+        try {
+            // current_user() also ends sessions that were signed out elsewhere
+            // (password change), so those can no longer change the account.
+            $user = current_user();
+            if ($user !== null) {
+                db_run('UPDATE users SET locale = ? WHERE id = ?', [$locale, (int) $user['id']]);
             }
+        } catch (Throwable $e) {
+            app_log('warning', 'Could not store language preference: ' . $e->getMessage());
         }
     }
 
     $query = $_GET;
     unset($query['lang']);
-    $page = basename((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH));
-    $target = safe_redirect_path($page . ($query !== [] ? '?' . http_build_query($query) : ''), 'Home_Page.php');
+    $target = safe_redirect_path(current_page_name() . ($query !== [] ? '?' . http_build_query($query) : ''), 'Home_Page.php');
     redirect($target);
 }
 
 /**
- * URL of the current page in another language.
+ * File name of the requested page: "index.php" for a directory URL such as
+ * "/" (its index page, the sign-in page), "Home_Page.php" for anything that
+ * is not a PHP page.
+ */
+function current_page_name(): string
+{
+    $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+    if ($path === '' || str_ends_with($path, '/')) {
+        return 'index.php';
+    }
+    $page = basename($path);
+    return preg_match('/^[A-Za-z0-9_.-]+\.php$/D', $page) ? $page : 'Home_Page.php';
+}
+
+/**
+ * URL of the current page in another language. Pages that cannot simply be
+ * requested again (a POST-only action showing an error, or a web-server error
+ * document, which never sees the query string) link to the home page instead.
  */
 function locale_switch_url(string $locale): string
 {
+    if (!in_array(request_method(), ['GET', 'HEAD'], true) || defined('LOCALE_SWITCH_TO_HOME')) {
+        return 'Home_Page.php?' . http_build_query(['lang' => $locale]);
+    }
     $query = $_GET;
     $query['lang'] = $locale;
-    $page = basename((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH));
-    if ($page === '' || !preg_match('/\.php$/D', $page)) {
-        $page = 'Home_Page.php';
-    }
-    return $page . '?' . http_build_query($query);
+    return current_page_name() . '?' . http_build_query($query);
 }
 
 /**
