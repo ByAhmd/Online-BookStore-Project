@@ -33,6 +33,9 @@ FROM php:8.3-apache
 
 # PHP extensions: pdo_mysql, gd with JPEG/PNG/WebP, opcache. Only the shared
 # libraries they need are kept; the -dev packages are removed again.
+# dpkg-query --search prints "package:arch: /path" lines, and on Debian trixie
+# also "diversion by ... from: /path" lines: the awk filter keeps only the
+# package names (as the official PHP images do).
 RUN set -eux; \
     savedAptMark="$(apt-mark showmanual)"; \
     apt-get update; \
@@ -45,7 +48,7 @@ RUN set -eux; \
         | awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); printf "*%s\n", so }' \
         | sort -u \
         | xargs -r dpkg-query --search \
-        | cut -d: -f1 \
+        | awk 'sub(":$", "", $1) { print $1 }' \
         | sort -u \
         | xargs -rt apt-mark manual; \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
