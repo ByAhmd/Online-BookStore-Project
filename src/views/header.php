@@ -25,6 +25,8 @@ $navLink = static function (string $href, string $label) use ($navCurrent): stri
     return '<a href="' . e($href) . '"' . $current . '>' . e($label) . '</a>';
 };
 $otherLocales = array_diff_key(SUPPORTED_LOCALES, [$locale => true]);
+// Public demo without an email provider: emails are shown on inbox.php.
+$navInbox = demo_inbox_enabled();
 $flashes = take_flashes();
 ?>
 <!DOCTYPE html>
@@ -45,7 +47,7 @@ $flashes = take_flashes();
 <body class="<?= e($bodyClass) ?>">
     <a class="skip-link" href="#main-content"><?= e(t('common.skip_link')) ?></a>
 <?php if (config('app.demo')): ?>
-    <p class="demo-banner" role="note"><?= e(t('common.demo_banner')) ?></p>
+    <p class="demo-banner" role="note"><?= e(t($navInbox ? 'common.demo_banner_inbox' : 'common.demo_banner')) ?></p>
 <?php endif; ?>
     <header class="site-header">
         <nav class="site-nav" aria-label="<?= e(t('common.main_navigation')) ?>">
@@ -62,6 +64,9 @@ $flashes = take_flashes();
                 <li><?= $navLink('Home_Page.php', t('common.nav.home')) ?></li>
                 <li><?= $navLink('Explore_Page.php', t('common.nav.explore')) ?></li>
                 <li><?= $navLink('About_us.php', t('common.nav.about')) ?></li>
+<?php endif; ?>
+<?php if ($navInbox): ?>
+                <li><a href="inbox.php" aria-label="<?= e(t('common.nav.inbox_label')) ?>"<?= $navCurrent === 'inbox.php' ? ' aria-current="page"' : '' ?>><?= e(t('common.nav.inbox')) ?></a></li>
 <?php endif; ?>
             </ul>
 

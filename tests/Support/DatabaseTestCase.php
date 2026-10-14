@@ -37,6 +37,7 @@ abstract class DatabaseTestCase extends TestCase
         'reset_tokens',
         'email_verifications',
         'login_attempts',
+        'demo_mail',
         'admins',
         'users',
     ];

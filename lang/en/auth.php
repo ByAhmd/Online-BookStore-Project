@@ -74,6 +74,9 @@ return [
         'remembered' => 'Remembered it?',
         'back_to_login' => 'Back to login',
         'demo_notice' => 'This demo store does not send email, so password reset and email confirmation links cannot be delivered.',
+        // Demo inbox (MAIL_DRIVER=database): :inbox is a link labelled with demo_inbox_link.
+        'demo_inbox_notice' => 'This demo store sends no real email: the password reset and confirmation emails for your account appear in the :inbox.',
+        'demo_inbox_link' => 'demo inbox',
         'sent' => [
             'one' => "If an account exists for that email, we've sent a password reset link. It expires in :count minute.",
             'other' => "If an account exists for that email, we've sent a password reset link. It expires in :count minutes.",

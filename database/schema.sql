@@ -217,6 +217,22 @@ CREATE TABLE login_attempts (
     KEY idx_login_attempts_ip_time (ip_address, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Demo inbox (APP_DEMO=true with MAIL_DRIVER=database): emails stored instead
+-- of sent and shown on inbox.php. Rows older than 48 hours are deleted
+-- whenever a new message is stored.
+CREATE TABLE demo_mail (
+    id         INT          NOT NULL AUTO_INCREMENT,
+    recipient  VARCHAR(255) NOT NULL COMMENT 'Email address the message was sent to',
+    subject    VARCHAR(255) NOT NULL,
+    html       MEDIUMTEXT   NOT NULL,
+    text       MEDIUMTEXT   NOT NULL,
+    locale     VARCHAR(5)   NOT NULL DEFAULT 'en' COMMENT 'Language the message is written in',
+    created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_demo_mail_recipient_created (recipient, created_at),
+    KEY idx_demo_mail_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Applied schema migrations (see src/migrations.php and bin/migrate.php).
 CREATE TABLE schema_migrations (
     version    VARCHAR(100) NOT NULL,
@@ -227,4 +243,5 @@ CREATE TABLE schema_migrations (
 INSERT INTO schema_migrations (version) VALUES
     ('001_initial'),
     ('002_accounts_commerce_i18n'),
-    ('003_order_stock_taken');
+    ('003_order_stock_taken'),
+    ('004_demo_mail');

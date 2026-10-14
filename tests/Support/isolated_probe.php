@@ -26,7 +26,7 @@ date_default_timezone_set((string) config('app.timezone'));
 try {
     switch ($action) {
         case 'send_mail':
-            $result = ['returned' => send_mail($args['to'], $args['name'], $args['subject'], $args['html'], $args['text'])];
+            $result = ['returned' => send_mail($args['to'], $args['name'], $args['subject'], $args['html'], $args['text'], $args['locale'] ?? null)];
             break;
         case 'app_log':
             app_log($args['level'], $args['message'], $args['context']);

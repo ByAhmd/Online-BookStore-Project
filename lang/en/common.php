@@ -9,6 +9,7 @@ return [
     'admin_tag' => 'Admin',
     'session_expired' => 'Your session expired. Please log in again.',
     'demo_banner' => 'Demo store: payments are simulated, no emails are sent, and data may be reset at any time.',
+    'demo_banner_inbox' => 'Demo store: payments are simulated, emails go to the demo inbox instead of being sent, and data may be reset at any time.',
 
     'nav' => [
         'home' => 'Home',
@@ -21,6 +22,9 @@ return [
         'login' => 'Login',
         'logout' => 'Log out',
         'my_profile' => 'My profile',
+        // Demo inbox link; the accessible label must contain the visible text.
+        'inbox' => 'Inbox',
+        'inbox_label' => 'Demo inbox',
         'cart' => [
             'one' => 'Cart, :count item',
             'other' => 'Cart, :count items',

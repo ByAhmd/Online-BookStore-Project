@@ -153,7 +153,7 @@ page_header($panels[$active], ['sign.css'], ['bodyClass' => 'auth-page']);
                     <h2 class="auth-title" id="reset-title" tabindex="-1"><?= e(t('auth.panels.reset')) ?></h2>
                     <p class="auth-intro"><?= e(t('auth.reset.intro')) ?></p>
 <?php if ($isDemo): ?>
-                    <p class="auth-notice" role="note"><?= e(t('auth.reset.demo_notice')) ?></p>
+                    <p class="auth-notice" role="note"><?= demo_mail_notice_html() ?></p>
 <?php endif; ?>
                     <form class="auth-form" method="post" action="reset_password.php" data-once>
                         <?= csrf_field() ?>
@@ -176,7 +176,7 @@ page_header($panels[$active], ['sign.css'], ['bodyClass' => 'auth-page']);
                     <h2 class="auth-title" id="verify-title" tabindex="-1"><?= e(t('auth.verify.heading')) ?></h2>
                     <p class="auth-intro"><?= e(tn('auth.verify.intro', EMAIL_VERIFICATION_TTL_HOURS)) ?></p>
 <?php if ($isDemo): ?>
-                    <p class="auth-notice" role="note"><?= e(t('auth.reset.demo_notice')) ?></p>
+                    <p class="auth-notice" role="note"><?= demo_mail_notice_html() ?></p>
 <?php endif; ?>
                     <p class="auth-intro" id="verify-email-hint"><?= e(t('auth.verify.resend_intro')) ?></p>
                     <form class="auth-form" method="post" action="resend_verification.php" data-once>

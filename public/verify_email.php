@@ -75,7 +75,7 @@ if ($account === null) {
                 <h1 class="auth-title" id="verify-invalid-title"><?= e(t('auth.verify.invalid_heading')) ?></h1>
                 <p class="auth-intro"><?= e(tn('auth.verify.invalid_intro', EMAIL_VERIFICATION_TTL_HOURS)) ?></p>
 <?php if (config('app.demo')): ?>
-                <p class="auth-notice" role="note"><?= e(t('auth.reset.demo_notice')) ?></p>
+                <p class="auth-notice" role="note"><?= demo_mail_notice_html() ?></p>
 <?php endif; ?>
 <?php if ($showResend): ?>
                 <form class="auth-form" method="post" action="resend_verification.php" data-once>

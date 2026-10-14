@@ -143,6 +143,26 @@ final class MailerTest extends TestCase
         self::assertStringContainsString('ERROR: Unknown MAIL_DRIVER {"driver":"carrier-pigeon"}', $run['files']['storage/logs/app.log'] ?? '');
     }
 
+    public function testTheDemoInboxDriverIsRefusedOutsideDemoMode(): void
+    {
+        // Refused before the database is touched: the inbox page is public, so only a demo may store mail for it.
+        $run = IsolatedPhp::run('send_mail', self::MESSAGE, ['MAIL_DRIVER' => 'database', 'APP_DEMO' => 'false', 'DB_PORT' => (string) self::closedPort()]);
+
+        self::assertSame(['ok' => true, 'returned' => false], $run['result']);
+        $log = $run['files']['storage/logs/app.log'] ?? '';
+        self::assertStringContainsString('ERROR: MAIL_DRIVER=database is only available in demo mode (APP_DEMO=true)', $log);
+        self::assertStringNotContainsString('Email delivery failed', $log);
+    }
+
+    public function testTheDemoInboxIsActiveOnlyInDemoModeWithTheDatabaseDriver(): void
+    {
+        foreach ([['true', 'database', true], ['true', 'DATABASE', true], ['false', 'database', false], ['true', 'log', false], ['true', 'null', false]] as [$demo, $driver, $expected]) {
+            $this->setEnv('APP_DEMO', $demo);
+            $this->setEnv('MAIL_DRIVER', $driver);
+            self::assertSame($expected, demo_inbox_enabled(), "APP_DEMO=$demo MAIL_DRIVER=$driver");
+        }
+    }
+
     public function testSmtpSettingsHaveSafeDefaults(): void
     {
         foreach (['SMTP_HOST', 'SMTP_PORT', 'SMTP_USERNAME', 'SMTP_PASSWORD', 'SMTP_ENCRYPTION', 'SMTP_TIMEOUT'] as $key) {
@@ -307,6 +327,29 @@ final class MailerTest extends TestCase
 
         self::assertSame(['ok' => true, 'returned' => false], $run['result']);
         self::assertStringContainsString('ERROR: Unknown SMTP_ENCRYPTION (use tls, ssl or none) {"encryption":"starttls"}', $run['files']['storage/logs/app.log'] ?? '');
+    }
+
+    public function testDemoMailTextLinksOnlyToTheStore(): void
+    {
+        $this->setEnv('APP_URL', 'https://shop.example/');
+
+        $html = demo_mail_text_html(
+            "Hello <b>Reader</b> & friends,\n"
+            . "Confirm: https://shop.example/verify_email.php?token=ab12&lang=ar.\n"
+            . "(https://shop.example/index.php?form=reset)\n"
+            . "Elsewhere: https://evil.example/phish https://shop.example.evil.com/x http://shop.example/x\n"
+            . 'javascript:alert(1) "https://shop.example/x"onmouseover="alert(1)'
+        );
+
+        self::assertSame(
+            "Hello &lt;b&gt;Reader&lt;/b&gt; &amp; friends,\n"
+            . 'Confirm: <a href="https://shop.example/verify_email.php?token=ab12&amp;lang=ar">https://shop.example/verify_email.php?token=ab12&amp;lang=ar</a>.' . "\n"
+            . '(<a href="https://shop.example/index.php?form=reset">https://shop.example/index.php?form=reset</a>)' . "\n"
+            . "Elsewhere: https://evil.example/phish https://shop.example.evil.com/x http://shop.example/x\n"
+            . 'javascript:alert(1) &quot;<a href="https://shop.example/x">https://shop.example/x</a>&quot;onmouseover=&quot;alert(1)',
+            $html
+        );
+        self::assertSame("a \u{FFFD} &lt;b&gt;", demo_mail_text_html("a \xFF <b>"), 'Invalid UTF-8 is still escaped');
     }
 
     public function testAppLogWritesOneStructuredLine(): void

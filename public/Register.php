@@ -28,10 +28,18 @@ if ($action === 'register') {
         redirect('index.php?form=signup');
     }
 
+    // Demo inbox: mail kept for this address from an earlier, deleted account
+    // must not be shown to whoever registers the address now.
+    demo_inbox_forget_unowned_mail($email);
+
     if (email_verification_required()) {
         // New, already registered or administrator address: the visitor always
         // gets the same answer, so sign-up cannot be used to discover accounts.
-        sign_up_with_verification($email, $name, $password);
+        if (sign_up_with_verification($email, $name, $password) === 'created') {
+            // Demo inbox: this browser may read the mail of the account it has
+            // just created, never that of an address that was already registered.
+            demo_inbox_remember_account($email);
+        }
         remember_input(['verify_email' => mb_substr($email, 0, 255)]);
         flash('success', t('auth.signup.check_inbox'));
         redirect('index.php?form=verify');
@@ -45,6 +53,7 @@ if ($action === 'register') {
     }
 
     login_user(find_user($userId) ?? throw new RuntimeException('Newly registered user could not be loaded.'));
+    demo_inbox_remember_account($email);
     send_welcome_email($email, $userId);
 
     flash('success', t('auth.signup.welcome', ['name' => $name]));

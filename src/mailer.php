@@ -5,16 +5,29 @@ declare(strict_types=1);
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 
+/** Demo inbox messages are deleted this long after they were stored. */
+const DEMO_MAIL_RETENTION_HOURS = 48;
+/** The inbox lists at most this many messages (newest first). */
+const DEMO_INBOX_LIST_LIMIT = 100;
+/** Session key: accounts that sign-up created in this browser session (user id => address). */
+const DEMO_INBOX_SESSION_KEY = 'demo_inbox_accounts';
+/** At most this many created accounts are remembered per session. */
+const DEMO_INBOX_MAX_ACCOUNTS = 20;
+
 /**
  * Sends an email using the configured MAIL_DRIVER:
  *  - "log"      (default) appends the message to mail.log in LOG_DIR (storage/logs); for local development.
  *  - "smtp"     sends through an SMTP server (SMTP_HOST, SMTP_PORT, ...) with PHPMailer.
+ *  - "database" stores the message for the demo inbox (inbox.php); only in demo mode (APP_DEMO=true).
  *  - "null"     discards the message.
+ *
+ * $locale is the language the message is written in (stored with demo inbox
+ * messages so they keep their own text direction); null means the active one.
  *
  * Returns true on success. Failures are logged and never expose provider
  * errors to visitors.
  */
-function send_mail(string $toEmail, string $toName, string $subject, string $html, string $text): bool
+function send_mail(string $toEmail, string $toName, string $subject, string $html, string $text, ?string $locale = null): bool
 {
     $driver = (string) config('mail.driver');
 
@@ -36,6 +49,15 @@ function send_mail(string $toEmail, string $toName, string $subject, string $htm
 
             case 'smtp':
                 return send_smtp_mail($toEmail, $toName, $subject, $html, $text);
+
+            case 'database':
+                // The inbox page shows these messages to visitors, which only a public demo may do.
+                if (!config('app.demo')) {
+                    app_log('error', 'MAIL_DRIVER=database is only available in demo mode (APP_DEMO=true)');
+                    return false;
+                }
+                store_demo_mail($toEmail, $subject, $html, $text, $locale ?? current_locale());
+                return true;
 
             default:
                 app_log('error', 'Unknown MAIL_DRIVER', ['driver' => $driver]);
@@ -125,10 +147,11 @@ function send_localized_mail(string $toEmail, string $toName, ?string $locale, c
     use_locale($locale);
     try {
         [$subject, $html, $text] = $compose();
+        $mailLocale = current_locale();
     } finally {
         use_locale(null);
     }
-    return send_mail($toEmail, $toName, $subject, $html, $text);
+    return send_mail($toEmail, $toName, $subject, $html, $text, $mailLocale);
 }
 
 /**
@@ -147,4 +170,220 @@ function mail_html_signature(): string
 function mail_text_signature(): string
 {
     return t('auth.mail.regards') . "\n" . t('auth.mail.team');
+}
+
+/* ---------------------------------------------------------------------
+ * Demo inbox (APP_DEMO=true and MAIL_DRIVER=database)
+ *
+ * A public demo has no email provider, so its emails are stored in the
+ * demo_mail table and shown on inbox.php. A browser may only read the mail
+ * of addresses it has proved it controls: the signed-in customer's own
+ * address, and the addresses of accounts that sign-up created in this
+ * browser session. Typing someone else's address into a form (sign-up,
+ * password reset, resend) never makes their mail readable.
+ * ------------------------------------------------------------------- */
+
+/**
+ * True when emails are stored for the demo inbox instead of being sent.
+ */
+function demo_inbox_enabled(): bool
+{
+    return (bool) config('app.demo') && config('mail.driver') === 'database';
+}
+
+/**
+ * Stores a message for the demo inbox and deletes messages older than
+ * DEMO_MAIL_RETENTION_HOURS.
+ */
+function store_demo_mail(string $toEmail, string $subject, string $html, string $text, string $locale): void
+{
+    db_run('DELETE FROM demo_mail WHERE created_at < (NOW() - INTERVAL ? HOUR)', [DEMO_MAIL_RETENTION_HOURS]);
+    db_run(
+        'INSERT INTO demo_mail (recipient, subject, html, text, locale) VALUES (?, ?, ?, ?, ?)',
+        [
+            mb_substr(normalize_email($toEmail), 0, 255),
+            mb_substr($subject, 0, 255),
+            $html,
+            $text,
+            is_supported_locale($locale) ? $locale : default_locale(),
+        ]
+    );
+}
+
+/**
+ * Called by sign-up before an account is created. Mail kept for an address
+ * that has no account belonged to an account that was deleted (for example
+ * its "account deleted" notice); it is removed so that whoever registers the
+ * address next cannot read it.
+ */
+function demo_inbox_forget_unowned_mail(string $email): void
+{
+    if (!demo_inbox_enabled() || user_email_exists($email)) {
+        return;
+    }
+    db_run('DELETE FROM demo_mail WHERE recipient = ?', [$email]);
+}
+
+/**
+ * Lets this browser session read the demo inbox of the customer account
+ * that sign-up has just created for $email. Call it only when the account
+ * was really created, never when the address was already registered.
+ * The session keeps the account's id: if that account is deleted and the
+ * address registered again by someone else, this session loses access.
+ */
+function demo_inbox_remember_account(string $email): void
+{
+    if (!demo_inbox_enabled()) {
+        return;
+    }
+    $userId = db_value('SELECT id FROM users WHERE Eaddress = ?', [$email]);
+    if ($userId === null) {
+        return;
+    }
+    $accounts = $_SESSION[DEMO_INBOX_SESSION_KEY] ?? [];
+    if (!is_array($accounts)) {
+        $accounts = [];
+    }
+    unset($accounts[(int) $userId]);
+    $accounts[(int) $userId] = normalize_email($email);
+    $_SESSION[DEMO_INBOX_SESSION_KEY] = array_slice($accounts, -DEMO_INBOX_MAX_ACCOUNTS, null, true);
+}
+
+/**
+ * Addresses whose demo inbox this browser session may read:
+ *  - a signed-in administrator: only the administrator's own address;
+ *  - everyone else: the signed-in customer's own address, plus the accounts
+ *    sign-up created in this session that still exist with the same address.
+ *
+ * @return list<string>
+ */
+function demo_inbox_addresses(): array
+{
+    $user = current_user();
+    if ($user === null) {
+        $admin = current_admin();
+        if ($admin !== null) {
+            return [normalize_email((string) $admin['Eaddress'])];
+        }
+    }
+
+    $addresses = $user !== null ? [normalize_email((string) $user['Eaddress'])] : [];
+    $created = $_SESSION[DEMO_INBOX_SESSION_KEY] ?? [];
+    if (is_array($created) && $created !== []) {
+        $ids = array_map('intval', array_keys($created));
+        $rows = db_all(
+            'SELECT id, Eaddress FROM users WHERE id IN (' . implode(', ', array_fill(0, count($ids), '?')) . ')',
+            $ids
+        );
+        foreach ($rows as $row) {
+            $remembered = $created[(int) $row['id']] ?? null;
+            if (is_string($remembered) && normalize_email((string) $row['Eaddress']) === $remembered) {
+                $addresses[] = $remembered;
+            }
+        }
+    }
+    return array_values(array_unique($addresses));
+}
+
+/**
+ * The newest messages to the given addresses that have not expired yet.
+ *
+ * @param list<string> $addresses
+ * @return list<array{id: int, recipient: string, subject: string, locale: string, created_at: string}>
+ */
+function demo_inbox_messages(array $addresses): array
+{
+    if ($addresses === []) {
+        return [];
+    }
+    $rows = db_all(
+        'SELECT id, recipient, subject, locale, created_at FROM demo_mail
+         WHERE recipient IN (' . implode(', ', array_fill(0, count($addresses), '?')) . ')
+           AND created_at >= (NOW() - INTERVAL ? HOUR)
+         ORDER BY created_at DESC, id DESC
+         LIMIT ' . DEMO_INBOX_LIST_LIMIT,
+        [...$addresses, DEMO_MAIL_RETENTION_HOURS]
+    );
+    return array_map('demo_mail_row', $rows);
+}
+
+/**
+ * One message, or null when it does not exist, has expired or was not sent
+ * to one of the given addresses (the caller cannot tell these apart).
+ *
+ * @param list<string> $addresses
+ * @return array{id: int, recipient: string, subject: string, locale: string, created_at: string, text: string}|null
+ */
+function demo_inbox_message(int $id, array $addresses): ?array
+{
+    if ($addresses === []) {
+        return null;
+    }
+    $row = db_one(
+        'SELECT id, recipient, subject, locale, created_at, text FROM demo_mail
+         WHERE id = ?
+           AND recipient IN (' . implode(', ', array_fill(0, count($addresses), '?')) . ')
+           AND created_at >= (NOW() - INTERVAL ? HOUR)',
+        [$id, ...$addresses, DEMO_MAIL_RETENTION_HOURS]
+    );
+    if ($row === null) {
+        return null;
+    }
+    return demo_mail_row($row) + ['text' => (string) $row['text']];
+}
+
+/**
+ * @param array<string, mixed> $row
+ * @return array{id: int, recipient: string, subject: string, locale: string, created_at: string}
+ */
+function demo_mail_row(array $row): array
+{
+    return [
+        'id' => (int) $row['id'],
+        'recipient' => (string) $row['recipient'],
+        'subject' => (string) $row['subject'],
+        'locale' => is_supported_locale($row['locale']) ? (string) $row['locale'] : default_locale(),
+        'created_at' => (string) $row['created_at'],
+    ];
+}
+
+/**
+ * The plain-text part of a message as escaped HTML in which links to this
+ * store (APP_URL) are clickable. Every other URL, including any scheme but
+ * http(s), stays plain text, so a stored message can never link elsewhere.
+ * Show it with white-space: pre-wrap to keep the line breaks.
+ */
+function demo_mail_text_html(string $text): string
+{
+    $parts = preg_split('~(https?://[^\s<>"\']+)~u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+    if ($parts === false) {
+        return e($text); // not valid UTF-8
+    }
+    $storeUrl = (string) config('app.url') . '/';
+    $html = '';
+    foreach ($parts as $index => $part) {
+        if ($index % 2 === 0) {
+            $html .= e($part);
+            continue;
+        }
+        // Punctuation that ends a sentence is not part of the link.
+        $url = rtrim($part, '.,;:!?)');
+        $html .= str_starts_with($url, $storeUrl) ? '<a href="' . e($url) . '">' . e($url) . '</a>' : e($url);
+        $html .= e(substr($part, strlen($url)));
+    }
+    return $html;
+}
+
+/**
+ * The demo-mode note on the sign-in pages, as HTML: it points to the demo
+ * inbox when that is active, and otherwise explains that no email is sent.
+ */
+function demo_mail_notice_html(): string
+{
+    if (!demo_inbox_enabled()) {
+        return e(t('auth.reset.demo_notice'));
+    }
+    return t_html('auth.reset.demo_inbox_notice', [
+        'inbox' => '<a class="auth-link" href="inbox.php">' . e(t('auth.reset.demo_inbox_link')) . '</a>',
+    ]);
 }

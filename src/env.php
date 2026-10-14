@@ -145,7 +145,7 @@ function app_config(bool $refresh = false): array
             'api_base' => env('STRIPE_API_BASE'),
         ],
         'mail' => [
-            // log, smtp or null.
+            // log, smtp, database (demo inbox, needs APP_DEMO=true) or null.
             'driver' => strtolower((string) env('MAIL_DRIVER', 'log')),
             'from_address' => env('MAIL_FROM_ADDRESS', 'no-reply@example.com'),
             'from_name' => env('MAIL_FROM_NAME', 'BookWise'),
