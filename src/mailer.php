@@ -92,6 +92,13 @@ function send_smtp_mail(string $toEmail, string $toName, string $subject, string
         app_log('error', 'Unknown SMTP_ENCRYPTION (use tls, ssl or none)', ['encryption' => $encryption]);
         return false;
     }
+    $username = (string) config('mail.smtp.username');
+    // Without encryption the sign-in (the password, merely base64-encoded)
+    // would cross the network readable: only a server on this machine is trusted with it.
+    if ($secure === '' && $username !== '' && !smtp_host_is_loopback($host)) {
+        app_log('error', 'SMTP_ENCRYPTION=none signs in only to a server on this machine (localhost); use tls or ssl');
+        return false;
+    }
     $timeout = max(1, (int) config('mail.smtp.timeout'));
 
     $mail = new PHPMailer(true);
@@ -109,7 +116,6 @@ function send_smtp_mail(string $toEmail, string $toName, string $subject, string
     $mail->Timeout = $timeout;
     $mail->getSMTPInstance()->Timelimit = $timeout;
 
-    $username = (string) config('mail.smtp.username');
     $mail->SMTPAuth = $username !== '';
     if ($mail->SMTPAuth) {
         $mail->Username = $username;
@@ -133,6 +139,29 @@ function send_smtp_mail(string $toEmail, string $toName, string $subject, string
     }
 
     return $mail->send();
+}
+
+/**
+ * True when every server in SMTP_HOST is this machine: localhost or a
+ * loopback address. SMTP_HOST is read the way PHPMailer reads it: servers
+ * separated by ";", each "[ssl:// or tls://]host[:port]", IPv6 in brackets.
+ * Anything else counts as remote.
+ */
+function smtp_host_is_loopback(string $hosts): bool
+{
+    foreach (explode(';', $hosts) as $entry) {
+        if (!preg_match('~^(?:(?:ssl|tls)://)?(\[[0-9a-f:.]+\]|[^:\[\]]+)(?::\d+)?$~iD', trim($entry), $match)) {
+            return false;
+        }
+        $host = strtolower(trim($match[1], '[]'));
+        $address = filter_var($host, FILTER_VALIDATE_IP) !== false ? inet_pton($host) : false;
+        $loopback = $host === 'localhost'
+            || ($address !== false && (strlen($address) === 4 ? $address[0] === "\x7F" : $address === inet_pton('::1')));
+        if (!$loopback) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /**

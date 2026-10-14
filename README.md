@@ -266,7 +266,7 @@ convenience, and variables already set in the real environment take precedence.
 | `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | `no-reply@example.com` / `BookWise` | Sender of outgoing email; your provider must allow this address |
 | `SMTP_HOST` / `SMTP_PORT` | — / `587` | SMTP server for `MAIL_DRIVER=smtp`. Use port `2525` where a host blocks 587 and the provider offers it. |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | — | SMTP sign-in; leave `SMTP_USERNAME` empty for a server without authentication. The password is never logged. |
-| `SMTP_ENCRYPTION` | `tls` | `tls` (STARTTLS, required before signing in), `ssl` (TLS from the start, usually port 465) or `none` (only for a test server on your own machine) |
+| `SMTP_ENCRYPTION` | `tls` | `tls` (STARTTLS, required before signing in), `ssl` (TLS from the start, usually port 465) or `none` (only for a test server on your own machine; signs in only to `localhost`) |
 | `SMTP_TIMEOUT` | `10` | Seconds to wait for the SMTP server before the email counts as failed |
 | `BOOKWISE_ADMIN_PASSWORD` | — | Optional; used by `bin/create-admin.php`, and with `BOOKWISE_ADMIN_EMAIL` by `bin/install.php` |
 
@@ -335,6 +335,7 @@ Every email has a plain-text and an HTML part. `MAIL_DRIVER` decides where it go
 - **`smtp`** sends through any SMTP server, using [PHPMailer](https://github.com/PHPMailer/PHPMailer). Most email providers offer SMTP; copy the server, port and sign-in from their settings into `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME` and `SMTP_PASSWORD`, and set `MAIL_FROM_ADDRESS` to an address the provider lets you send from.
   - `SMTP_ENCRYPTION=tls` (the default) requires STARTTLS: if the server does not offer it, the email fails before the password is sent.
     `ssl` uses TLS from the start (usually port 465). `none` is only for a test server on your own machine, such as [Mailpit](https://mailpit.axllent.org/).
+    With `none`, BookWise signs in only to `localhost` or a loopback address; for any other `SMTP_HOST` with an `SMTP_USERNAME`, the email fails and an error is logged, because the password would cross the network unencrypted.
   - Port 587 is the standard. Some hosts block it; many providers also accept port 2525.
   - Messages are encoded as UTF-8, so Arabic subjects, names and text arrive intact.
   - A server that does not answer makes the email fail after `SMTP_TIMEOUT` seconds (10 by default), so a page never hangs on it.

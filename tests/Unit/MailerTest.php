@@ -7,6 +7,7 @@ namespace BookWise\Tests\Unit;
 use BookWise\Tests\Support\EnvironmentOverrides;
 use BookWise\Tests\Support\FakeSmtpServer;
 use BookWise\Tests\Support\IsolatedPhp;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -266,6 +267,49 @@ final class MailerTest extends TestCase
         } finally {
             $server->stop();
         }
+    }
+
+    public function testSmtpWithoutEncryptionSignsInOnlyToThisMachine(): void
+    {
+        // 192.0.2.1 is reserved for documentation: if the check ever let this
+        // through, the attempt would fail (after SMTP_TIMEOUT) instead of reaching a server.
+        $run = IsolatedPhp::run('send_mail', self::MESSAGE, [
+            'MAIL_DRIVER' => 'smtp',
+            'SMTP_HOST' => '192.0.2.1',
+            'SMTP_PORT' => '587',
+            'SMTP_USERNAME' => self::SMTP_USERNAME,
+            'SMTP_PASSWORD' => self::SMTP_PASSWORD,
+            'SMTP_ENCRYPTION' => 'none',
+            'SMTP_TIMEOUT' => '1',
+        ]);
+
+        self::assertSame(['ok' => true, 'returned' => false], $run['result'], $run['stderr']);
+        $log = $run['files']['storage/logs/app.log'] ?? '';
+        self::assertStringContainsString('ERROR: SMTP_ENCRYPTION=none signs in only to a server on this machine (localhost); use tls or ssl', $log);
+        self::assertStringNotContainsString('Email delivery failed', $log, 'Refused before connecting');
+        foreach ($run['files'] as $file => $contents) {
+            self::assertStringNotContainsString(self::SMTP_PASSWORD, $contents, $file);
+        }
+        self::assertStringNotContainsString(self::SMTP_PASSWORD, $run['stderr']);
+    }
+
+    /**
+     * @return iterable<string, array{0: string, 1: bool}>
+     */
+    public static function smtpHosts(): iterable
+    {
+        foreach (['localhost', 'LocalHost', ' localhost ', '127.0.0.1', '127.8.9.10', '[::1]', '[0:0:0:0:0:0:0:1]', '127.0.0.1:2525', 'localhost:1025', '[::1]:25', 'tls://localhost:587', 'ssl://127.0.0.1', '127.0.0.1;localhost'] as $host) {
+            yield "loopback $host" => [$host, true];
+        }
+        foreach (['', 'mailpit', 'smtp.example.com', '192.0.2.1', '10.0.0.5', '0.0.0.0', 'localhost.example.com', '127.0.0.1.example.com', '[::2]', '[::ffff:127.0.0.1]', '::1', 'localhost;smtp.example.com', 'smtp.example.com;127.0.0.1', '127.0.0.1;', 'http://localhost'] as $host) {
+            yield "remote $host" => [$host, false];
+        }
+    }
+
+    #[DataProvider('smtpHosts')]
+    public function testOnlyLocalhostAndLoopbackAddressesCountAsThisMachine(string $host, bool $loopback): void
+    {
+        self::assertSame($loopback, smtp_host_is_loopback($host));
     }
 
     public function testSmtpFailsFastOnAClosedPortWithoutLoggingThePassword(): void

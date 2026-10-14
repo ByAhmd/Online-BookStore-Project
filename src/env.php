@@ -149,7 +149,8 @@ function app_config(bool $refresh = false): array
             'driver' => strtolower((string) env('MAIL_DRIVER', 'log')),
             'from_address' => env('MAIL_FROM_ADDRESS', 'no-reply@example.com'),
             'from_name' => env('MAIL_FROM_NAME', 'BookWise'),
-            // MAIL_DRIVER=smtp. encryption: tls (STARTTLS), ssl (implicit TLS) or none (local test servers only).
+            // MAIL_DRIVER=smtp. encryption: tls (STARTTLS), ssl (implicit TLS) or none (local test servers
+            // only; with none, the username and password are only sent to localhost).
             'smtp' => [
                 'host' => env('SMTP_HOST'),
                 'port' => (int) env('SMTP_PORT', '587'),
