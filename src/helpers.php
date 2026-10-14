@@ -69,7 +69,8 @@ function configure_runtime(): void
         app_log('error', get_class($e) . ': ' . $e->getMessage(), [
             'file' => $e->getFile(),
             'line' => $e->getLine(),
-            'uri' => $_SERVER['REQUEST_URI'] ?? null,
+            // Path only: query strings can hold single-use tokens (verification, reset, Stripe session).
+            'uri' => isset($_SERVER['REQUEST_URI']) ? strtok((string) $_SERVER['REQUEST_URI'], '?') : null,
         ]);
 
         if (PHP_SAPI === 'cli') {

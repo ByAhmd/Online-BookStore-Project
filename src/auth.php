@@ -476,7 +476,8 @@ function send_password_changed_email(int $userId): void
     if ($account === null) {
         return;
     }
-    $name = email_verification_required() && $account['email_verified_at'] === null ? '' : $account['name'];
+    // An unconfirmed account's name may have been typed by someone else: leave it out.
+    $name = $account['email_verified_at'] === null ? '' : $account['name'];
     $resetLink = absolute_url('index.php?form=reset');
     $sent = send_localized_mail($account['Eaddress'], $name, $account['locale'], static function () use ($name, $resetLink): array {
         $greeting = $name !== '' ? t('auth.mail.greeting_name', ['name' => $name]) : t('auth.mail.greeting');

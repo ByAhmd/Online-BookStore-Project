@@ -48,6 +48,16 @@ final class EmailVerificationTest extends HttpTestCase
         return self::tokenLink('verify_email.php', $mails[count($mails) - 1]['body']);
     }
 
+    /**
+     * Opens a confirmation link (which only shows the form) and submits the password.
+     */
+    private function confirm(HttpClient $client, string $link, string $password): HttpResponse
+    {
+        $form = $client->get($link);
+        $this->assertHtmlPage($form);
+        return $client->submitForm($form, 'verify_email.php', ['password' => $password]);
+    }
+
     private function resend(HttpClient $client, string $email): HttpResponse
     {
         $page = $client->get('index.php?form=verify');
@@ -80,7 +90,7 @@ final class EmailVerificationTest extends HttpTestCase
         ];
     }
 
-    public function testSignUpEmailsAConfirmationLinkThatSignsTheCustomerIn(): void
+    public function testTheConfirmationLinkAsksForThePasswordThenSignsIn(): void
     {
         $client = $this->client();
         $email = self::uniqueEmail('confirm');
@@ -110,12 +120,31 @@ final class EmailVerificationTest extends HttpTestCase
         self::assertStringStartsWith(self::server()->baseUrl . '/verify_email.php?token=', $link, 'The link uses APP_URL');
         self::assertSame(hash('sha256', self::tokenOf($link)), db_value('SELECT token FROM email_verifications'), 'Only a hash is stored');
 
-        // Opening the link confirms the address and signs in, with a fresh session id.
-        $confirmed = $client->get($link);
+        // Opening the link only shows a password form: nothing is used up or signed in yet.
+        $form = $client->get($link);
+        $document = $this->assertHtmlPage($form);
+        self::assertSame('no-referrer', $form->header('Referrer-Policy'), 'The token must not leak through Referer');
+        self::assertStringContainsString('no-store', (string) $form->header('Cache-Control'));
+        self::assertSame('Confirm your email address', $document->text('//h1'));
+        self::assertSame("To confirm $email, enter the password you chose when you signed up. You will then be logged in.", $document->text('//p[@class="auth-intro"]'));
+        self::assertNotNull($document->first('//p[@class="auth-alt"]/a[@href="index.php?form=reset"]'), 'Offers choosing a new password instead');
+        self::assertFalse($this->isSignedInCustomer($client));
+        self::assertFalse($this->isVerified($account['id']));
+        self::assertSame($account['id'], find_valid_email_verification(self::tokenOf($link)));
+
+        // A wrong password is refused and counted like a failed login.
+        $wrong = $client->submitForm($form, 'verify_email.php', ['password' => 'not-the-password-1']);
+        $document = $this->assertHtmlPage($wrong, 422);
+        self::assertSame('Incorrect password. Enter the password you chose when you signed up.', $document->fieldError('verify-password-error'));
+        self::assertFalse($this->isSignedInCustomer($client));
+        self::assertFalse($this->isVerified($account['id']));
+        self::assertSame(1, $this->countRows('login_attempts', 'email = ?', [$email]));
+
+        // The right password confirms the address and signs in, with a fresh session id.
+        $confirmed = $client->submitForm($wrong, 'verify_email.php', ['password' => self::PASSWORD]);
         $this->assertRedirect($confirmed, 'Home_Page.php');
-        self::assertSame('no-referrer', $confirmed->header('Referrer-Policy'), 'The token must not leak through Referer');
-        self::assertStringContainsString('no-store', (string) $confirmed->header('Cache-Control'));
         self::assertNotSame($guestSession, $client->cookie(self::SESSION_COOKIE));
+        self::assertSame(0, $this->countRows('login_attempts', 'email = ?', [$email]), 'Success clears the failures');
         $home = $client->follow($confirmed);
         $this->assertHtmlPage($home);
         $this->assertFlash($home, 'success', 'Thank you, your email address is confirmed. Welcome to BookWise, Confirm Reader!');
@@ -192,7 +221,7 @@ final class EmailVerificationTest extends HttpTestCase
         $secondLink = $this->verificationLink($email);
         self::assertNotSame($firstLink, $secondLink);
         $this->assertHtmlPage($this->client()->get($firstLink), 404);
-        $this->assertRedirect($this->client()->get($secondLink), 'Home_Page.php');
+        $this->assertRedirect($this->confirm($this->client(), $secondLink, self::PASSWORD), 'Home_Page.php');
 
         // Confirmed, unknown and administrator addresses get the same answer and no email.
         $admin = $this->createAdmin(self::uniqueEmail('admin'));
@@ -205,36 +234,71 @@ final class EmailVerificationTest extends HttpTestCase
         self::assertSame([], $this->mailsTo($admin['Eaddress']));
     }
 
-    public function testUnconfirmedLoginRevealsNothingWithoutThePassword(): void
+    public function testAnUnconfirmedLoginLooksLikeAWrongPassword(): void
     {
+        $failed = 'Incorrect email or password, or the email address is not confirmed yet. If you have just signed up, open the link we emailed you.';
         $user = $this->createUser(self::uniqueEmail('unconfirmed'), 'Unconfirmed Reader');
         $email = (string) $user['Eaddress'];
 
-        // Wrong password: the usual generic answer.
+        // Wrong password.
         $client = $this->client();
-        $response = $this->logIn($client, $email, 'wrong-password-1');
-        $this->assertRedirect($response, 'index.php?form=login');
-        $page = $client->follow($response);
-        self::assertSame([['type' => 'error', 'message' => 'Incorrect email or password.']], $page->document()->flashes());
+        $wrong = $this->logIn($client, $email, 'wrong-password-1');
+        $this->assertRedirect($wrong, 'index.php?form=login');
+        self::assertSame([['type' => 'error', 'message' => $failed]], $client->follow($wrong)->document()->flashes());
         self::assertSame(1, $this->countRows('login_attempts', 'email = ?', [$email]));
+        self::assertSame([], $this->mailsTo($email));
 
-        // Right password: not signed in, told to confirm first, with the resend form.
+        // Right password: exactly the same answer (otherwise signing up with an
+        // address and then logging in would tell new addresses from registered
+        // ones), counted the same way, and the owner gets a fresh link.
         $client->get('index.php?form=login');
         $session = $client->cookie(self::SESSION_COOKIE);
-        $response = $this->logIn($client, $email, self::DEFAULT_PASSWORD);
-        $this->assertRedirect($response, 'index.php?form=verify');
+        $right = $this->logIn($client, $email, self::DEFAULT_PASSWORD);
+        $this->assertRedirect($right, 'index.php?form=login');
         self::assertSame($session, $client->cookie(self::SESSION_COOKIE), 'No new (signed-in) session');
-        $page = $client->follow($response);
-        $document = $this->assertHtmlPage($page);
-        $this->assertFlash($page, 'info', 'Please confirm your email first. Open the link we emailed you, or request a new one below.');
-        self::assertSame($email, $document->form('resend_verification.php')->field('email'));
+        self::assertSame([['type' => 'error', 'message' => $failed]], $client->follow($right)->document()->flashes());
+        self::assertSame(count($wrong->headerValues('Set-Cookie')), count($right->headerValues('Set-Cookie')));
         self::assertFalse($this->isSignedInCustomer($client));
-        self::assertSame(0, $this->countRows('login_attempts', 'email = ?', [$email]), 'The right password is not a failure');
+        self::assertSame(2, $this->countRows('login_attempts', 'email = ?', [$email]));
 
-        // Resending from there delivers a working link.
-        $this->assertRedirect($client->submitForm($page, 'resend_verification.php'), 'index.php?form=verify');
-        $this->assertRedirect($client->get($this->verificationLink($email)), 'Home_Page.php');
+        // The link emailed meanwhile works.
+        $this->assertRedirect($this->confirm($client, $this->verificationLink($email), self::DEFAULT_PASSWORD), 'Home_Page.php');
         self::assertTrue($this->isSignedInCustomer($client));
+    }
+
+    public function testSomeoneWhoRegisteredAnotherPersonsAddressCannotKeepTheAccount(): void
+    {
+        $victim = self::uniqueEmail('victim');
+        $attackerPassword = 'attacker-Pass-123';
+        $attacker = $this->client();
+        $this->assertRedirect($this->signUp($attacker, $victim, 'Victim Name', $attackerPassword), 'index.php?form=verify');
+        $link = $this->verificationLink($victim);
+
+        // The mailbox owner opens the link but cannot confirm with a password they never chose.
+        $owner = $this->client();
+        $wrong = $this->confirm($owner, $link, 'owners-own-Password-9');
+        $this->assertHtmlPage($wrong, 422);
+        self::assertFalse($this->isSignedInCustomer($owner));
+        $account = find_user_account_by_email($victim);
+        self::assertNotNull($account);
+        self::assertFalse($this->isVerified($account['id']));
+
+        // The attacker cannot sign in either, and a scanner fetching the link changes nothing.
+        $this->assertRedirect($this->logIn($attacker, $victim, $attackerPassword), 'index.php?form=login');
+        self::assertFalse($this->isSignedInCustomer($attacker));
+        $this->assertHtmlPage($this->client()->get($link));
+        self::assertFalse($this->isVerified($account['id']));
+
+        // Choosing a new password through the reset link confirms the address for the owner only.
+        $page = $owner->get('index.php?form=reset');
+        $this->assertRedirect($owner->submitForm($page, 'reset_password.php', ['email' => $victim]), 'index.php?form=login');
+        $resetMails = array_values(array_filter($this->mailsTo($victim), static fn (array $mail): bool => $mail['subject'] === 'Reset your BookWise password'));
+        $form = $owner->get(self::tokenLink('reset_form.php', $resetMails[0]['body']));
+        $this->assertRedirect($owner->submitForm($form, 'update_password.php', ['password' => 'owners-own-Password-9', 'password_confirmation' => 'owners-own-Password-9']), 'index.php?form=login');
+        self::assertTrue($this->isVerified($account['id']));
+
+        $this->assertRedirect($this->logIn($this->client(), $victim, 'owners-own-Password-9'), 'Home_Page.php');
+        $this->assertRedirect($this->logIn($this->client(), $victim, $attackerPassword), 'index.php?form=login');
     }
 
     public function testThrottlingStillComesFirstForUnconfirmedAccounts(): void
@@ -270,14 +334,20 @@ final class EmailVerificationTest extends HttpTestCase
         self::assertFalse($this->isVerified($userId));
         self::assertFalse($this->isSignedInCustomer($visitor));
 
-        // Only GET uses a token: POST is refused and HEAD (mail link checkers) leaves it unused.
+        // Only a POST with the CSRF token and the password uses a token: HEAD (mail link
+        // checkers) and GET leave it unused, and other methods are refused.
         $valid = $this->issueVerificationToken($userId);
-        $this->assertHtmlPage($visitor->postWithToken('verify_email.php?token=' . $valid), 405);
         $head = $visitor->request('HEAD', 'verify_email.php?token=' . $valid);
         $this->assertStatus(200, $head);
+        $this->assertHtmlPage($visitor->get('verify_email.php?token=' . $valid));
+        $this->assertHtmlPage($visitor->request('PUT', 'verify_email.php?token=' . $valid), 405);
+        $this->assertHtmlPage($visitor->post('verify_email.php', ['token' => $valid, 'password' => self::DEFAULT_PASSWORD]), 419);
+        $this->assertHtmlPage($visitor->postWithToken('verify_email.php', ['token' => $valid]), 422);
+        $this->assertHtmlPage($visitor->postWithToken('verify_email.php', ['token' => str_repeat('a', 64), 'password' => self::DEFAULT_PASSWORD]), 404);
         self::assertSame($userId, find_valid_email_verification($valid));
         self::assertFalse($this->isVerified($userId));
-        $this->assertRedirect($visitor->get('verify_email.php?token=' . $valid), 'Home_Page.php');
+        $this->assertRedirect($this->confirm($visitor, 'verify_email.php?token=' . $valid, self::DEFAULT_PASSWORD), 'Home_Page.php');
+        self::assertTrue($this->isVerified($userId));
     }
 
     public function testResendRequiresPostCsrfAndAValidAddress(): void

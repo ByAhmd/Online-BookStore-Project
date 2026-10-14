@@ -57,7 +57,7 @@ return [
         ],
         'welcome_back_name' => 'Welcome back, :name!',
         'welcome_back' => 'Welcome back!',
-        'unverified' => 'Please confirm your email first. Open the link we emailed you, or request a new one below.',
+        'failed_or_unconfirmed' => 'Incorrect email or password, or the email address is not confirmed yet. If you have just signed up, open the link we emailed you.',
     ],
 
     'logout' => [
@@ -106,6 +106,10 @@ return [
             'other' => "If an account with that email is waiting for confirmation, we've sent a new link. It expires in :count hours.",
         ],
         'already_confirmed' => 'Already confirmed?',
+        'confirm_intro' => 'To confirm :email, enter the password you chose when you signed up. You will then be logged in.',
+        'confirm_submit' => 'Confirm and Log In',
+        'confirm_failed' => 'Incorrect password. Enter the password you chose when you signed up.',
+        'not_you' => 'Did someone else sign up with your address, or did you forget the password? Choose a new password instead; that confirms your address too.',
         'success' => 'Thank you, your email address is confirmed. Welcome to BookWise, :name!',
         'invalid_title' => 'Confirmation link expired',
         'invalid_heading' => 'This confirmation link is invalid or has expired',

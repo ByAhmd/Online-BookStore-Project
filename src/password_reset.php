@@ -43,7 +43,7 @@ function request_password_reset(string $email): void
 
     $link = absolute_url('reset_form.php?token=' . $rawToken);
     // An unconfirmed account's name may have been typed by someone else: leave it out.
-    $name = email_verification_required() && $user['email_verified_at'] === null ? '' : $user['name'];
+    $name = $user['email_verified_at'] === null ? '' : $user['name'];
 
     send_localized_mail($user['Eaddress'], $name, $user['locale'], static function () use ($name, $link): array {
         $greeting = $name !== '' ? t('auth.mail.greeting_name', ['name' => $name]) : t('auth.mail.greeting');

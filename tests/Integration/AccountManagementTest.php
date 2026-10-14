@@ -239,6 +239,13 @@ final class AccountManagementTest extends DatabaseTestCase
         $userId = (int) $user['id'];
         update_user_locale($userId, 'ar');
 
+        // An unconfirmed account's name may have been typed by someone else: no greeting by name.
+        $mails = $this->captureMail(static fn () => send_password_changed_email($userId));
+        self::assertSame('', $mails[0]['name']);
+        self::assertStringStartsWith('مرحبًا،', $mails[0]['body']);
+        self::assertStringNotContainsString('Mail Reader', $mails[0]['body']);
+
+        db_run('UPDATE users SET email_verified_at = NOW() WHERE id = ?', [$userId]);
         $mails = $this->captureMail(static fn () => send_password_changed_email($userId));
         self::assertCount(1, $mails);
         self::assertSame(['mails@example.com', 'Mail Reader', 'تم تغيير كلمة المرور لحسابك في BookWise'], [$mails[0]['to'], $mails[0]['name'], $mails[0]['subject']]);
@@ -247,12 +254,6 @@ final class AccountManagementTest extends DatabaseTestCase
         $mails = $this->captureMail(static fn () => send_account_deleted_email(['Eaddress' => 'mails@example.com', 'locale' => 'en']));
         self::assertSame(['mails@example.com', '', 'Your BookWise account was deleted'], [$mails[0]['to'], $mails[0]['name'], $mails[0]['subject']]);
         self::assertSame('en', current_locale());
-
-        // With verification required, an unconfirmed account's name is left out.
-        $this->setEnv('REQUIRE_EMAIL_VERIFICATION', 'true');
-        $mails = $this->captureMail(static fn () => send_password_changed_email($userId));
-        self::assertSame('', $mails[0]['name']);
-        self::assertStringStartsWith('مرحبًا،', $mails[0]['body']);
     }
 
     /* -----------------------------------------------------------------

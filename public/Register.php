@@ -76,21 +76,23 @@ if ($action === 'login') {
     }
 
     $result = attempt_login($email, $password);
-    if ($result === null) {
+    // An unconfirmed account answers exactly like a wrong password. Otherwise
+    // anyone could sign up with an address and then log in with the password
+    // they just chose, and tell new addresses (unconfirmed) from registered
+    // ones (wrong password). Its owner gets a fresh link (throttled, silent).
+    $unconfirmed = $result !== null && $result['type'] === 'user'
+        && customer_awaits_verification((int) $result['record']['id']);
+    if ($result === null || $unconfirmed) {
         record_failed_login($email, $ip);
-        flash('error', t('auth.login.failed'));
+        if ($unconfirmed) {
+            resend_email_verification($email);
+        }
+        flash('error', email_verification_required() ? t('auth.login.failed_or_unconfirmed') : t('auth.login.failed'));
         remember_input(['login_email' => $email]);
         redirect('index.php?form=login');
     }
 
     clear_failed_logins($email);
-
-    // Only someone who knows the password learns that the address still needs confirming.
-    if ($result['type'] === 'user' && customer_awaits_verification((int) $result['record']['id'])) {
-        remember_input(['verify_email' => $email]);
-        flash('info', t('auth.login.unverified'));
-        redirect('index.php?form=verify');
-    }
 
     if ($result['type'] === 'admin') {
         login_admin($result['record']);

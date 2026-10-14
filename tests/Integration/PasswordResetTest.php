@@ -38,6 +38,10 @@ final class PasswordResetTest extends DatabaseTestCase
     private function requestResetAndReadEmail(string $email, string $expectedName = 'Test Reader', string $expectedSubject = 'Reset your BookWise password'): ?string
     {
         $this->setEnv('APP_URL', 'https://books.example.com');
+        if ($expectedName !== '') {
+            // Only confirmed accounts are greeted by name.
+            db_run('UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()) WHERE Eaddress = ?', [$email]);
+        }
         $mails = $this->captureMail(static fn () => request_password_reset($email));
         if ($mails === []) {
             return null;
@@ -59,10 +63,10 @@ final class PasswordResetTest extends DatabaseTestCase
         self::assertSame('en', current_locale(), 'The visitor language is restored after composing the email');
     }
 
-    public function testUnconfirmedAccountNamesAreLeftOutWhenVerificationIsRequired(): void
+    public function testUnconfirmedAccountNamesAreLeftOut(): void
     {
-        // A pre-registered (unconfirmed) account's name may have been typed by someone else.
-        $this->setEnv('REQUIRE_EMAIL_VERIFICATION', 'true');
+        // A pre-registered (unconfirmed) account's name may have been typed by
+        // someone else, also when sign-up does not require confirmation.
         $user = $this->createUser('pending@example.com', 'Call +1 555 0100 now');
 
         self::assertNotNull($this->requestResetAndReadEmail('pending@example.com', ''));
