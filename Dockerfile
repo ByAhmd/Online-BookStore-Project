@@ -30,7 +30,7 @@ RUN composer dump-autoload --no-dev --optimize --no-interaction
 ############################################################################
 # Stage 2: runtime
 ############################################################################
-FROM php:8.3-apache
+FROM php:8.5-apache
 
 # PHP extensions: pdo_mysql, gd with JPEG/PNG/WebP, opcache. Only the shared
 # libraries they need are kept; the -dev packages are removed again.
