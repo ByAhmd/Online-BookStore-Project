@@ -184,14 +184,18 @@ else
         ' "$ROOT" "$1"
     }
 
-    env "${db_env[@]}" php -r '
-        require $argv[1] . "/src/bootstrap.php";
-        db()->exec("SET FOREIGN_KEY_CHECKS = 0");
-        foreach (db()->query("SHOW FULL TABLES WHERE Table_type = \"BASE TABLE\"")->fetchAll(PDO::FETCH_NUM) as $row) {
-            db()->exec("DROP TABLE `" . str_replace("`", "``", $row[0]) . "`");
-        }
-        db()->exec("SET FOREIGN_KEY_CHECKS = 1");
-    ' "$ROOT"
+    # drop_tables: empties the test database.
+    drop_tables() {
+        env "${db_env[@]}" php -r '
+            require $argv[1] . "/src/bootstrap.php";
+            db()->exec("SET FOREIGN_KEY_CHECKS = 0");
+            foreach (db()->query("SHOW FULL TABLES WHERE Table_type = \"BASE TABLE\"")->fetchAll(PDO::FETCH_NUM) as $row) {
+                db()->exec("DROP TABLE `" . str_replace("`", "``", $row[0]) . "`");
+            }
+            db()->exec("SET FOREIGN_KEY_CHECKS = 1");
+        ' "$ROOT"
+    }
+    drop_tables
 
     # Stand-in for Apache: records its arguments and the payment settings it was given.
     mkdir -p "$WORK/bin"
@@ -236,9 +240,26 @@ STUB
     assert_not_contains "administrator" "$RUN_LOG" "restart: the unchanged administrator is left alone"
     assert_eq 55 "$(db_query 'SELECT COUNT(*) FROM books')" "restart: still 55 books"
 
+    # Demo mode puts back the copies visitors bought.
+    env "${db_env[@]}" php -r 'require $argv[1] . "/src/bootstrap.php"; db()->exec("UPDATE books SET stock = 0");' "$ROOT"
+    run_entrypoint APP_DEMO=true
+    assert_contains "Demo: restocked 55 book(s)." "$RUN_LOG" "demo restart: restocks the catalog"
+    assert_eq 0 "$(db_query 'SELECT COUNT(*) FROM books WHERE stock < 3')" "demo restart: every book has copies again"
+
     run_entrypoint APP_DEMO=false STRIPE_SECRET_KEY=sk_test_realmode
     assert_eq 0 "$RUN_STATUS" "real mode: succeeds"
     assert_eq "ARGS=" "$(grep -E '^ARGS=' <<<"$APACHE")" "real mode: Apache is started without the simulator"
+    assert_not_contains "Demo: restocked" "$RUN_LOG" "real mode: stock is left alone"
+
+    # A real store starts with an empty catalog, unless BOOKWISE_SEED asks for the sample.
+    drop_tables
+    run_entrypoint APP_DEMO=false STRIPE_SECRET_KEY=sk_test_realmode
+    assert_eq 0 "$RUN_STATUS" "real mode, empty database: succeeds"
+    assert_contains "Created schema" "$RUN_LOG" "real mode, empty database: creates the schema"
+    assert_eq 0 "$(db_query 'SELECT COUNT(*) FROM books')" "real mode, empty database: no sample books"
+    drop_tables
+    run_entrypoint APP_DEMO=false STRIPE_SECRET_KEY=sk_test_realmode BOOKWISE_SEED=true
+    assert_eq 55 "$(db_query 'SELECT COUNT(*) FROM books')" "real mode with BOOKWISE_SEED=true: the sample catalog"
 
     run_entrypoint APP_DEMO=true BOOKWISE_ADMIN_EMAIL=not-an-email "BOOKWISE_ADMIN_PASSWORD=${admin_password}"
     assert_eq 1 "$RUN_STATUS" "an invalid administrator email stops the container"

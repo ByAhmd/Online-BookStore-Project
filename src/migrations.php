@@ -17,6 +17,11 @@ declare(strict_types=1);
 
 /** Version recorded for databases created from the first published schema. */
 const MIGRATION_BASELINE = '001_initial';
+/** Tables of the first published schema: all must exist before it is recorded as the baseline. */
+const MIGRATION_BASELINE_TABLES = [
+    'users', 'admins', 'books', 'cart', 'favorites', 'comments', 'comment_interactions',
+    'reset_tokens', 'orders', 'order_items', 'sales', 'login_attempts',
+];
 
 /* ---------------------------------------------------------------------
  * Schema inspection
@@ -186,11 +191,23 @@ function available_migrations(): array
  * Creates the bookkeeping table. A database that already has the BookWise
  * tables but no record of migrations was created from the first published
  * schema, so it is marked with the baseline version.
+ *
+ * @throws RuntimeException when only some of those tables exist: an
+ *   installation that stopped halfway must not be mistaken for a complete one
  */
 function ensure_migrations_table(): void
 {
     if (db_table_exists('schema_migrations')) {
         return;
+    }
+    if (db_table_exists('users')) {
+        $missing = array_values(array_filter(MIGRATION_BASELINE_TABLES, static fn (string $table): bool => !db_table_exists($table)));
+        if ($missing !== []) {
+            throw new RuntimeException(
+                'The database "' . config('db.name') . '" was only partly installed (missing tables: ' . implode(', ', $missing) . '). '
+                . 'Drop its tables (or create a new, empty database) and run php bin/install.php again.'
+            );
+        }
     }
     db()->exec(
         'CREATE TABLE schema_migrations (

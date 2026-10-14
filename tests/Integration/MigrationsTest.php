@@ -1,0 +1,100 @@
+<?php
+
+declare(strict_types=1);
+
+namespace BookWise\Tests\Integration;
+
+use BookWise\Tests\Support\DatabaseTestCase;
+use RuntimeException;
+
+/**
+ * The migration runner (src/migrations.php) against a real database: fresh
+ * installs record every migration, older databases are brought up to date
+ * exactly once, and a half-installed database is never taken for a complete
+ * one. These tests change the schema, so each is followed by a rebuild.
+ */
+final class MigrationsTest extends DatabaseTestCase
+{
+    protected function tearDown(): void
+    {
+        self::schemaChanged();
+        parent::tearDown();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function migrationFiles(): array
+    {
+        return array_keys(available_migrations());
+    }
+
+    public function testAFreshSchemaRecordsEveryMigration(): void
+    {
+        self::assertContains('003_order_stock_taken', self::migrationFiles());
+        self::assertSame([MIGRATION_BASELINE, ...self::migrationFiles()], applied_migrations());
+        self::assertSame([], run_migrations(), 'Nothing to apply');
+    }
+
+    public function testMigration003RecordsTheCopiesPaidOrdersTookFromStock(): void
+    {
+        $user = $this->createUser();
+        $orders = [];
+        foreach (['paid', 'pending', 'refunded'] as $status) {
+            db_run(
+                'INSERT INTO orders (user_id, status, currency, total_amount, amount_minor) VALUES (?, ?, ?, ?, ?)',
+                [$user['id'], $status, 'sar', '39.98', 3998]
+            );
+            $orders[$status] = (int) db()->lastInsertId();
+            db_run(
+                'INSERT INTO order_items (order_id, book_id, title, unit_price, quantity) VALUES (?, 51, ?, ?, 2)',
+                [$orders[$status], 'Esabella', '19.99']
+            );
+        }
+
+        // A database from before 003.
+        db()->exec('ALTER TABLE order_items DROP COLUMN stock_taken');
+        db_run('DELETE FROM schema_migrations WHERE version = ?', ['003_order_stock_taken']);
+
+        self::assertSame(['003_order_stock_taken'], run_migrations());
+        $taken = [];
+        foreach ($orders as $status => $orderId) {
+            $taken[$status] = (int) db_value('SELECT stock_taken FROM order_items WHERE order_id = ?', [$orderId]);
+        }
+        self::assertSame(['paid' => 2, 'pending' => 0, 'refunded' => 0], $taken, 'Only paid orders hold copies');
+        self::assertSame([], run_migrations(), 'Applied once');
+    }
+
+    public function testACompleteDatabaseWithoutRecordsStartsFromTheBaseline(): void
+    {
+        // A database created from the first published schema has no record of
+        // migrations. Every migration must then be safe to apply to it; here
+        // they run against a schema that already has their changes.
+        db()->exec('DROP TABLE schema_migrations');
+
+        self::assertSame(self::migrationFiles(), run_migrations());
+        self::assertSame([MIGRATION_BASELINE, ...self::migrationFiles()], applied_migrations());
+        self::assertSame([], run_migrations());
+    }
+
+    public function testAPartlyInstalledDatabaseIsNotTakenForAComplete(): void
+    {
+        // An installation that stopped after creating some tables.
+        db()->exec('DROP TABLE schema_migrations');
+        db()->exec('SET FOREIGN_KEY_CHECKS = 0');
+        try {
+            db()->exec('DROP TABLE login_attempts');
+            db()->exec('DROP TABLE sales');
+        } finally {
+            db()->exec('SET FOREIGN_KEY_CHECKS = 1');
+        }
+
+        try {
+            run_migrations();
+            self::fail('Expected the half-installed database to be refused');
+        } catch (RuntimeException $e) {
+            self::assertStringContainsString('only partly installed (missing tables: sales, login_attempts)', $e->getMessage());
+        }
+        self::assertFalse(db_table_exists('schema_migrations'), 'Nothing is recorded');
+    }
+}

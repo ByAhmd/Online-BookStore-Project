@@ -33,6 +33,8 @@ final class RefundException extends RuntimeException
 }
 
 const CHECKOUT_SESSION_TTL_SECONDS = 3600; // Stripe allows 30 minutes to 24 hours.
+/** Demo mode: simulated purchases never take a book below this many copies. */
+const DEMO_MIN_STOCK = 3;
 /** Statuses mark_order_status() may set (refunds go through apply_order_refund()). */
 const ORDER_STATUSES = ['pending', 'paid', 'canceled', 'expired', 'failed'];
 /** Every order status, in the order the admin filter lists them. */
@@ -79,7 +81,18 @@ function stripe_client(): \Stripe\StripeClient
     if (is_string($apiBase) && $apiBase !== '') {
         $options['api_base'] = rtrim($apiBase, '/');
     }
-    \Stripe\Stripe::setMaxNetworkRetries(2);
+    if (config('app.demo')) {
+        // The demo's payment simulator runs on the same web server and needs a
+        // free worker of its own: give up quickly, without retries, so a busy
+        // server cannot tie up every worker waiting on itself.
+        $http = new \Stripe\HttpClient\CurlClient();
+        $http->setTimeout(10);
+        $http->setConnectTimeout(2);
+        \Stripe\ApiRequestor::setHttpClient($http);
+        \Stripe\Stripe::setMaxNetworkRetries(0);
+    } else {
+        \Stripe\Stripe::setMaxNetworkRetries(2);
+    }
 
     return $client = new \Stripe\StripeClient($options);
 }
@@ -581,12 +594,31 @@ function fulfill_order(int $orderId, \Stripe\StripeObject $session): string
                 ]);
             }
         }
+        // Record what each line really takes (less than ordered when oversold),
+        // so a refund later puts back exactly those copies.
+        db_run(
+            'UPDATE order_items oi
+             JOIN books b ON b.id = oi.book_id
+             SET oi.stock_taken = LEAST(b.stock, oi.quantity)
+             WHERE oi.order_id = ?',
+            [$orderId]
+        );
         db_run(
             'UPDATE books b
              JOIN order_items oi ON oi.book_id = b.id AND oi.order_id = ?
-             SET b.stock = GREATEST(b.stock - oi.quantity, 0)',
+             SET b.stock = b.stock - oi.stock_taken',
             [$orderId]
         );
+        if (config('app.demo')) {
+            // Public demo: visitors' free simulated purchases must not sell the
+            // shared catalog out for everyone else.
+            db_run(
+                'UPDATE books b
+                 JOIN order_items oi ON oi.book_id = b.id AND oi.order_id = ?
+                 SET b.stock = GREATEST(b.stock, ?)',
+                [$orderId, DEMO_MIN_STOCK]
+            );
+        }
 
         // Remove the paid copies from the cart, keeping any copies added after checkout started.
         db_run(
@@ -698,6 +730,12 @@ function refund_order(int $orderId): string
             $refundId = $e->getStripeCode() === 'charge_already_refunded'
                 ? confirmed_full_refund($paymentIntent, (int) $order['amount_minor'], (string) $order['currency'])
                 : null;
+            if ($refundId === null && config('app.demo') && $e->getStripeCode() === 'resource_missing') {
+                // Demo: the payment simulator forgets its payments when the server
+                // restarts. No real money was ever taken, so record the refund here.
+                $refundId = 're_demo_' . bin2hex(random_bytes(12));
+                app_log('info', 'Demo: the simulator no longer knows this payment; refund recorded locally', ['order_id' => $orderId]);
+            }
             if ($refundId === null) {
                 throw $e;
             }
@@ -736,7 +774,7 @@ function apply_order_refund(int $orderId, string $refundId, string $paymentInten
         db_run(
             'UPDATE books b
              JOIN order_items oi ON oi.book_id = b.id AND oi.order_id = ?
-             SET b.stock = b.stock + oi.quantity',
+             SET b.stock = b.stock + oi.stock_taken',
             [$orderId]
         );
         app_log('info', 'Order refunded', ['order_id' => $orderId, 'refund' => $refundId]);

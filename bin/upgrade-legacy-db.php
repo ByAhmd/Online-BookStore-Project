@@ -342,6 +342,12 @@ step('add foreign keys with documented ON DELETE behaviour', static function ():
         ['sales', 'fk_sales_user', 'user_id', 'users (id)', 'CASCADE'],
         ['sales', 'fk_sales_order', 'order_id', 'orders (id)', 'SET NULL'],
     ];
+    // ON DELETE SET NULL needs a nullable column. Orders created by an earlier
+    // version of this script have user_id NOT NULL (migration 002 changes it
+    // too, but it only runs in the next step).
+    if (db_value("SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'user_id'") === 'NO') {
+        db()->exec('ALTER TABLE orders MODIFY user_id INT NULL DEFAULT NULL');
+    }
     foreach ($fks as [$table, $name, $column, $ref, $onDelete]) {
         if (!db_constraint_exists($table, $name)) {
             db()->exec("ALTER TABLE `$table` ADD CONSTRAINT `$name` FOREIGN KEY (`$column`) REFERENCES $ref ON DELETE $onDelete");

@@ -152,6 +152,54 @@ final class RefundTest extends CheckoutTestCase
         self::assertSame('paid', $this->reloadOrder((int) $order['id'])['status']);
     }
 
+    public function testInDemoModeAPaymentTheSimulatorForgotIsRefundedLocally(): void
+    {
+        // The demo's simulator loses its payments when the server restarts.
+        $stock = $this->stockOf(self::ESABELLA);
+        [, $order] = $this->paidOrder([self::ESABELLA => 1]);
+        $this->stripe->reset();
+        $this->setEnv('APP_DEMO', 'true');
+
+        self::assertSame('refunded', refund_order((int) $order['id']));
+        $refunded = $this->reloadOrder((int) $order['id']);
+        self::assertSame('refunded', $refunded['status']);
+        self::assertStringStartsWith('re_demo_', (string) $refunded['stripe_refund_id']);
+        self::assertSame($stock, $this->stockOf(self::ESABELLA));
+
+        // Outside demo mode the same situation is an error (see the test above).
+    }
+
+    public function testRefundingAnOversoldOrderRestocksOnlyTheCopiesItTook(): void
+    {
+        $user = $this->customerWithCart([self::ESABELLA => 2, self::BIOLOGY => 1]);
+        [$sessionId, $order] = $this->checkout($user);
+        // Another order took the copies while this customer was paying.
+        $this->setStock(self::ESABELLA, 1);
+        $biology = $this->stockOf(self::BIOLOGY);
+        $this->stripe->pay($sessionId);
+        self::assertSame('paid', confirm_checkout_return((int) $user['id'], $sessionId)['state']);
+        self::assertSame([0, $biology - 1], [$this->stockOf(self::ESABELLA), $this->stockOf(self::BIOLOGY)]);
+        self::assertSame(
+            [[self::BIOLOGY, 1, 1], [self::ESABELLA, 2, 1]],
+            array_map(static fn (array $row): array => array_map('intval', array_values($row)), db_all('SELECT book_id, quantity, stock_taken FROM order_items WHERE order_id = ? ORDER BY book_id', [$order['id']]))
+        );
+
+        self::assertSame('refunded', refund_order((int) $order['id']));
+        self::assertSame([1, $biology], [$this->stockOf(self::ESABELLA), $this->stockOf(self::BIOLOGY)], 'Only the copy that left the shelf comes back');
+    }
+
+    public function testDemoPurchasesNeverTakeABookBelowTheDemoMinimum(): void
+    {
+        $this->setStock(self::ESABELLA, 4);
+        // Create the (per-process) Stripe client first: in demo mode it would
+        // replace the HTTP client that records these tests' Stripe requests.
+        stripe_client();
+        $this->setEnv('APP_DEMO', 'true');
+        [, $order] = $this->paidOrder([self::ESABELLA => 3]);
+        self::assertSame(DEMO_MIN_STOCK, $this->stockOf(self::ESABELLA), 'Visitors cannot sell the shared demo catalog out');
+        self::assertSame(3, (int) db_value('SELECT stock_taken FROM order_items WHERE order_id = ?', [$order['id']]));
+    }
+
     public function testARefundAlreadyMadeInTheStripeDashboardIsRecorded(): void
     {
         [, $order] = $this->paidOrder([self::ESABELLA => 2]);

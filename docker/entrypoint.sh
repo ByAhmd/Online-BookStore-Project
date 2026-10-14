@@ -8,9 +8,10 @@
 #      that Apache serves under /stripe-sim, generating STRIPE_SECRET_KEY
 #      (sk_test_...) and STRIPE_WEBHOOK_SECRET when they are missing;
 #   3. waits for the database (up to DB_WAIT_SECONDS, default 60);
-#   4. runs "php bin/install.php --seed": schema and sample catalog for an
-#      empty database, pending migrations for an existing one, and the
-#      administrator from BOOKWISE_ADMIN_EMAIL / BOOKWISE_ADMIN_PASSWORD;
+#   4. runs "php bin/install.php": the schema for an empty database (plus the
+#      sample catalog in demo mode or with BOOKWISE_SEED=true), pending
+#      migrations for an existing one, and the administrator from
+#      BOOKWISE_ADMIN_EMAIL / BOOKWISE_ADMIN_PASSWORD;
 #   5. mirrors app.log and php-error.log to the container output and starts
 #      Apache in the foreground.
 # Any other command (e.g. "bash" or "php bin/create-admin.php ...") runs as is.
@@ -201,8 +202,13 @@ main() {
     prepare_directories
     wait_for_database || die "Giving up. Check DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS (and DB_SSL_CA_PEM for a hosted MySQL that requires TLS)."
 
-    log "Preparing the database (php bin/install.php --seed)..."
-    php "${BOOKWISE_ROOT}/bin/install.php" --seed || die "Database installation failed (see the messages above)."
+    # The sample catalog is for demos: a real store starts with an empty catalog.
+    local install_args=()
+    if is_true "${APP_DEMO:-false}" || is_true "${BOOKWISE_SEED:-false}"; then
+        install_args=(--seed)
+    fi
+    log "Preparing the database (php bin/install.php ${install_args[*]:-})..."
+    php "${BOOKWISE_ROOT}/bin/install.php" "${install_args[@]}" || die "Database installation failed (see the messages above)."
 
     mirror_logs
     if ((SIMULATOR)); then

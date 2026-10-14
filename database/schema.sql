@@ -179,6 +179,7 @@ CREATE TABLE order_items (
     title      VARCHAR(255)  NOT NULL,
     unit_price DECIMAL(10,2) NOT NULL,
     quantity   INT           NOT NULL,
+    stock_taken INT          NOT NULL DEFAULT 0 COMMENT 'Copies this line took out of stock when the order was paid',
     PRIMARY KEY (id),
     UNIQUE KEY uq_order_items_order_book (order_id, book_id),
     KEY idx_order_items_book (book_id),
@@ -225,4 +226,5 @@ CREATE TABLE schema_migrations (
 
 INSERT INTO schema_migrations (version) VALUES
     ('001_initial'),
-    ('002_accounts_commerce_i18n');
+    ('002_accounts_commerce_i18n'),
+    ('003_order_stock_taken');

@@ -343,6 +343,23 @@ final class BooksTest extends DatabaseTestCase
         self::assertSame(['Renamed Book', 0], [find_book($id)['title'], find_book($id)['stock']]);
         self::assertFalse(update_book(999999, $clean), 'Unknown book');
         self::assertSame(self::SEED_BOOK_COUNT + 1, book_count());
+
+        // With the stock the form showed, the admin's change is applied as a
+        // difference: copies sold meanwhile (7 shown, 5 left now) are kept.
+        db_run('UPDATE books SET stock = 5 WHERE id = ?', [$id]);
+        $clean['stock'] = '7';
+        self::assertTrue(update_book($id, $clean, 7));
+        self::assertSame(5, find_book($id)['stock'], 'Unchanged stock field: the sale is not undone');
+        $clean['stock'] = '17';
+        self::assertTrue(update_book($id, $clean, 7));
+        self::assertSame(15, find_book($id)['stock'], '+10 restocked on top of the current stock');
+        $clean['stock'] = '0';
+        self::assertTrue(update_book($id, $clean, 30));
+        self::assertSame(0, find_book($id)['stock'], 'Never below zero');
+        $clean['stock'] = (string) BOOK_STOCK_MAX;
+        db_run('UPDATE books SET stock = ? WHERE id = ?', [BOOK_STOCK_MAX - 1, $id]);
+        self::assertTrue(update_book($id, $clean, 0));
+        self::assertSame(BOOK_STOCK_MAX, find_book($id)['stock'], 'Never above the maximum');
     }
 
     public function testDeleteBookCascadesButKeepsOrderHistory(): void

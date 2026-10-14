@@ -99,6 +99,15 @@ abstract class DatabaseTestCase extends TestCase
         self::resetData($pdo);
     }
 
+    /**
+     * For tests that change the schema itself: the next test starts from a
+     * freshly created schema again.
+     */
+    protected static function schemaChanged(): void
+    {
+        self::$schemaReady = false;
+    }
+
     private static function assertSafeDatabaseName(string $name, string $source): void
     {
         if (!str_ends_with($name, '_test')) {

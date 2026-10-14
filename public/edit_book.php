@@ -19,6 +19,7 @@ if ($book === null) {
 
 $values = $book;
 $errors = [];
+$stockShown = (int) $book['stock'];
 
 if (is_post()) {
     verify_csrf();
@@ -29,6 +30,15 @@ if (is_post()) {
     // An uploaded cover file replaces the path/URL field.
     $hasUpload = has_uploaded_file($_FILES, 'cover_upload');
     [$clean, $errors] = validate_book_input($_POST, $hasUpload);
+    // The cover the book already has never blocks saving the other fields, even
+    // if its file is gone (free hosts lose uploads on restart; the storefront
+    // then shows a placeholder).
+    if (!$hasUpload && isset($errors['cover_image']) && ($clean['cover_image'] ?? null) === (string) $book['cover_image']) {
+        unset($errors['cover_image']);
+    }
+    // Stock is saved as a change to the value the form showed, so copies sold
+    // or refunded while the form was open are not overwritten.
+    $stockShown = parse_int($_POST['stock_shown'] ?? null, 0, BOOK_STOCK_MAX) ?? (int) $book['stock'];
     $storedCover = null;
     if ($hasUpload) {
         if ($errors === []) {
@@ -47,7 +57,7 @@ if (is_post()) {
     if ($errors === []) {
         try {
             // update_book() deletes the previous uploaded cover when it is replaced.
-            $updated = update_book($id, $clean);
+            $updated = update_book($id, $clean, $stockShown);
         } catch (Throwable $e) {
             delete_uploaded_cover($storedCover);
             throw $e;
@@ -117,6 +127,7 @@ page_header(t('admin.edit.title'), ['Admin_dashboard.css']);
                     <form class="book-form" method="post" action="edit_book.php?id=<?= (int) $book['id'] ?>" enctype="multipart/form-data" data-once>
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="update_book">
+                        <input type="hidden" name="stock_shown" value="<?= (int) $stockShown ?>">
 
                         <div class="form-field">
                             <label for="book-title"><?= e(t('admin.form.title')) ?></label>

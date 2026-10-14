@@ -27,6 +27,18 @@ function find_book(int $id): ?array
 }
 
 /**
+ * Name of a catalog genre in the visitor's language. Genres are catalog data
+ * (administrators can create any), so a genre without an entry under
+ * shop.genres is shown as stored. Links and forms keep the stored name.
+ */
+function genre_label(string $genre): string
+{
+    $key = strtolower(trim((string) preg_replace('/[^A-Za-z0-9]+/', '_', $genre), '_'));
+    $label = $key !== '' ? translation_entry('shop.genres.' . $key, current_locale()) : null;
+    return is_string($label) ? $label : $genre;
+}
+
+/**
  * Distinct genres present in the catalog, alphabetically.
  *
  * @return list<string>
@@ -138,7 +150,7 @@ function catalog_summary(string $genre, string $query, array $pagination): strin
     $scope = match ($genre) {
         'all' => t('shop.explore.scope_all'),
         'Favorites' => t('shop.explore.scope_favorites'),
-        default => $genre,
+        default => genre_label($genre),
     };
     $replace = ['scope' => $scope, 'q' => $query];
     if ($pagination['pages'] > 1) {
@@ -519,14 +531,22 @@ function create_book(array $book): int
  * Updates a book. When the cover changes, the previous uploaded cover file
  * (if any, and if no other book uses it) is deleted.
  *
+ * With $stockShown (the stock the edit form displayed), the stock is changed
+ * by the difference the admin made, so copies sold or refunded while the form
+ * was open are kept. Without it, the stock is set as given.
+ *
  * @param array<string, string> $book Output of validate_book_input()
  */
-function update_book(int $id, array $book): bool
+function update_book(int $id, array $book, ?int $stockShown = null): bool
 {
     $previousCover = db_value('SELECT cover_image FROM books WHERE id = ?', [$id]);
+    $stock = (int) $book['stock'];
+    [$stockSql, $stockParams] = $stockShown === null
+        ? ['?', [$stock]]
+        : ['GREATEST(0, LEAST(?, stock + ?))', [BOOK_STOCK_MAX, $stock - $stockShown]];
     db_run(
-        'UPDATE books SET title = ?, author = ?, genre = ?, description = ?, price = ?, stock = ?, cover_image = ? WHERE id = ?',
-        [$book['title'], $book['author'], $book['genre'], $book['description'], $book['price'], (int) $book['stock'], $book['cover_image'], $id]
+        "UPDATE books SET title = ?, author = ?, genre = ?, description = ?, price = ?, stock = $stockSql, cover_image = ? WHERE id = ?",
+        array_merge([$book['title'], $book['author'], $book['genre'], $book['description'], $book['price']], $stockParams, [$book['cover_image'], $id])
     );
     if ($previousCover === null || find_book($id) === null) {
         return false;

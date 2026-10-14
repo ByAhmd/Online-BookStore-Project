@@ -118,6 +118,46 @@ final class CoverUploadTest extends HttpTestCase
         return (string) db_value('SELECT cover_image FROM books WHERE id = ?', [$bookId]);
     }
 
+    public function testABookWhoseCoverFileWasLostCanStillBeEdited(): void
+    {
+        [$admin] = $this->signedInAdmin();
+        $this->assertRedirect($this->addBook($admin, self::book(), self::upload($this->imageFile())), 'admin_dashboard.php');
+        $id = (int) db_value('SELECT id FROM books WHERE title = ?', ['Uploaded Cover Book']);
+        $cover = self::cover($id);
+        // Free hosts lose uploaded files on restart; the database keeps the path.
+        unlink(BASE_PATH . '/public/' . $cover);
+
+        // Saving other fields with the stored (missing) cover works.
+        $form = $admin->get('edit_book.php?id=' . $id);
+        self::assertSame($cover, $form->document()->form('edit_book.php?id=' . $id, ['action' => 'update_book'])->field('cover_image'));
+        $this->assertRedirect($admin->submitForm($form, 'edit_book.php?id=' . $id, ['title' => 'Renamed After Restart'], ['action' => 'update_book']), 'admin_dashboard.php#manage-books');
+        self::assertSame(['Renamed After Restart', $cover], [(string) db_value('SELECT title FROM books WHERE id = ?', [$id]), self::cover($id)]);
+
+        // Another missing file is still refused.
+        $page = $this->editBook($admin, $id, ['cover_image' => 'uploads/covers/' . str_repeat('a', 32) . '.png']);
+        self::assertSame(422, $page->status);
+        self::assertSame($cover, self::cover($id));
+    }
+
+    public function testStockChangesMadeWhileTheEditFormWasOpenAreKept(): void
+    {
+        [$admin] = $this->signedInAdmin();
+        $this->assertRedirect($this->addBook($admin, self::book(['cover_image' => 'imges/All_section/biology.png']), []), 'admin_dashboard.php');
+        $id = (int) db_value('SELECT id FROM books WHERE title = ?', ['Uploaded Cover Book']);
+
+        $form = $admin->get('edit_book.php?id=' . $id);
+        self::assertSame('9', $form->document()->form('edit_book.php?id=' . $id, ['action' => 'update_book'])->field('stock'));
+        db_run('UPDATE books SET stock = 7 WHERE id = ?', [$id]); // two copies sold meanwhile
+
+        $this->assertRedirect($admin->submitForm($form, 'edit_book.php?id=' . $id, ['price' => '16.00'], ['action' => 'update_book']), 'admin_dashboard.php#manage-books');
+        self::assertSame(7, (int) db_value('SELECT stock FROM books WHERE id = ?', [$id]), 'The sale is not undone');
+
+        $form = $admin->get('edit_book.php?id=' . $id);
+        db_run('UPDATE books SET stock = 6 WHERE id = ?', [$id]);
+        $this->assertRedirect($admin->submitForm($form, 'edit_book.php?id=' . $id, ['stock' => '17'], ['action' => 'update_book']), 'admin_dashboard.php#manage-books');
+        self::assertSame(16, (int) db_value('SELECT stock FROM books WHERE id = ?', [$id]), 'Ten copies added to what is there now');
+    }
+
     public function testAddingABookWithAnUploadedCover(): void
     {
         [$admin] = $this->signedInAdmin();
