@@ -221,7 +221,8 @@ final class ProfileTest extends HttpTestCase
             $this->assertFlash($page, 'error', 'Your payment preference was not saved.');
             self::assertSame('Please choose one of the listed payment preferences.', $page->document()->fieldError('payment_method-error'));
             self::assertSame('Apple Pay', find_user($userId)['payment_method']);
-            self::assertStringNotContainsString('4111', $page->body);
+            // The full number: a random token or asset version may contain "4111" by chance.
+            self::assertStringNotContainsString('4111 1111', $page->body);
         }
 
         $this->assertRedirect($customer->postWithToken('profilePage.php', ['action' => 'update_payment', 'payment_method' => '']), 'profilePage.php?section=payment');
@@ -230,7 +231,7 @@ final class ProfileTest extends HttpTestCase
         // A legacy free-text value (possibly a card number) is never echoed back.
         db_run('UPDATE users SET payment_method = ? WHERE id = ?', ['4242 4242 4242 4242', $userId]);
         $page = $customer->get('profilePage.php?section=payment');
-        self::assertStringNotContainsString('4242', $page->body);
+        self::assertStringNotContainsString('4242 4242', $page->body);
         $this->assertPageText('Your previous entry was cleared for your security', $page);
     }
 
