@@ -221,22 +221,37 @@ function demo_inbox_enabled(): bool
 }
 
 /**
- * Stores a message for the demo inbox and deletes messages older than
- * DEMO_MAIL_RETENTION_HOURS.
+ * Stores a message for the demo inbox, after deleting expired messages.
+ * Mail to an address without a customer or administrator account, such as
+ * the "account deleted" notice, is not stored: no browser could ever read
+ * it (see demo_inbox_addresses()), and it would only keep personal data.
  */
 function store_demo_mail(string $toEmail, string $subject, string $html, string $text, string $locale): void
 {
-    db_run('DELETE FROM demo_mail WHERE created_at < (NOW() - INTERVAL ? HOUR)', [DEMO_MAIL_RETENTION_HOURS]);
+    purge_expired_demo_mail();
+    $recipient = normalize_email($toEmail);
+    if (!user_email_exists($recipient)) {
+        return;
+    }
     db_run(
         'INSERT INTO demo_mail (recipient, subject, html, text, locale) VALUES (?, ?, ?, ?, ?)',
         [
-            mb_substr(normalize_email($toEmail), 0, 255),
+            $recipient,
             mb_substr($subject, 0, 255),
             $html,
             $text,
             is_supported_locale($locale) ? $locale : default_locale(),
         ]
     );
+}
+
+/**
+ * Deletes demo inbox messages older than DEMO_MAIL_RETENTION_HOURS. Runs
+ * whenever a message is stored and whenever the inbox is opened.
+ */
+function purge_expired_demo_mail(): void
+{
+    db_run('DELETE FROM demo_mail WHERE created_at < (NOW() - INTERVAL ? HOUR)', [DEMO_MAIL_RETENTION_HOURS]);
 }
 
 /**
@@ -259,6 +274,10 @@ function demo_inbox_forget_unowned_mail(string $email): void
  * was really created, never when the address was already registered.
  * The session keeps the account's id: if that account is deleted and the
  * address registered again by someone else, this session loses access.
+ *
+ * Like signing in, this gives the session a new privilege, so it gets a new
+ * session ID and CSRF token: a session ID planted in the browser beforehand
+ * cannot be used to read the new account's confirmation or reset links.
  */
 function demo_inbox_remember_account(string $email): void
 {
@@ -268,6 +287,10 @@ function demo_inbox_remember_account(string $email): void
     $userId = db_value('SELECT id FROM users WHERE Eaddress = ?', [$email]);
     if ($userId === null) {
         return;
+    }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_regenerate_id(true);
+        rotate_csrf_token();
     }
     $accounts = $_SESSION[DEMO_INBOX_SESSION_KEY] ?? [];
     if (!is_array($accounts)) {

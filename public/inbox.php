@@ -20,6 +20,8 @@ if (!in_array(request_method(), ['GET', 'HEAD'], true)) {
 }
 // Messages carry single-use links: keep them out of every cache.
 header('Cache-Control: no-store');
+// Expired messages are also deleted here, so a quiet demo does not keep them.
+purge_expired_demo_mail();
 
 $addresses = demo_inbox_addresses();
 $isAdmin = current_user() === null && current_admin() !== null;

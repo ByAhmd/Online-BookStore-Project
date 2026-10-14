@@ -500,9 +500,9 @@ function complete_email_verification(string $rawToken): ?array
  * Open checkouts are resolved first (settle_pending_orders) while holding the
  * customer's checkout lock, so no payment can complete for an account that
  * no longer exists. Then, in one transaction: the customer's reviews and
- * reactions, reset tokens, login attempts and the users row are deleted
- * (cart, favorites, sales and verification tokens cascade; orders are kept
- * with user_id set to NULL by the schema).
+ * reactions, reset tokens, login attempts, demo inbox messages and the users
+ * row are deleted (cart, favorites, sales and verification tokens cascade;
+ * orders are kept with user_id set to NULL by the schema).
  *
  * @return array{status: 'deleted'|'wrong_password'|'throttled'|'unresolved', account: array<string, mixed>|null}
  */
@@ -551,6 +551,8 @@ function delete_customer_account(int $userId, string $password, string $ip): arr
             db_run('DELETE FROM comments WHERE username = ?', [$email]);
             db_run('DELETE FROM reset_tokens WHERE email = ?', [$email]);
             db_run('DELETE FROM login_attempts WHERE email = ?', [$email]);
+            // Demo inbox (MAIL_DRIVER=database): its emails may greet the customer by name.
+            db_run('DELETE FROM demo_mail WHERE recipient = ?', [normalize_email($email)]);
             db_run('DELETE FROM users WHERE id = ?', [$userId]);
             return 'deleted';
         });

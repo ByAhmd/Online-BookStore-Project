@@ -8,8 +8,8 @@ use BookWise\Tests\Support\DatabaseTestCase;
 
 /**
  * The demo inbox's domain code (src/mailer.php) against the database: the
- * "database" mail driver, the 48-hour retention, and which addresses a
- * browser session may read.
+ * "database" mail driver, the 48-hour retention, what happens to the mail
+ * of deleted accounts, and which addresses a browser session may read.
  */
 final class DemoMailTest extends DatabaseTestCase
 {
@@ -51,6 +51,8 @@ final class DemoMailTest extends DatabaseTestCase
 
     public function testTheDatabaseDriverStoresTheMessageWithItsLanguage(): void
     {
+        $this->createUser('reader@example.com');
+        $this->createUser('other@example.com');
         self::assertTrue(send_mail(' Reader@Example.com ', 'Reader', 'تأكيد البريد', '<p dir="rtl">html</p>', "نص\nhttps://demo.example.com/x", 'ar'));
         self::assertTrue(send_mail('other@example.com', '', 'Plain', '', 'text', 'xx'));
 
@@ -77,6 +79,7 @@ final class DemoMailTest extends DatabaseTestCase
 
     public function testStoringAMessageDeletesMessagesOlderThan48Hours(): void
     {
+        $this->createUser('new@example.com');
         $this->storeMessage('reader@example.com', 'Expired', '49 HOUR');
         $this->storeMessage('someone@example.com', 'Also expired', '2881 MINUTE');
         $this->storeMessage('reader@example.com', 'Recent', '47 HOUR');
@@ -84,6 +87,45 @@ final class DemoMailTest extends DatabaseTestCase
         self::assertTrue(send_mail('new@example.com', '', 'New', '<p>x</p>', 'x'));
 
         self::assertSame(['Recent', 'New'], array_column(db_all('SELECT subject FROM demo_mail ORDER BY id'), 'subject'));
+
+        $this->storeMessage('reader@example.com', 'Expired since', '49 HOUR');
+        purge_expired_demo_mail();
+        self::assertSame(['Recent', 'New'], array_column(db_all('SELECT subject FROM demo_mail ORDER BY id'), 'subject'), 'The inbox page purges too');
+    }
+
+    public function testMailToAnAddressWithoutAccountIsNotStored(): void
+    {
+        $this->createUser('customer@example.com');
+        $this->createAdmin('boss@example.com');
+        $this->storeMessage('someone@example.com', 'Expired', '49 HOUR');
+
+        // Nobody could ever read it, so it is dropped (and the email counts as handled).
+        self::assertTrue(send_mail('nobody@example.com', 'Nobody', 'Lost', '<p>x</p>', 'x'));
+        self::assertTrue(send_mail('Customer@Example.com', '', 'For the customer', '<p>x</p>', 'x'));
+        self::assertTrue(send_mail('boss@example.com', '', 'For the administrator', '<p>x</p>', 'x'));
+
+        self::assertSame(
+            [['customer@example.com', 'For the customer'], ['boss@example.com', 'For the administrator']],
+            array_map(static fn (array $row): array => [$row['recipient'], $row['subject']], db_all('SELECT recipient, subject FROM demo_mail ORDER BY id'))
+        );
+    }
+
+    public function testDeletingAnAccountDeletesItsMailAndStoresNoGoodbye(): void
+    {
+        $user = $this->createUser('leaving@example.com', 'Leaving Reader');
+        $this->createUser('staying@example.com');
+        request_password_reset('leaving@example.com');
+        $this->storeMessage('leaving@example.com', 'Older mail', '1 HOUR');
+        $this->storeMessage('staying@example.com', 'Their mail');
+        self::assertSame(2, $this->countRows('demo_mail', 'recipient = ?', ['leaving@example.com']));
+
+        $result = delete_customer_account((int) $user['id'], self::DEFAULT_PASSWORD, '203.0.113.20');
+        self::assertSame('deleted', $result['status']);
+        self::assertNotNull($result['account']);
+        send_account_deleted_email($result['account']);
+
+        self::assertSame(0, $this->countRows('demo_mail', 'recipient = ?', ['leaving@example.com']), 'Its mail, and no "account deleted" notice nobody could read');
+        self::assertSame(['Their mail'], array_column(db_all('SELECT subject FROM demo_mail'), 'subject'));
     }
 
     public function testNothingIsStoredOutsideDemoMode(): void

@@ -13,9 +13,10 @@ use BookWise\Tests\Support\HttpTestCase;
 /**
  * The demo inbox (inbox.php) with APP_DEMO=true and MAIL_DRIVER=database:
  * a browser reads only the mail of the account it is signed in to and of
- * the accounts it created by signing up, never mail it merely triggered for
- * someone else's address; messages are escaped, link only to the store and
- * keep their own language and direction.
+ * the accounts it created by signing up (in a renewed session), never mail
+ * it merely triggered for someone else's address; messages are escaped,
+ * link only to the store, keep their own language and direction, and go
+ * when they expire or their account is deleted.
  */
 final class DemoInboxTest extends HttpTestCase
 {
@@ -23,7 +24,8 @@ final class DemoInboxTest extends HttpTestCase
 
     private const PASSWORD = 'a-Strong-passphrase-1';
     private const VERIFY_SUBJECT = 'Confirm your BookWise email address';
-    private const NOTICE = 'This demo store sends no real email: the password reset and confirmation emails for your account appear in the demo inbox.';
+    private const NOTICE = 'This demo store sends no real email. Emails to the account you are logged in to, and to the accounts you created in this browser session, appear in the demo inbox.'
+        . " Once the session ends, for example when you log out, an account's emails can only be read by logging in to it.";
     private const GUEST_TEXT = 'Sign up, or log in, to read the emails this store sends you.';
 
     protected function setUp(): void
@@ -137,6 +139,7 @@ final class DemoInboxTest extends HttpTestCase
         self::assertSame('Demo inbox', $inbox->text('//h1'));
         self::assertSame('page', $inbox->first('//nav//a[@href="inbox.php"]')?->getAttribute('aria-current'));
         self::assertStringContainsString('are deleted after 48 hours', $inbox->text());
+        self::assertStringContainsString("to the accounts you created in this browser session. Once the session ends, for example when you log out, an account's emails can only be read by logging in to it.", $inbox->text());
         self::assertSame(self::GUEST_TEXT, $inbox->text('//div[' . HtmlDocument::hasClass('inbox-guest') . ']/p[1]'));
         self::assertSame([], self::listed($inbox));
     }
@@ -171,6 +174,34 @@ final class DemoInboxTest extends HttpTestCase
         // The link from the inbox confirms the account.
         $this->assertRedirect($this->confirm($creator, $links[0]), 'Home_Page.php');
         self::assertSame([self::VERIFY_SUBJECT], self::subjects($this->inbox($creator)), 'Signed in, the customer still reads it');
+
+        // Logging out ends the session, and with it access to the account it created.
+        $this->assertRedirect($creator->submitForm($creator->get('Home_Page.php'), 'logout.php'), 'index.php?form=login');
+        self::assertSame([], self::listed($this->inbox($creator)));
+        $this->assertHtmlPage($creator->get($listed[0]['href']), 404);
+    }
+
+    public function testSignUpRenewsTheSessionSoAPlantedSessionIdReadsNothing(): void
+    {
+        // An attacker starts a valid session and plants its ID in the victim's browser.
+        $attacker = $this->client();
+        $this->assertHtmlPage($attacker->get('index.php?form=signup'));
+        $planted = (string) $attacker->cookie(self::SESSION_COOKIE);
+        self::assertNotSame('', $planted);
+        $victim = $this->client();
+        $victim->setCookie(self::SESSION_COOKIE, $planted);
+        $this->assertHtmlPage($victim->get('index.php?form=signup'));
+        $plantedToken = $victim->csrfToken();
+
+        $this->assertRedirect($this->signUp($victim, self::uniqueEmail('inbox-fixation'), 'Planted Reader', self::PASSWORD), 'index.php?form=verify');
+        self::assertNotSame($planted, $victim->cookie(self::SESSION_COOKIE), 'A new session ID, as at login');
+        $this->assertHtmlPage($victim->get('index.php?form=verify'));
+        self::assertNotSame($plantedToken, $victim->csrfToken(), 'And a new CSRF token');
+
+        $victimList = self::listed($this->inbox($victim));
+        self::assertSame([self::VERIFY_SUBJECT], array_column($victimList, 'subject'));
+        self::assertSame([], self::listed($this->inbox($attacker)), 'The planted session ID grants nothing');
+        $this->assertHtmlPage($attacker->get($victimList[0]['href']), 404);
     }
 
     public function testTypingSomeoneElsesAddressNeverRevealsTheirMail(): void
@@ -335,15 +366,33 @@ final class DemoInboxTest extends HttpTestCase
         self::assertDoesNotMatchRegularExpression('/\b(?:mail|common|auth)\.[a-z_]+\.[a-z_]/', $inbox->html, 'No untranslated keys');
     }
 
-    public function testExpiredMessagesAreHidden(): void
+    public function testExpiredMessagesAreHiddenAndDeletedWhenTheInboxIsOpened(): void
     {
         [$client, $user] = $this->verifiedCustomer();
         $old = $this->storeMessage((string) $user['Eaddress'], 'Two days old', age: '49 HOUR');
+        $someoneElses = $this->storeMessage(self::uniqueEmail('inbox-quiet'), 'Also two days old', age: '49 HOUR');
 
         $inbox = $this->inbox($client);
         self::assertSame([], self::listed($inbox));
         self::assertSame('No emails yet.', $inbox->text('//p[' . HtmlDocument::hasClass('inbox-empty') . ']'));
+        self::assertSame(0, $this->countRows('demo_mail', 'id IN (?, ?)', [$old, $someoneElses]), 'Every expired message is deleted');
         $this->assertHtmlPage($client->get('inbox.php?id=' . $old), 404);
+    }
+
+    public function testDeletingTheAccountDeletesItsMail(): void
+    {
+        [$client, $user] = $this->verifiedCustomer('inbox-leaving');
+        $email = (string) $user['Eaddress'];
+        $this->storeMessage($email, 'Reset your BookWise password', 'Hello Inbox Customer');
+        self::assertSame(['Reset your BookWise password'], self::subjects($this->inbox($client)));
+
+        $page = $client->get('profilePage.php?section=delete');
+        $this->assertStatus(200, $page);
+        $deleted = $client->submitForm($page, 'profilePage.php', ['delete_password' => self::DEFAULT_PASSWORD, 'confirm_delete' => 'yes'], ['action' => 'delete_account']);
+        $this->assertRedirect($deleted, 'Home_Page.php');
+
+        self::assertNull(find_user((int) $user['id']));
+        self::assertSame(0, $this->countRows('demo_mail', 'recipient = ?', [$email]), 'Its mail, and no "account deleted" notice that nobody could read');
     }
 
     public function testTheInboxOnlyAnswersGetRequests(): void

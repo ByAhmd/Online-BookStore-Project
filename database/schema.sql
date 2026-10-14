@@ -219,7 +219,8 @@ CREATE TABLE login_attempts (
 
 -- Demo inbox (APP_DEMO=true with MAIL_DRIVER=database): emails stored instead
 -- of sent and shown on inbox.php. Rows older than 48 hours are deleted
--- whenever a new message is stored.
+-- whenever a message is stored or the inbox is opened, and a customer's rows
+-- when the account is deleted.
 CREATE TABLE demo_mail (
     id         INT          NOT NULL AUTO_INCREMENT,
     recipient  VARCHAR(255) NOT NULL COMMENT 'Email address the message was sent to',

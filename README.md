@@ -341,11 +341,15 @@ Every email has a plain-text and an HTML part. `MAIL_DRIVER` decides where it go
   - A server that does not answer makes the email fail after `SMTP_TIMEOUT` seconds (10 by default), so a page never hangs on it.
     Failures are logged in `app.log` as `Email delivery failed` (never with the password); visitors see the usual answer.
 - **`database`** is the **demo inbox**, for a public demo without an email provider. It only works with `APP_DEMO=true`; otherwise every email fails and an error is logged.
-  Emails are stored in the `demo_mail` table instead of being sent, deleted after 48 hours, and shown on `inbox.php` (the **Inbox** link in the header).
+  Emails are stored in the `demo_mail` table instead of being sent, and shown on `inbox.php` (the **Inbox** link in the header).
+  After 48 hours they are hidden, and deleted the next time an email is stored or the inbox is opened.
   - A browser sees only the emails of the account it is logged in to, and of the accounts it created by signing up in the same browser session.
     Signing up with an address that already has an account, or asking for a password reset or a new confirmation link for it, never makes that account's emails readable.
     Nobody can therefore read another person's confirmation or reset links. An administrator sees only the emails sent to their own address.
-  - When an address is registered again after its account was deleted, the emails left over from the deleted account are removed first.
+  - A successful sign-up gives the browser a new session ID and CSRF token, as logging in does, so a session ID planted in the browser beforehand cannot read the new account's emails.
+    Access to an account created this way ends with the session (see [Known limitations](#known-limitations)).
+  - Deleting an account deletes its emails. Emails to an address without an account, such as the account-deleted notice, are not stored, because nobody could read them.
+    Emails left over for an address without an account are also removed before the address is registered again.
   - Emails are shown as plain text, in their own language and text direction. Only links to the store (`APP_URL`) are clickable; the HTML part is stored but never displayed.
   - The demo banner and the notes on the password reset and confirmation pages point to the inbox.
 - **`null`** discards every email. Use it with `REQUIRE_EMAIL_VERIFICATION=false`, or new customers can never confirm their address.
@@ -457,7 +461,7 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job
   - `public/uploads/.htaccess` prevents script execution on Apache.
 - **Input encoding:** text that is not valid UTF-8 is rejected as empty input rather than reaching the database.
 - **Demo inbox:** a browser reads only the emails of the account it is logged in to and of the accounts it created by signing up; typing an address into a form never shows its emails (see [Email](#email)).
-  Messages are escaped, link only to the store, and are sent with `Cache-Control: no-store`.
+  Signing up renews the session ID, as logging in does. Messages are escaped, link only to the store, and are sent with `Cache-Control: no-store`.
 - **Secrets:** read only from the environment. `.env` is git-ignored, and `.env.example` contains placeholders only.
 - **Headers:** `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` and HSTS when served over HTTPS.
 
@@ -492,6 +496,10 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job
 - **No sign-up rate limit:** only verification and sign-up notice emails are limited, to one per account every few minutes.
 - **The demo inbox reveals registered addresses:** after signing up, a confirmation email appears in the browser's inbox only when the address was new.
   The sign-up page itself still gives the same answer either way. This only applies to a demo with `MAIL_DRIVER=database`, which holds no real accounts.
+- **Demo inbox access to a new account ends with the browser session:** without logging in, an account's emails can only be read in the browser session that created it.
+  Once that session ends (logging out, closing the browser or 2 hours of inactivity), a forgotten password cannot be reset from the demo.
+  An account that was never confirmed cannot be confirmed any more, and its address stays taken until the demo data is reset.
+  This follows from the rule that nobody may read another person's emails.
 - **The free live demo** sleeps after 15 minutes without visitors (the first request then takes about a minute) and loses uploaded images on every restart. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#limits-of-the-free-demo).
 - **The original database could not be fully recovered:** the original repository shipped raw MariaDB data files instead of an SQL export.
   The table definitions and the 55-book catalog were recovered from them and form `schema.sql`/`seed.sql`.

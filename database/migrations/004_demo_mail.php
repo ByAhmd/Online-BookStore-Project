@@ -5,8 +5,9 @@ declare(strict_types=1);
 /**
  * 004 — demo_mail: the demo inbox. With APP_DEMO=true and
  * MAIL_DRIVER=database, emails are stored here instead of being sent and
- * shown on inbox.php. Rows older than 48 hours are deleted whenever a new
- * message is stored.
+ * shown on inbox.php. Rows older than 48 hours are deleted whenever a
+ * message is stored or the inbox is opened, and a customer's rows when the
+ * account is deleted.
  */
 return static function (PDO $pdo): void {
     if (!db_table_exists('demo_mail')) {

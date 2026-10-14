@@ -10,7 +10,7 @@ return [
             'one' => 'This demo store sends no real email. The emails it would send you, such as confirmation and password reset links, appear here instead and are deleted after :count hour.',
             'other' => 'This demo store sends no real email. The emails it would send you, such as confirmation and password reset links, appear here instead and are deleted after :count hours.',
         ],
-        'rule' => 'You can read the emails sent to the account you are logged in to, and to the accounts you created in this browser.',
+        'rule' => "You can read the emails sent to the account you are logged in to, and to the accounts you created in this browser session. Once the session ends, for example when you log out, an account's emails can only be read by logging in to it.",
         'rule_admin' => 'As an administrator, you can read the emails sent to your own address.',
         'addresses' => 'Emails sent to',
         'guest' => 'Sign up, or log in, to read the emails this store sends you.',
