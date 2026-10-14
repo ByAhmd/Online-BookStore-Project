@@ -80,8 +80,10 @@ final class StripeMock
             proc_close($this->process);
         }
         $this->process = null;
-        @unlink($this->storeFile);
-        @unlink($this->logFile);
+        // The simulator's state, plus the lock and temporary files it keeps next to it.
+        foreach ([$this->storeFile, $this->storeFile . '.lock', $this->storeFile . '.tmp', $this->logFile] as $file) {
+            @unlink($file);
+        }
     }
 
     /**

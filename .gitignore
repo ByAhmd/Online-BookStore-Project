@@ -9,7 +9,7 @@
 # Runtime output
 /storage/logs/*
 !/storage/logs/.gitkeep
-/storage/payment-simulator.json
+/storage/payment-simulator.json*
 /public/uploads/avatars/*
 !/public/uploads/avatars/.gitkeep
 /public/uploads/covers/*

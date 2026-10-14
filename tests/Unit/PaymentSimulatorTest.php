@@ -33,7 +33,10 @@ final class PaymentSimulatorTest extends TestCase
         if ($this->previousHttpClient !== null) {
             ApiRequestor::setHttpClient($this->previousHttpClient);
         }
-        @unlink($this->store);
+        // The state file, its .lock file and whatever a test left next to them.
+        foreach (glob(dirname($this->store) . DIRECTORY_SEPARATOR . '*') ?: [] as $path) {
+            is_dir($path) ? @rmdir($path) : @unlink($path);
+        }
         @rmdir(dirname($this->store));
     }
 
@@ -331,15 +334,47 @@ final class PaymentSimulatorTest extends TestCase
         self::assertSame(404, $this->api('GET', "/v1/checkout/sessions/$id")[0]);
     }
 
-    public function testAnUnreadableStateFileStartsAfresh(): void
+    public function testAnUnreadableStateFileIsMovedAsideAndTheSimulatorStartsAfresh(): void
     {
         mkdir(dirname($this->store), 0700, true);
         file_put_contents($this->store, '{not json');
+        $log = log_path('app.log');
+        clearstatcache();
+        $logSize = is_file($log) ? (int) filesize($log) : 0;
 
         $id = $this->createSession()['id'];
 
         $state = json_decode((string) file_get_contents($this->store), true);
         self::assertSame([$id], array_keys($state['sessions']));
+        $aside = glob($this->store . '.unreadable-*') ?: [];
+        self::assertCount(1, $aside, 'The unreadable file is kept, not overwritten');
+        self::assertSame('{not json', file_get_contents($aside[0]));
+        self::assertStringContainsString(
+            'WARNING: The payment simulator could not read its state file; it was moved aside',
+            (string) file_get_contents($log, false, null, $logSize)
+        );
+    }
+
+    public function testAFailedSaveIsReportedAndKeepsThePreviousState(): void
+    {
+        $id = $this->createSession()['id'];
+        $before = (string) file_get_contents($this->store);
+        // The temporary file the state is written to cannot be created.
+        mkdir($this->store . '.tmp');
+
+        try {
+            payment_simulator_checkout_action($id, 'pay', $this->store);
+            self::fail('A failed save must not look like a saved payment');
+        } catch (\RuntimeException $e) {
+            self::assertSame("The payment simulator cannot save {$this->store}", $e->getMessage());
+        }
+        self::assertSame($before, file_get_contents($this->store), 'The previous state is intact');
+        self::assertSame('open', payment_simulator_session($id, $this->store)['status'] ?? null);
+
+        // stripe-php sees a connection problem, so the store retries or reports it.
+        $client = new PaymentSimulatorHttpClient($this->store);
+        $this->expectException(ApiConnectionException::class);
+        $client->request('post', PAYMENT_SIMULATOR_API_BASE . "/v1/checkout/sessions/$id/expire", [], [], false);
     }
 
     public function testAMissingStoreDirectoryIsReportedAsAConnectionProblem(): void

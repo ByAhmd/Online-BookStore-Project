@@ -74,12 +74,16 @@ function payment_simulator_store_path(): string
  * past their expires_at are expired, slow payments past their processing time
  * succeed, and records past their retention are dropped.
  *
+ * The lock is held on a separate file ($store.lock), so the state can be saved
+ * atomically (see payment_simulator_save()): a failed save, for example on a
+ * full disk, throws and leaves the previous state as it was.
+ *
  * @template T
  * @param callable(array{sessions: array<string, array<string, mixed>>, refunds: array<string, array<string, mixed>>, idempotency: array<string, array<string, mixed>>}): T $change
  *        Receives the state by reference.
  * @param string|null $store State file; default payment_simulator_store_path()
  * @return T
- * @throws RuntimeException when the state file cannot be created, opened or locked
+ * @throws RuntimeException when the state file cannot be created, locked, read or saved
  */
 function payment_simulator_transaction(callable $change, ?string $store = null): mixed
 {
@@ -88,31 +92,75 @@ function payment_simulator_transaction(callable $change, ?string $store = null):
     if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
         throw new RuntimeException("The payment simulator cannot create the directory $directory");
     }
-    $handle = @fopen($store, 'c+');
-    if ($handle === false) {
-        throw new RuntimeException("The payment simulator cannot open $store");
+    $lock = @fopen($store . '.lock', 'c');
+    if ($lock === false) {
+        throw new RuntimeException("The payment simulator cannot open $store.lock");
     }
     try {
-        if (!flock($handle, LOCK_EX)) {
-            throw new RuntimeException("The payment simulator cannot lock $store");
+        if (!flock($lock, LOCK_EX)) {
+            throw new RuntimeException("The payment simulator cannot lock $store.lock");
         }
-        $saved = (string) stream_get_contents($handle);
-        $state = payment_simulator_normalize_state(json_decode($saved, true));
+        [$saved, $decoded] = payment_simulator_load($store);
+        $state = payment_simulator_normalize_state($decoded);
         payment_simulator_refresh($state, time());
 
         $result = $change($state);
 
         $encoded = json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
         if ($encoded !== $saved) {
-            ftruncate($handle, 0);
-            rewind($handle);
-            fwrite($handle, $encoded);
-            fflush($handle);
+            payment_simulator_save($store, $encoded);
         }
         return $result;
     } finally {
-        flock($handle, LOCK_UN);
-        fclose($handle);
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
+/**
+ * Reads the saved state: the file's contents ('' when there is none yet) and
+ * their decoded JSON. A file that does not hold JSON (edited by hand, for
+ * example) is never overwritten: it is moved aside to
+ * $store.unreadable-<date>-<time> and the simulator starts afresh.
+ *
+ * @return array{0: string, 1: array<mixed>}
+ * @throws RuntimeException when the file cannot be read or moved aside
+ */
+function payment_simulator_load(string $store): array
+{
+    if (!file_exists($store)) {
+        return ['', []];
+    }
+    $saved = @file_get_contents($store);
+    if ($saved === false) {
+        throw new RuntimeException("The payment simulator cannot read $store");
+    }
+    $decoded = $saved === '' ? [] : json_decode($saved, true);
+    if (is_array($decoded)) {
+        return [$saved, $decoded];
+    }
+
+    $aside = $store . '.unreadable-' . date('Ymd-His');
+    if (!@rename($store, $aside)) {
+        throw new RuntimeException("The payment simulator cannot read $store, nor move it aside");
+    }
+    app_log('warning', 'The payment simulator could not read its state file; it was moved aside and the simulator starts afresh', ['file' => basename($aside)]);
+    return ['', []];
+}
+
+/**
+ * Saves the state atomically: it is written to $store.tmp, which then
+ * replaces $store. A failed or short write never leaves a partial state file.
+ * The caller holds the lock, so one temporary file is enough.
+ *
+ * @throws RuntimeException when the state cannot be saved; the previous state is kept
+ */
+function payment_simulator_save(string $store, string $encoded): void
+{
+    $temporary = $store . '.tmp';
+    if (@file_put_contents($temporary, $encoded) !== strlen($encoded) || !@rename($temporary, $store)) {
+        @unlink($temporary);
+        throw new RuntimeException("The payment simulator cannot save $store");
     }
 }
 
