@@ -157,12 +157,7 @@ final class HtmlDocument
                     continue 2;
                 }
             }
-            return new HtmlForm(
-                $formAction,
-                strtoupper($form->getAttribute('method') ?: 'GET'),
-                strtolower($form->getAttribute('enctype') ?: 'application/x-www-form-urlencoded'),
-                $fields
-            );
+            return $this->htmlForm($form);
         }
         throw new RuntimeException(sprintf(
             "No form posting to \"%s\" with %s on this page. Forms found:\n%s",
@@ -170,6 +165,33 @@ final class HtmlDocument
             json_encode($match),
             implode("\n", $candidates)
         ));
+    }
+
+    /**
+     * Every form of the page, in document order.
+     *
+     * @return list<HtmlForm>
+     */
+    public function forms(): array
+    {
+        return array_map(fn (DOMElement $form): HtmlForm => $this->htmlForm($form), $this->elements('//form'));
+    }
+
+    private function htmlForm(DOMElement $form): HtmlForm
+    {
+        $fileFields = [];
+        foreach ($this->elements('.//input[@type="file"][@name]', $form) as $input) {
+            if (!$input->hasAttribute('disabled')) {
+                $fileFields[] = $input->getAttribute('name');
+            }
+        }
+        return new HtmlForm(
+            $form->getAttribute('action'),
+            strtoupper($form->getAttribute('method') ?: 'GET'),
+            strtolower($form->getAttribute('enctype') ?: 'application/x-www-form-urlencoded'),
+            $this->formFields($form),
+            $fileFields
+        );
     }
 
     /**

@@ -19,6 +19,8 @@ if ($order === null) {
 $orderUrl = 'admin_order.php?id=' . $id;
 
 if (is_post()) {
+    // Read-only administrators may look but never change anything (refunds and every other action).
+    require_admin_write();
     verify_csrf();
     $action = input_string($_POST, 'action', 50);
 
@@ -92,6 +94,9 @@ $shipmentAria = static function (string $field, string $hintId) use ($shipmentEr
     $describedBy = array_filter([$hintId, $shipmentErrors[$field] !== null ? 'shipment-' . $field . '-error' : null]);
     return ($shipmentErrors[$field] !== null ? ' aria-invalid="true"' : '') . ' aria-describedby="' . e(implode(' ', $describedBy)) . '"';
 };
+// Read-only administrators see the actions switched off and the customer's details shortened.
+$locked = admin_can_write() ? '' : ' disabled';
+$showCustomers = admin_sees_customer_details();
 
 page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashboard.css']);
 ?>
@@ -148,9 +153,12 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
 
                 <section class="admin-content" aria-labelledby="order-customer-title">
                     <h2 id="order-customer-title"><?= e(t('admin.order.customer')) ?></h2>
-<?php if ($order['customer_email'] !== null): ?>
+<?php if ($order['customer_email'] !== null && $showCustomers): ?>
                     <p class="customer-name" dir="auto"><?= e($order['customer_name']) ?></p>
                     <p class="customer-email"><a href="mailto:<?= e(rawurlencode((string) $order['customer_email'])) ?>"><?= e($order['customer_email']) ?></a></p>
+<?php elseif ($order['customer_email'] !== null): ?>
+                    <p class="customer-name" dir="auto"><?= e(masked_name((string) $order['customer_name'])) ?></p>
+                    <p class="customer-email"><?= e(masked_email((string) $order['customer_email'])) ?></p>
 <?php else: ?>
                     <p class="customer-name customer-deleted"><?= e(t('admin.orders.deleted_account')) ?></p>
 <?php endif; ?>
@@ -255,7 +263,7 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
                     <form method="post" action="<?= e($orderUrl) ?>" data-confirm="<?= e(t('admin.order.refund_confirm', ['id' => (int) $order['id'], 'amount' => $total])) ?>" data-once>
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="refund">
-                        <button type="submit" class="btn btn-danger" aria-describedby="refund-help"><?= e(t('admin.order.refund_button')) ?></button>
+                        <button type="submit" class="btn btn-danger" aria-describedby="refund-help"<?= $locked ?>><?= e(t('admin.order.refund_button')) ?></button>
                     </form>
 <?php elseif ($status === 'refunded'): ?>
                     <p><?= e(t('admin.order.refunded_note')) ?></p>

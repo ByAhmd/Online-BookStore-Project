@@ -22,6 +22,8 @@ $errors = [];
 $stockShown = (int) $book['stock'];
 
 if (is_post()) {
+    // Read-only administrators may look but never change anything.
+    require_admin_write();
     verify_csrf();
     if (input_string($_POST, 'action', 50) !== 'update_book') {
         abort(400, t('admin.edit.unknown_action'));
@@ -95,6 +97,8 @@ $fieldError = static function (string $field) use ($errors): string {
 $addedOn = new DateTimeImmutable((string) $book['created_at']);
 $stock = (int) $book['stock'];
 $currency = strtoupper((string) config('stripe.currency'));
+// Read-only administrators see the form switched off.
+$locked = admin_can_write() ? '' : ' disabled';
 
 page_header(t('admin.edit.title'), ['Admin_dashboard.css']);
 ?>
@@ -131,19 +135,19 @@ page_header(t('admin.edit.title'), ['Admin_dashboard.css']);
 
                         <div class="form-field">
                             <label for="book-title"><?= e(t('admin.form.title')) ?></label>
-                            <input class="form-control" type="text" id="book-title" name="title" maxlength="255" required dir="auto" value="<?= e($values['title']) ?>"<?= $describe('title') ?>>
+                            <input class="form-control" type="text" id="book-title" name="title" maxlength="255" required dir="auto" value="<?= e($values['title']) ?>"<?= $locked ?><?= $describe('title') ?>>
                             <?= $fieldError('title') ?>
                         </div>
 
                         <div class="form-field">
                             <label for="book-author"><?= e(t('admin.form.author')) ?></label>
-                            <input class="form-control" type="text" id="book-author" name="author" maxlength="255" required dir="auto" value="<?= e($values['author']) ?>"<?= $describe('author') ?>>
+                            <input class="form-control" type="text" id="book-author" name="author" maxlength="255" required dir="auto" value="<?= e($values['author']) ?>"<?= $locked ?><?= $describe('author') ?>>
                             <?= $fieldError('author') ?>
                         </div>
 
                         <div class="form-field">
                             <label for="book-genre"><?= e(t('admin.form.genre')) ?></label>
-                            <input class="form-control" type="text" id="book-genre" name="genre" maxlength="100" list="genre-options" autocomplete="off" required dir="auto" value="<?= e($values['genre']) ?>"<?= $describe('genre') ?>>
+                            <input class="form-control" type="text" id="book-genre" name="genre" maxlength="100" list="genre-options" autocomplete="off" required dir="auto" value="<?= e($values['genre']) ?>"<?= $locked ?><?= $describe('genre') ?>>
                             <datalist id="genre-options">
 <?php foreach ($genres as $genre): ?>
                                 <option value="<?= e($genre) ?>"></option>
@@ -154,39 +158,39 @@ page_header(t('admin.edit.title'), ['Admin_dashboard.css']);
 
                         <div class="form-field">
                             <label for="book-price"><?= e(t('admin.form.price', ['currency' => $currency])) ?></label>
-                            <input class="form-control" type="number" id="book-price" name="price" step="0.01" min="1" max="10000" inputmode="decimal" required value="<?= e($values['price']) ?>"<?= $describe('price') ?>>
+                            <input class="form-control" type="number" id="book-price" name="price" step="0.01" min="1" max="10000" inputmode="decimal" required value="<?= e($values['price']) ?>"<?= $locked ?><?= $describe('price') ?>>
                             <?= $fieldError('price') ?>
                         </div>
 
                         <div class="form-field">
                             <label for="book-stock"><?= e(t('admin.form.stock')) ?></label>
-                            <input class="form-control" type="number" id="book-stock" name="stock" step="1" min="0" max="<?= BOOK_STOCK_MAX ?>" inputmode="numeric" required value="<?= e($values['stock']) ?>"<?= $describe('stock', 'book-stock-hint') ?>>
+                            <input class="form-control" type="number" id="book-stock" name="stock" step="1" min="0" max="<?= BOOK_STOCK_MAX ?>" inputmode="numeric" required value="<?= e($values['stock']) ?>"<?= $locked ?><?= $describe('stock', 'book-stock-hint') ?>>
                             <p class="form-hint" id="book-stock-hint"><?= e(t('admin.form.stock_hint', ['max' => BOOK_STOCK_MAX])) ?></p>
                             <?= $fieldError('stock') ?>
                         </div>
 
                         <div class="form-field form-field-wide">
                             <label for="book-description"><?= e(t('admin.form.description')) ?></label>
-                            <textarea class="form-control" id="book-description" name="description" maxlength="5000" rows="6" required dir="auto"<?= $describe('description') ?>><?= e($values['description']) ?></textarea>
+                            <textarea class="form-control" id="book-description" name="description" maxlength="5000" rows="6" required dir="auto"<?= $locked ?><?= $describe('description') ?>><?= e($values['description']) ?></textarea>
                             <?= $fieldError('description') ?>
                         </div>
 
                         <div class="form-field form-field-wide">
                             <label for="book-cover"><?= e(t('admin.form.cover')) ?></label>
-                            <input class="form-control" type="text" id="book-cover" name="cover_image" maxlength="255" spellcheck="false" dir="ltr" value="<?= e($values['cover_image']) ?>"<?= $describe('cover_image', 'book-cover-hint') ?>>
+                            <input class="form-control" type="text" id="book-cover" name="cover_image" maxlength="255" spellcheck="false" dir="ltr" value="<?= e($values['cover_image']) ?>"<?= $locked ?><?= $describe('cover_image', 'book-cover-hint') ?>>
                             <p class="form-hint" id="book-cover-hint"><?= e(t('admin.form.cover_hint')) ?></p>
                             <?= $fieldError('cover_image') ?>
                         </div>
 
                         <div class="form-field form-field-wide">
                             <label for="book-cover-upload"><?= e(t('admin.form.cover_upload')) ?></label>
-                            <input class="form-control form-file" type="file" id="book-cover-upload" name="cover_upload" accept="image/jpeg,image/png,image/gif,image/webp"<?= $describe('cover_upload', 'book-cover-upload-hint') ?>>
+                            <input class="form-control form-file" type="file" id="book-cover-upload" name="cover_upload" accept="image/jpeg,image/png,image/gif,image/webp"<?= $locked ?><?= $describe('cover_upload', 'book-cover-upload-hint') ?>>
                             <p class="form-hint" id="book-cover-upload-hint"><?= e(t('admin.form.cover_upload_hint')) ?></p>
                             <?= $fieldError('cover_upload') ?>
                         </div>
 
                         <div class="form-actions form-field-wide">
-                            <button type="submit" class="btn admin-submit"><?= e(t('admin.edit.update_button')) ?></button>
+                            <button type="submit" class="btn admin-submit"<?= $locked ?>><?= e(t('admin.edit.update_button')) ?></button>
                             <a class="btn btn-secondary" href="admin_dashboard.php#manage-books"><?= e(t('admin.edit.cancel')) ?></a>
                         </div>
                     </form>

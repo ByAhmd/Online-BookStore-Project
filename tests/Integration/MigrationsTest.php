@@ -95,7 +95,42 @@ final class MigrationsTest extends DatabaseTestCase
         self::assertNull($order['fulfilment_status'], 'Orders paid before 006 have no delivery to track');
         self::assertSame([], run_migrations(), 'Applied once');
     }
+    public function testMigration005AddsAdministratorRolesAndDemoGuests(): void
+    {
+        $tables = ['admins', 'users', 'demo_guest_creations'];
+        $fresh = self::tableDefinitions($tables);
+        $admin = $this->createAdmin();
+        $customer = $this->createUser();
 
+        // A database from before 005.
+        db()->exec('DROP TABLE demo_guest_creations');
+        db()->exec('ALTER TABLE users DROP INDEX idx_users_demo_guest, DROP COLUMN demo_guest_at');
+        db()->exec('ALTER TABLE admins DROP COLUMN role');
+        db_run('DELETE FROM schema_migrations WHERE version = ?', ['005_admin_roles']);
+
+        self::assertSame(['005_admin_roles'], run_migrations());
+        self::assertSame(ADMIN_ROLE_OWNER, db_value('SELECT role FROM admins WHERE Eaddress = ?', [$admin['Eaddress']]), 'Existing administrators keep every right');
+        self::assertNull(db_value('SELECT demo_guest_at FROM users WHERE id = ?', [$customer['id']]), 'Existing customers are not demo guests');
+        self::assertSame($fresh, self::tableDefinitions($tables), 'The same tables as a fresh install from schema.sql');
+        self::assertSame([], run_migrations(), 'Applied once');
+    }
+
+    /**
+     * SHOW CREATE TABLE of each table, without the AUTO_INCREMENT counter.
+     *
+     * @param list<string> $tables
+     * @return array<string, string>
+     */
+    private static function tableDefinitions(array $tables): array
+    {
+        $definitions = [];
+        foreach ($tables as $table) {
+            $row = db_one('SHOW CREATE TABLE `' . $table . '`');
+            self::assertNotNull($row);
+            $definitions[$table] = (string) preg_replace('/ AUTO_INCREMENT=\d+/', '', (string) $row['Create Table']);
+        }
+        return $definitions;
+    }
     public function testACompleteDatabaseWithoutRecordsStartsFromTheBaseline(): void
     {
         // A database created from the first published schema has no record of

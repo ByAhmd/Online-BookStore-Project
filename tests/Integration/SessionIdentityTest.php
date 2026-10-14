@@ -88,7 +88,7 @@ final class SessionIdentityTest extends DatabaseTestCase
         $admin = $this->createAdmin(name: 'Boss');
         $_SESSION = ['admin_email' => $admin['Eaddress'], 'role' => 'admin', 'session_version' => 0];
 
-        self::assertSame(['Eaddress' => $admin['Eaddress'], 'name' => 'Boss'], current_admin());
+        self::assertSame(['Eaddress' => $admin['Eaddress'], 'name' => 'Boss', 'role' => ADMIN_ROLE_OWNER], current_admin());
         self::assertTrue(is_admin());
         self::assertNull(current_user(true), 'An admin session is not a customer session');
     }

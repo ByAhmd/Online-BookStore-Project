@@ -52,6 +52,7 @@ abstract class DatabaseTestCase extends TestCase
         'email_verifications',
         'login_attempts',
         'demo_mail',
+        'demo_guest_creations',
         'admins',
         'users',
     ];

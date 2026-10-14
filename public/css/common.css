@@ -655,6 +655,16 @@ textarea.form-control {
     font-size: 0.95rem;
 }
 
+/* Read-only administrators (role "viewer"): above every page, explaining the switched-off forms. */
+.read-only-note {
+    margin: 0;
+    padding: 10px 16px;
+    background-color: var(--color-info-bg);
+    color: var(--color-info-text);
+    text-align: center;
+    font-weight: 600;
+}
+
 .lang-switch {
     color: var(--color-chrome-text);
     font-weight: 700;

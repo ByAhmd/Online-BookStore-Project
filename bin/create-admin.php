@@ -7,6 +7,13 @@ declare(strict_types=1);
  *
  * Usage:
  *   php bin/create-admin.php admin@example.com "Store Admin"
+ *   php bin/create-admin.php reviewer@example.com "Reviewer" --viewer
+ *
+ * Administrators are owners, who may change everything. With --viewer the
+ * account is read-only instead: it can open every admin page but change
+ * nothing (customers' names and email addresses are shown shortened).
+ * Running the command again for the same email sets the role given (owner
+ * unless --viewer) together with the new password.
  *
  * The password is read from the BOOKWISE_ADMIN_PASSWORD environment variable
  * if set, otherwise prompted for on standard input. It is stored with
@@ -20,11 +27,21 @@ if (PHP_SAPI !== 'cli') {
 
 require __DIR__ . '/../src/bootstrap.php';
 
-$email = normalize_email((string) ($argv[1] ?? ''));
-$name = trim((string) ($argv[2] ?? 'Administrator'));
+$usage = "Usage: php bin/create-admin.php <email> [\"Display Name\"] [--viewer]\n";
+$options = array_values(array_filter(array_slice($argv, 1), static fn (string $argument): bool => str_starts_with($argument, '--')));
+$arguments = array_values(array_filter(array_slice($argv, 1), static fn (string $argument): bool => !str_starts_with($argument, '--')));
+$unknown = array_diff($options, ['--viewer']);
+if ($unknown !== []) {
+    fwrite(STDERR, $usage . 'Unknown option: ' . implode(', ', $unknown) . PHP_EOL);
+    exit(1);
+}
+$role = in_array('--viewer', $options, true) ? ADMIN_ROLE_VIEWER : ADMIN_ROLE_OWNER;
+
+$email = normalize_email((string) ($arguments[0] ?? ''));
+$name = trim((string) ($arguments[1] ?? 'Administrator'));
 
 if (($error = validate_email($email)) !== null) {
-    fwrite(STDERR, "Usage: php bin/create-admin.php <email> [\"Display Name\"]\n$error\n");
+    fwrite(STDERR, "$usage$error\n");
     exit(1);
 }
 if (($error = validate_person_name($name)) !== null) {
@@ -47,16 +64,17 @@ if (($error = validate_new_password($password, $confirm)) !== null) {
     exit(1);
 }
 
+$described = $role === ADMIN_ROLE_VIEWER ? 'read-only administrator' : 'administrator';
 $exists = db_value('SELECT 1 FROM admins WHERE Eaddress = ?', [$email]) !== null;
 if ($exists) {
     // A new password signs out existing sessions and lifts any sign-in lockout.
     db_run(
-        'UPDATE admins SET name = ?, password = ?, session_version = session_version + 1 WHERE Eaddress = ?',
-        [$name, hash_password($password), $email]
+        'UPDATE admins SET name = ?, password = ?, role = ?, session_version = session_version + 1 WHERE Eaddress = ?',
+        [$name, hash_password($password), $role, $email]
     );
     clear_failed_logins($email);
-    echo "Updated administrator $email (other sessions signed out, sign-in lockout cleared)." . PHP_EOL;
+    echo "Updated $described $email (other sessions signed out, sign-in lockout cleared)." . PHP_EOL;
 } else {
-    db_run('INSERT INTO admins (Eaddress, name, password) VALUES (?, ?, ?)', [$email, $name, hash_password($password)]);
-    echo "Created administrator $email." . PHP_EOL;
+    db_run('INSERT INTO admins (Eaddress, name, password, role) VALUES (?, ?, ?, ?)', [$email, $name, hash_password($password), $role]);
+    echo "Created $described $email." . PHP_EOL;
 }

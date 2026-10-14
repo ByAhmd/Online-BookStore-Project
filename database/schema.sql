@@ -34,16 +34,21 @@ CREATE TABLE users (
     session_version INT         NOT NULL DEFAULT 0 COMMENT 'Incremented on password change to sign out other sessions',
     email_verified_at DATETIME  NULL DEFAULT NULL COMMENT 'Set when the address is confirmed',
     locale         VARCHAR(5)   NOT NULL DEFAULT 'en' COMMENT 'Interface/email language',
+    demo_guest_at  DATETIME     NULL DEFAULT NULL COMMENT 'Set for throwaway demo customers, which are deleted after 24 hours',
     PRIMARY KEY (id),
-    UNIQUE KEY uq_users_email (Eaddress)
+    UNIQUE KEY uq_users_email (Eaddress),
+    KEY idx_users_demo_guest (demo_guest_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Administrator accounts (managed with bin/create-admin.php).
+-- Administrator accounts (managed with bin/create-admin.php). Owners may
+-- change everything; viewers (bin/create-admin.php --viewer, and the demo's
+-- shared administrator) may open every admin page but change nothing.
 CREATE TABLE admins (
     Eaddress VARCHAR(255) NOT NULL,
     name     VARCHAR(255) NULL DEFAULT NULL,
     password VARCHAR(255) NOT NULL COMMENT 'password_hash() output',
     session_version INT   NOT NULL DEFAULT 0 COMMENT 'Incremented on password change to sign out other sessions',
+    role     ENUM('owner', 'viewer') NOT NULL DEFAULT 'owner' COMMENT 'owner: may change everything; viewer: read-only',
     PRIMARY KEY (Eaddress)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -283,6 +288,18 @@ CREATE TABLE demo_mail (
     KEY idx_demo_mail_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- One-click demo customers (APP_DEMO=true): when, and from which address, each
+-- was created, to limit how many one visitor can create per hour. Rows older
+-- than a day are deleted whenever a demo customer is created or cleaned up.
+CREATE TABLE demo_guest_creations (
+    id         INT         NOT NULL AUTO_INCREMENT,
+    ip_address VARCHAR(45) NOT NULL,
+    created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_demo_guest_creations_ip_time (ip_address, created_at),
+    KEY idx_demo_guest_creations_time (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Applied schema migrations (see src/migrations.php and bin/migrate.php).
 CREATE TABLE schema_migrations (
     version    VARCHAR(100) NOT NULL,
@@ -295,4 +312,5 @@ INSERT INTO schema_migrations (version) VALUES
     ('002_accounts_commerce_i18n'),
     ('003_order_stock_taken'),
     ('004_demo_mail'),
+    ('005_admin_roles'),
     ('006_order_fulfilment');

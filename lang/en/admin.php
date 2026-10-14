@@ -121,6 +121,9 @@ return [
         'fulfilment_hint' => 'Lists paid orders at that stage.',
         'search_label' => 'Order number or customer email',
         'search_placeholder' => 'e.g. 42 or reader@example.com',
+        // Read-only administrators search by order number only.
+        'search_label_number' => 'Order number',
+        'search_placeholder_number' => 'e.g. 42',
         'apply' => 'Show orders',
         'reset' => 'Clear filters',
         'list_title' => 'Order list',
@@ -219,5 +222,11 @@ return [
         'failed' => 'Stripe could not refund this order right now, so nothing was changed. Please try again later or refund it in the Stripe Dashboard.',
         'done' => 'Order #:id was refunded.',
         'already' => 'Order #:id was already refunded.',
+    ],
+
+    // Read-only administrators (role "viewer"), such as the demo's shared administrator.
+    'read_only' => [
+        'note' => "You are signed in as a read-only demo administrator. You can open every page, but the forms are switched off and nothing can be changed. Customers' names and email addresses are shortened.",
+        'view' => 'View',
     ],
 ];

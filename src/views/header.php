@@ -106,6 +106,9 @@ $flashes = take_flashes();
     </header>
 
     <main id="main-content" class="site-main" tabindex="-1">
+<?php if ($navAdmin !== null && ($navAdmin['role'] ?? null) !== ADMIN_ROLE_OWNER): ?>
+        <p class="read-only-note" role="note"><?= e(t('admin.read_only.note')) ?></p>
+<?php endif; ?>
 <?php if ($flashes !== []): ?>
         <div class="flash-stack">
 <?php foreach ($flashes as $flash): ?>

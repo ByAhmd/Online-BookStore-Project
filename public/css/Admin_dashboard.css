@@ -135,6 +135,13 @@
     border: 2px solid var(--color-accent);
 }
 
+/* Read-only administrators: the switched-off fields stay easy to read. */
+.admin-page .form-control:disabled {
+    background-color: var(--color-surface-muted);
+    color: var(--color-text);
+    cursor: not-allowed;
+}
+
 .admin-page .form-hint {
     margin: 0;
 }

@@ -128,6 +128,7 @@ return [
         'admin_shop' => 'Administrator accounts manage the catalog. Sign in with a customer account to shop.',
         'admin_login_required' => 'Please log in with an administrator account.',
         'admin_forbidden' => 'You do not have permission to access the admin area.',
+        'admin_read_only' => 'You are signed in as a read-only demo administrator, so nothing can be changed. You can still open every admin page.',
     ],
 
     'errors' => [

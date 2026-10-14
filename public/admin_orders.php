@@ -21,8 +21,13 @@ if (!in_array($fulfilment, FULFILMENT_STATUSES, true)) {
     $fulfilment = '';
 }
 $query = input_string($_GET, 'q', 255);
+// Read-only administrators see customers' details shortened, so they search by order number only.
+$showCustomers = admin_sees_customer_details();
+$searchable = $showCustomers || $query === '' || preg_match('/^#?\d{1,10}$/D', $query) === 1;
 
-$listing = admin_order_list($status, $query, $_GET['page'] ?? null, $fulfilment);
+$listing = $searchable
+    ? admin_order_list($status, $query, $_GET['page'] ?? null, $fulfilment)
+    : ['orders' => [], 'pagination' => paginate(0, ADMIN_PAGE_SIZE, 1)];
 $orders = $listing['orders'];
 $pagination = $listing['pagination'];
 $filtered = $status !== '' || $fulfilment !== '' || $query !== '';
@@ -77,8 +82,8 @@ page_header(t('admin.orders.title'), ['Admin_dashboard.css']);
                         </select>
                     </div>
                     <div class="form-field">
-                        <label for="order-search"><?= e(t('admin.orders.search_label')) ?></label>
-                        <input class="form-control" type="search" id="order-search" name="q" maxlength="255" dir="ltr" value="<?= e($query) ?>" placeholder="<?= e(t('admin.orders.search_placeholder')) ?>" autocomplete="off" spellcheck="false">
+                        <label for="order-search"><?= e(t($showCustomers ? 'admin.orders.search_label' : 'admin.orders.search_label_number')) ?></label>
+                        <input class="form-control" type="search" id="order-search" name="q" maxlength="255" dir="ltr" value="<?= e($query) ?>" placeholder="<?= e(t($showCustomers ? 'admin.orders.search_placeholder' : 'admin.orders.search_placeholder_number')) ?>" autocomplete="off" spellcheck="false">
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn admin-submit"><?= e(t('admin.orders.apply')) ?></button>
@@ -121,8 +126,13 @@ page_header(t('admin.orders.title'), ['Admin_dashboard.css']);
                                 <td><?= $formatDate($order['created_at']) ?></td>
                                 <td>
 <?php if ($order['customer_email'] !== null): ?>
+<?php if ($showCustomers): ?>
                                     <span class="customer-name" dir="auto"><?= e($order['customer_name']) ?></span>
                                     <span class="customer-email"><?= $breakableEmail((string) $order['customer_email']) ?></span>
+<?php else: ?>
+                                    <span class="customer-name" dir="auto"><?= e(masked_name((string) $order['customer_name'])) ?></span>
+                                    <span class="customer-email"><?= e(masked_email((string) $order['customer_email'])) ?></span>
+<?php endif; ?>
 <?php else: ?>
                                     <span class="customer-name customer-deleted"><?= e(t('admin.orders.deleted_account')) ?></span>
 <?php endif; ?>

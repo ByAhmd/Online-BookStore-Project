@@ -9,6 +9,11 @@ const LOGIN_MAX_ATTEMPTS_PER_IP = 20;
 const LOGIN_MAX_ATTEMPTS_PER_EMAIL_GLOBAL = 100;
 const LOGIN_LOCKOUT_MINUTES = 15;
 
+/** Administrators who may change everything: the catalog, covers, orders and refunds. */
+const ADMIN_ROLE_OWNER = 'owner';
+/** Administrators who may open every admin page but change nothing. */
+const ADMIN_ROLE_VIEWER = 'viewer';
+
 /* ---------------------------------------------------------------------
  * Password hashing
  * ------------------------------------------------------------------- */
@@ -233,7 +238,7 @@ function current_user(bool $refresh = false): ?array
 }
 
 /**
- * The signed-in administrator, or null.
+ * The signed-in administrator (Eaddress, name, role), or null.
  *
  * @return array<string, mixed>|null
  */
@@ -245,7 +250,7 @@ function current_admin(): ?array
         return null;
     }
     if (!array_key_exists($email, $cache)) {
-        $row = db_one('SELECT Eaddress, name, session_version FROM admins WHERE Eaddress = ?', [$email]);
+        $row = db_one('SELECT Eaddress, name, role, session_version FROM admins WHERE Eaddress = ?', [$email]);
         if (!session_version_matches($row)) {
             unset($_SESSION['admin_email'], $_SESSION['role'], $_SESSION['session_version']);
             $row = null;
@@ -306,6 +311,8 @@ function customer_or_guest(): ?array
 
 /**
  * Requires a signed-in administrator; everyone else gets 403 or the login form.
+ * Read-only administrators pass too: actions that change something use
+ * require_admin_write().
  *
  * @return array<string, mixed>
  */
@@ -323,6 +330,70 @@ function require_admin(): array
     }
     flash('info', t('auth.guard.admin_login_required'));
     redirect('index.php?form=login');
+}
+
+/* ---------------------------------------------------------------------
+ * Administrator roles
+ * ------------------------------------------------------------------- */
+
+/**
+ * True when the signed-in administrator may change data (role "owner").
+ * Read-only administrators, customers and guests may not.
+ */
+function admin_can_write(): bool
+{
+    return (current_admin()['role'] ?? null) === ADMIN_ROLE_OWNER;
+}
+
+/**
+ * Requires an administrator who may change data. Every admin request that
+ * changes something calls it before anything else: a read-only
+ * administrator gets a 403 page that says why, and customers and guests get
+ * what require_admin() gives them.
+ *
+ * @return array<string, mixed>
+ */
+function require_admin_write(): array
+{
+    $admin = require_admin();
+    if (($admin['role'] ?? null) !== ADMIN_ROLE_OWNER) {
+        abort(403, t('auth.guard.admin_read_only'));
+    }
+    return $admin;
+}
+
+/**
+ * True when admin pages may show customers' names and email addresses in
+ * full. A read-only administrator sees them shortened (masked_name(),
+ * masked_email()): on a public demo every visitor can sign in as one.
+ */
+function admin_sees_customer_details(): bool
+{
+    return admin_can_write();
+}
+
+/**
+ * A name shortened to its first letter, e.g. "Sara Ali" -> "S…".
+ */
+function masked_name(string $name): string
+{
+    $name = trim($name);
+    return ($name === '' ? '' : mb_substr($name, 0, 1)) . '…';
+}
+
+/**
+ * An email address shortened to its first letter and top-level domain,
+ * e.g. "reader@example.com" -> "r…@….com".
+ */
+function masked_email(string $email): string
+{
+    $at = strrpos($email, '@');
+    if ($at === false || $at === 0) {
+        return '…';
+    }
+    $domain = substr($email, $at + 1);
+    $dot = strrpos($domain, '.');
+    return mb_substr($email, 0, 1) . '…@…' . ($dot === false ? '' : substr($domain, $dot));
 }
 
 /**
