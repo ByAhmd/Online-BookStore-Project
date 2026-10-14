@@ -20,10 +20,11 @@ final class IsolatedPhp
 {
     /** Configuration keys copied from the current test process into the child. */
     private const CONFIG_KEYS = [
-        'APP_NAME', 'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_TIMEZONE',
+        'APP_NAME', 'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_TIMEZONE', 'APP_DEMO',
         'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS',
         'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_CURRENCY', 'STRIPE_API_BASE',
-        'MAIL_DRIVER', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'SENDGRID_API_KEY',
+        'MAIL_DRIVER', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME',
+        'SMTP_HOST', 'SMTP_PORT', 'SMTP_USERNAME', 'SMTP_PASSWORD', 'SMTP_ENCRYPTION', 'SMTP_TIMEOUT',
     ];
 
     /**

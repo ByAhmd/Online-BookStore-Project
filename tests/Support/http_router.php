@@ -12,7 +12,7 @@ declare(strict_types=1);
  *
  * The harness passes its complete configuration in the process environment,
  * but Windows silently drops empty variables (e.g. DB_PASS= or
- * SENDGRID_API_KEY=) from a child process, and load_env() would then fill
+ * SMTP_PASSWORD=) from a child process, and load_env() would then fill
  * them from the developer's .env file. Seeding $_ENV with every configured
  * key, empty ones included, keeps .env out of the tests on every platform
  * (load_env() skips keys present in $_ENV, and env() reads $_ENV first).

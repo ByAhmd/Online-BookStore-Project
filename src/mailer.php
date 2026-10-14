@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+
 /**
  * Sends an email using the configured MAIL_DRIVER:
  *  - "log"      (default) appends the message to mail.log in LOG_DIR (storage/logs); for local development.
- *  - "sendgrid" sends through the SendGrid v3 API using SENDGRID_API_KEY.
+ *  - "smtp"     sends through an SMTP server (SMTP_HOST, SMTP_PORT, ...) with PHPMailer.
  *  - "null"     discards the message.
  *
  * Returns true on success. Failures are logged and never expose provider
@@ -31,25 +34,8 @@ function send_mail(string $toEmail, string $toName, string $subject, string $htm
                 );
                 return file_put_contents(log_path('mail.log'), $entry, FILE_APPEND | LOCK_EX) !== false;
 
-            case 'sendgrid':
-                $apiKey = config('mail.sendgrid_api_key');
-                if (!is_string($apiKey) || $apiKey === '') {
-                    app_log('error', 'MAIL_DRIVER=sendgrid but SENDGRID_API_KEY is not set');
-                    return false;
-                }
-                $mail = new \SendGrid\Mail\Mail();
-                $mail->setFrom((string) config('mail.from_address'), (string) config('mail.from_name'));
-                $mail->setSubject($subject);
-                $mail->addTo($toEmail, $toName);
-                $mail->addContent('text/plain', $text);
-                $mail->addContent('text/html', $html);
-
-                $response = (new \SendGrid($apiKey))->send($mail);
-                if ($response->statusCode() >= 300) {
-                    app_log('error', 'SendGrid rejected an email', ['status' => $response->statusCode(), 'subject' => $subject]);
-                    return false;
-                }
-                return true;
+            case 'smtp':
+                return send_smtp_mail($toEmail, $toName, $subject, $html, $text);
 
             default:
                 app_log('error', 'Unknown MAIL_DRIVER', ['driver' => $driver]);
@@ -59,6 +45,72 @@ function send_mail(string $toEmail, string $toName, string $subject, string $htm
         app_log('error', 'Email delivery failed: ' . $e->getMessage(), ['subject' => $subject]);
         return false;
     }
+}
+
+/**
+ * Sends one message through the SMTP server configured in SMTP_*. Throws
+ * PHPMailer exceptions on delivery errors (send_mail() logs them). The
+ * password is only handed to PHPMailer, never logged, and debug output is off.
+ */
+function send_smtp_mail(string $toEmail, string $toName, string $subject, string $html, string $text): bool
+{
+    $host = trim((string) config('mail.smtp.host'));
+    if ($host === '') {
+        app_log('error', 'MAIL_DRIVER=smtp but SMTP_HOST is not set');
+        return false;
+    }
+    $encryption = (string) config('mail.smtp.encryption');
+    $secure = match ($encryption) {
+        'tls' => PHPMailer::ENCRYPTION_STARTTLS,
+        'ssl' => PHPMailer::ENCRYPTION_SMTPS,
+        'none' => '',
+        default => null,
+    };
+    if ($secure === null) {
+        app_log('error', 'Unknown SMTP_ENCRYPTION (use tls, ssl or none)', ['encryption' => $encryption]);
+        return false;
+    }
+    $timeout = max(1, (int) config('mail.smtp.timeout'));
+
+    $mail = new PHPMailer(true);
+    $mail->isSMTP();
+    $mail->SMTPDebug = SMTP::DEBUG_OFF;
+    $mail->Host = $host;
+    $mail->Port = (int) config('mail.smtp.port');
+    // Exactly the configured encryption: with "tls" PHPMailer stops (before
+    // authenticating) when the server offers no STARTTLS, and "none" never
+    // upgrades on its own.
+    $mail->SMTPSecure = $secure;
+    $mail->SMTPAutoTLS = false;
+    // PHPMailer waits up to 300 seconds by default, for the connection and for
+    // every reply; a page that sends an email must not hang that long.
+    $mail->Timeout = $timeout;
+    $mail->getSMTPInstance()->Timelimit = $timeout;
+
+    $username = (string) config('mail.smtp.username');
+    $mail->SMTPAuth = $username !== '';
+    if ($mail->SMTPAuth) {
+        $mail->Username = $username;
+        $mail->Password = (string) config('mail.smtp.password');
+    }
+
+    // UTF-8 with quoted-printable bodies: Arabic text survives every server,
+    // and headers such as the subject are MIME-encoded automatically.
+    $mail->CharSet = PHPMailer::CHARSET_UTF8;
+    $mail->Encoding = PHPMailer::ENCODING_QUOTED_PRINTABLE;
+    $mail->XMailer = ' '; // no X-Mailer header naming the library and its version
+    $mail->setFrom((string) config('mail.from_address'), (string) config('mail.from_name'));
+    $mail->addAddress($toEmail, $toName);
+    $mail->Subject = $subject;
+    if ($html !== '') {
+        $mail->isHTML(true);
+        $mail->Body = $html;
+        $mail->AltBody = $text;
+    } else {
+        $mail->Body = $text;
+    }
+
+    return $mail->send();
 }
 
 /**

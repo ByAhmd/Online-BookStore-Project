@@ -145,10 +145,19 @@ function app_config(bool $refresh = false): array
             'api_base' => env('STRIPE_API_BASE'),
         ],
         'mail' => [
+            // log, smtp or null.
             'driver' => strtolower((string) env('MAIL_DRIVER', 'log')),
             'from_address' => env('MAIL_FROM_ADDRESS', 'no-reply@example.com'),
             'from_name' => env('MAIL_FROM_NAME', 'BookWise'),
-            'sendgrid_api_key' => env('SENDGRID_API_KEY'),
+            // MAIL_DRIVER=smtp. encryption: tls (STARTTLS), ssl (implicit TLS) or none (local test servers only).
+            'smtp' => [
+                'host' => env('SMTP_HOST'),
+                'port' => (int) env('SMTP_PORT', '587'),
+                'username' => env('SMTP_USERNAME'),
+                'password' => env('SMTP_PASSWORD'),
+                'encryption' => strtolower((string) env('SMTP_ENCRYPTION', 'tls')),
+                'timeout' => (int) env('SMTP_TIMEOUT', '10'),
+            ],
         ],
     ];
 
