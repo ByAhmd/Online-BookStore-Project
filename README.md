@@ -4,15 +4,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 BookWise is an online bookstore written in plain PHP with MySQL/MariaDB.
-Customers browse a catalog, search and filter by genre, keep favorites, buy printed books
-through **Stripe Checkout** (or the built-in **payment simulator**) for delivery to a
-**Saudi National Address**, follow each order until it is delivered, and review the books
-they bought. Administrators manage the catalog, stock and covers, ship and deliver orders
-and refund them. The whole interface is available in **English and Arabic** (right-to-left).
+Visitors browse a catalog, search and filter by genre without an account. Customers keep
+favorites, buy printed books through **Stripe Checkout** (or the built-in **payment simulator**)
+for delivery to a **Saudi National Address**, follow each order until it is delivered, and
+review the books they bought. Administrators manage the catalog, stock and covers, ship and
+deliver orders and refund them; read-only administrators can look at everything but change
+nothing. The whole interface is available in **English and Arabic** (right-to-left).
 
 It runs locally with PHP's built-in server or Docker, and can be published as a free
 **live demo** with simulated payments on ordinary PHP hosting such as alwaysdata
-(see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+(see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). A reviewer can try such a demo in one click:
+as a fresh demo customer, or as a read-only administrator.
 
 It started as a team project for the *Fundamentals of Web Programming* course at
 King Faisal University (see the in-app **About** page). It has since been audited
@@ -47,6 +49,9 @@ page architecture is unchanged; there is no framework.
 ## Features
 
 **Customers**
+- Guests browse without an account: the Explore page (search, genres, Favorites tab), book pages and reviews.
+  Buying, favorites, reviews and reactions are links such as **Log in to buy** and **Log in to save favorites**; after signing in (or signing up), the visitor is back on the same page.
+  The Favorites tab asks guests to log in.
 - Sign up, log in and log out. Passwords are hashed with `password_hash()`, failed logins are throttled, and the session ID is regenerated on login.
 - Email verification: new accounts confirm their address through a link that expires after 24 hours (can be turned off with `REQUIRE_EMAIL_VERIFICATION=false`).
   The link asks for the account's password before it confirms and signs in, so mail scanners that open links, or someone who registered another person's address, cannot use it.
@@ -83,11 +88,19 @@ page architecture is unchanged; there is no framework.
   A paid order can be refunded in full through Stripe from its page, at any stage of its delivery; the copies go back into stock only if the order had not been shipped yet.
   Refunds made in the Stripe Dashboard are picked up by the `charge.refunded` webhook.
 - Accounts are created from the command line (`bin/create-admin.php`, or `bin/install.php` in containers); there is no public admin sign-up.
+- Two roles: **owners** (the default) may change everything; **viewers** (`bin/create-admin.php --viewer`) open every admin page but change nothing.
+  For a viewer every form is switched off with a note that says why, every action that changes something answers 403, and customers' names and email addresses are shortened (`S…`, `s…@….com`), so orders are found by their number only.
 
 **Everywhere**
 - English and Arabic interface with a language switch in the header, Arabic plural forms, Arabic dates, amounts and genre names, and a mirrored right-to-left layout.
 - Optional demo mode (`APP_DEMO=true`) for a public showcase: a banner, a built-in payment simulator instead of Stripe, and optionally a demo inbox that shows the store's emails instead of sending them.
   The simulator runs inside the application, so no Stripe account, second server or special web-server setup is needed.
+- One-click demo accounts (only with `APP_DEMO=true`), offered on the sign-in page and pointed to by the banner:
+  - **Try as a customer** creates a fresh account for that visitor ("Demo reader 4821", a random address at the reserved `demo.invalid` domain, a random password nobody knows, already confirmed, with a few favorites) and signs it in.
+    It can use the whole store (cart, simulated checkout, reviews of the books it bought, the demo inbox) and delete itself, but it has no password to change or reset.
+    One address may create 10 per hour, and at most 200 exist at once (the oldest are deleted, with their data, to make room).
+    `php bin/demo-cleanup.php` deletes them after 24 hours, with their carts, favorites, reviews and abandoned checkouts; paid orders are kept, anonymised, as when customers delete their accounts.
+  - **Try as an administrator (read-only)** signs in to a shared viewer administrator, created on first use with a random password nobody knows.
 
 ## Technology stack
 
@@ -111,7 +124,7 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 ├── public/                 Web root: point your server's document root here
 │   ├── *.php               Pages and form handlers (index.php = login/sign-up, Home_Page.php, Explore_Page.php,
 │   │                       checkout.php = delivery and review, order.php = an order's page,
-│   │                       pay.php = the payment simulator's page, …)
+│   │                       pay.php = the payment simulator's page, demo_login.php = the one-click demo accounts, …)
 │   ├── css/  js/           Stylesheets and scripts (common.css/common.js are shared)
 │   ├── imges/              Catalog covers and UI images (folder name kept: database rows reference it)
 │   └── uploads/            Uploaded avatars/ and covers/ (git-ignored, must be writable)
@@ -134,7 +147,8 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 │   ├── setup.php           Set up a demo on PHP hosting without Docker (.env, database, administrator)
 │   ├── install.php         Create the schema on an empty database, or migrate an existing one
 │   ├── migrate.php         Apply pending migrations
-│   ├── create-admin.php    Create an administrator or reset an administrator's password
+│   ├── create-admin.php    Create an administrator (--viewer: read-only) or reset an administrator's password
+│   ├── demo-cleanup.php    Delete the one-click demo customers after 24 hours (a daily scheduled task)
 │   ├── upgrade-legacy-db.php  Upgrade a database created by the original project
 │   └── lint.php            `php -l` over the whole project
 ├── docker/  Dockerfile  docker-compose.yml   Container image and local Compose setup
@@ -209,6 +223,10 @@ You will be prompted for a password (minimum 8 characters). To script it, set
 Running the command again for the same email resets that administrator's password.
 It also signs out the administrator's other sessions and clears any sign-in lockout.
 
+Add `--viewer` to create a read-only administrator instead, for example for a reviewer:
+`php bin/create-admin.php reviewer@example.com "Reviewer" --viewer`.
+Running the command again sets the role it is given (an owner unless `--viewer`).
+
 ### 6. Run it
 
 **PHP built-in server (simplest):**
@@ -271,7 +289,7 @@ convenience, and variables already set in the real environment take precedence.
 | `APP_URL` | `http://localhost:8000` | Public URL of `public/` without a trailing slash. Used for Stripe return URLs and password-reset links. |
 | `APP_TIMEZONE` | `Asia/Riyadh` | PHP and database-session timezone |
 | `APP_DEFAULT_LOCALE` | `en` | Interface language for visitors who have not chosen one: `en` or `ar` |
-| `APP_DEMO` | `false` | Public demo mode: shows a banner, turns the payment simulator on (unless `PAYMENT_SIMULATOR=false`) and keeps the sample catalog in stock ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
+| `APP_DEMO` | `false` | Public demo mode: shows a banner, offers the one-click demo accounts on the sign-in page (`demo_login.php` answers 404 without it), turns the payment simulator on (unless `PAYMENT_SIMULATOR=false`) and keeps the sample catalog in stock ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
 | `REQUIRE_EMAIL_VERIFICATION` | `true` | New customers must confirm their email address before signing in. Needs working email in production. |
 | `LOG_DIR` | `storage/logs` | Directory for `app.log`, `php-error.log` and `mail.log` (relative paths start at the project root) |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `3306` | Database server |
@@ -448,6 +466,9 @@ Every email has a plain-text and an HTML part. `MAIL_DRIVER` decides where it go
   - The demo banner and the notes on the password reset and confirmation pages point to the inbox.
 - **`null`** discards every email. Use it with `REQUIRE_EMAIL_VERIFICATION=false`, or new customers can never confirm their address.
 
+The one-click demo customers have made-up addresses at the reserved `demo.invalid` domain: their emails appear in the demo inbox (or `mail.log`), and are never sent over SMTP.
+Nobody can sign up with, or ask for links to, an address at that domain.
+
 ## Database migrations
 
 `database/schema.sql` always describes the latest schema. Changes for existing databases live in `database/migrations/` and are recorded in the `schema_migrations` table:
@@ -511,7 +532,7 @@ The suites are:
 
 - **unit:** pure functions, plus the image tools (WebP copies, `bin/optimize-images.php`) on scratch files.
 - **integration:** domain code against a real database.
-- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, the checkout page and delivery addresses, checkout (with Stripe and with every ending of the payment simulator), the order page, deliveries and order emails, refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, the demo inbox and the Arabic interface.
+- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, guest browsing, cart and stock, the checkout page and delivery addresses, checkout (with Stripe and with every ending of the payment simulator), the order page, deliveries and order emails, refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, read-only administrators (every admin form is posted as a viewer, and nothing may change), the one-click demo accounts, the demo inbox and the Arabic interface.
   Every page check also loads the page's CSS, scripts and images, including each WebP copy in a `srcset`.
 - **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes) and of the Apache cache rules. The image itself is built and smoke-tested by the CI's Docker job.
 
@@ -560,6 +581,9 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
   Sessions expire after 2 hours of inactivity or 24 hours after sign-in, and a password change signs out every other session.
 - **Access control:** customer and admin checks are enforced on the server for every page and action.
   Cart lines, delivery addresses, orders, order pages and payment returns are always scoped to the signed-in user; a checkout accepts only one of the customer's own addresses.
+  Guests may only read the catalog and book pages. Every admin request that changes something (book forms, cover uploads, deletions, refunds) requires an owner (`require_admin_write()`): read-only administrators get 403.
+- **Demo accounts:** only in demo mode, through POST forms with a CSRF token. Demo customers get random, unguessable addresses and passwords that nobody knows; they cannot set a password (no password change, no reset link), and their creation is limited per IP address and in total.
+  The shared demo administrator is always a viewer, and sees customers' names and email addresses only shortened.
 - **Passwords:** bcrypt via `password_hash()`, with a transparent upgrade of legacy MD5 hashes.
   Sign-in performs one hash verification per attempt, so response times don't reveal which accounts exist.
   Login is throttled after 5 failures for one email from one IP address, 20 failures from one IP, or 100 failures for one email from anywhere, within 15 minutes.
@@ -617,6 +641,11 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
 - **Login throttling** counts attempts per IP address. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server.
   The Docker image takes the address from `X-Forwarded-For` on connections from private addresses; on alwaysdata this was not confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#step-9-check-the-visitors-addresses) for a check).
 - **No sign-up rate limit:** only verification and sign-up notice emails are limited, to one per account every few minutes.
+- **Demo accounts:**
+  - Demo customers are limited per IP address (10 per hour), with the same caveat as login throttling behind a proxy: if every visitor shares the proxy's address, they share the limit too.
+  - At most 200 demo customers exist at once. On a busy demo the oldest are deleted to make room, so a visitor's demo account can disappear before its 24 hours are over.
+  - They are deleted after 24 hours only when `php bin/demo-cleanup.php` runs (a daily scheduled task, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-demo-cleanup)); a checkout still being confirmed delays it to the next run.
+  - Every visitor who presses **Try as an administrator** shares the same read-only account, and sees every order of the demo (with shortened customer details).
 - **The demo inbox reveals registered addresses:** after signing up, a confirmation email appears in the browser's inbox only when the address was new.
   The sign-up page itself still gives the same answer either way. This only applies to a demo with `MAIL_DRIVER=database`, which holds no real accounts.
 - **Demo inbox access to a new account ends with the browser session:** without logging in, an account's emails can only be read in the browser session that created it.

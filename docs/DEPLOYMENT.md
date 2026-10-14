@@ -33,6 +33,7 @@ The guide ends with the [limits of the free demo](#limits-of-the-free-demo), [se
 | File | Purpose |
 | --- | --- |
 | `bin/setup.php` | Setup script for hosts without Docker, such as alwaysdata: checks PHP, writes `.env`, installs the database and creates an administrator. |
+| `bin/demo-cleanup.php` | Deletes the demo's one-click customers after 24 hours; run it daily as a scheduled task ([below](#schedule-the-demo-cleanup)). |
 | `src/payment_simulator.php`, `public/pay.php` | The built-in payment simulator and its payment page. |
 | `Dockerfile` | Two-stage build. Composer installs the production dependencies; the runtime image is `php:8.3-apache` with `pdo_mysql`, `gd` (JPEG, PNG, WebP) and `opcache`. |
 | `.dockerignore` | Allowlist for the build context. `.env`, `.git`, `vendor/`, logs, uploads and the test suite never reach the build. |
@@ -165,8 +166,9 @@ You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Do
    Wait for `[bookwise] Starting Apache on port 8080.` On the first start you will also see `Created schema …` and `Loaded the sample catalog (55 books).`
 
 3. Open <http://localhost:8080>.
-   - Sign up as a customer (no email confirmation is needed), add books to the cart and check out. The simulated payment page appears; press **Pay** and you return to the order confirmation.
+   - Sign up as a customer (no email confirmation is needed), or press **Try as a customer** on the sign-in page, add books to the cart and check out. The simulated payment page appears; press **Pay** and you return to the order confirmation.
      Try **Decline**, **Slow payment** and **Cancel** too.
+   - **Try as an administrator (read-only)** shows the admin pages with every form switched off.
    - Or log in as the local administrator: `admin@bookwise.test` / `local-admin-password`.
      These values come from `docker-compose.yml` and are **for local use only**. Never reuse them anywhere else; the container refuses that password when `APP_URL` is not a local address.
 
@@ -177,7 +179,8 @@ You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Do
    | `docker compose up -d --build` | Start in the background |
    | `docker compose logs -f app` | Follow the app's output (start-up, access log, `app.log`) |
    | `docker compose exec app cat storage/logs/mail.log` | Read the emails, e.g. password-reset links (`MAIL_DRIVER=log`) |
-   | `docker compose exec app php bin/create-admin.php you@example.com "Your Name"` | Create another administrator (asks for a password) |
+   | `docker compose exec app php bin/create-admin.php you@example.com "Your Name"` | Create another administrator (asks for a password); add `--viewer` for a read-only one |
+   | `docker compose exec app php bin/demo-cleanup.php` | Delete the one-click demo customers that are more than 24 hours old |
    | `docker compose down` | Stop; the database and uploads are kept in named volumes |
    | `docker compose down -v` | Stop and **delete** the database and uploads |
    | `BASE_URL=http://localhost:8080 bash tests/Docker/smoke.sh` | Run the end-to-end smoke test against the running store |
@@ -280,7 +283,8 @@ Nothing changes until every answer is valid and the database answers. Then the s
 
 - writes `~/bookwise/.env`, readable only by you, with the values of a public demo: `APP_ENV=production`, `APP_DEBUG=false`, `APP_DEMO=true`, `PAYMENT_SIMULATOR=true`, `MAIL_DRIVER=database` (emails are kept for 48 hours and shown on the demo inbox page, `inbox.php`) and `REQUIRE_EMAIL_VERIFICATION=true` (new customers confirm their address with the link in the inbox);
 - creates the tables and loads the 55-book sample catalog (`php bin/install.php --seed`);
-- creates the administrator.
+- creates the administrator;
+- names the command for the daily cleanup of the one-click demo customers ([Schedule the demo cleanup](#schedule-the-demo-cleanup)).
 
 Settings come from the `.env` file; nothing has to be entered in the panel's environment variables.
 If you ever turn the demo into a real store, change both `APP_DEMO` and `PAYMENT_SIMULATOR` to `false`, as described in [(d)](#d-a-real-store-stripe-payments-and-email).
@@ -300,6 +304,7 @@ All its options are listed by `php bin/setup.php --help`.
 
 1. Open `https://myaccount.alwaysdata.net/health.php`. It should answer `{"status":"ok"}`.
 2. Open `https://myaccount.alwaysdata.net`, sign up as a customer, add a book to the cart and check out. The simulated payment page appears; press **Pay**.
+   The sign-in page also offers **Try as a customer** and **Try as an administrator (read-only)**, which sign visitors in with one click.
 3. Log in with the administrator account from step 6 and open **Orders**: the order is paid, and you can refund it.
 4. Optional, from your own computer (Git Bash on Windows): `BASE_URL=https://myaccount.alwaysdata.net bash tests/Docker/smoke.sh`.
    It registers one throwaway customer and buys one book.
@@ -320,7 +325,19 @@ rm public/ip-check.php
 ```
 
 If the page showed your address, throttling works per visitor. If it showed another address (the proxy's), every visitor shares that address: after 20 failed sign-ins within 15 minutes, sign-in is refused for everyone until the 15 minutes have passed.
+The same holds for the one-click demo customers: 10 per hour for everyone together instead of per visitor.
 That is acceptable for a demo; note it in the limits you present.
+
+### Schedule the demo cleanup
+
+Every press of **Try as a customer** creates a throwaway customer account. `php bin/demo-cleanup.php` deletes the ones that are more than 24 hours old, with their carts, favorites, reviews and abandoned checkouts (paid orders are kept, anonymised).
+It is safe to run at any time and prints one line. Run it once a day:
+
+1. Open **Advanced > Scheduled tasks** and add a task that runs a command.
+2. Command: `cd $HOME/bookwise && php bin/demo-cleanup.php`
+3. Schedule: `0 4 * * *` (04:00 every day, in crontab syntax; shortcuts such as `@daily` are not accepted). Save.
+
+Its output goes to `/home/myaccount/admin/logs/jobs/`. Without the task, demo customers are only deleted when 200 of them exist (the oldest make room for new ones).
 
 ### After the first deploy
 
@@ -337,7 +354,7 @@ That is acceptable for a demo; note it in the limits you present.
 - **Logs:** BookWise writes `~/bookwise/storage/logs/app.log` and `php-error.log`. Read them with `tail -n 50 ~/bookwise/storage/logs/app.log`.
 - **Another administrator:** `php bin/create-admin.php you@example.com "Your Name"` (asks for a password).
 - **Scheduled tasks:** **Advanced > Scheduled tasks** runs commands on a schedule written in crontab syntax, for example `0 4 * * *` for 04:00 every day (shortcuts such as `@daily` are not accepted).
-  Their output goes to `/home/myaccount/admin/logs/jobs/`. BookWise has no demo-reset command yet; a daily `cd $HOME/bookwise && php bin/install.php` already restocks the catalog.
+  Their output goes to `/home/myaccount/admin/logs/jobs/`. The demo cleanup runs this way ([above](#schedule-the-demo-cleanup)); a daily `cd $HOME/bookwise && php bin/install.php` also restocks the catalog.
 - **Idle site:** alwaysdata stops a site's PHP processes after a period without visits (30 minutes by default, changeable under the site's **Advanced** settings) and starts them again on the next visit.
   Unlike a container platform, files are kept: uploads, logs, sessions and the payment simulator's state survive.
 
@@ -467,6 +484,8 @@ The free alwaysdata plan cannot be used for a store that makes money.
 **The demo itself:**
 
 - Anyone can register. Do not enter real personal data (delivery addresses included: any made-up Saudi address in the right format works), and expect the data to be reset.
+- One-click demo customers are limited to 10 per visitor address and hour and 200 at once (the oldest are deleted first), and are deleted after 24 hours by `php bin/demo-cleanup.php`.
+  Everybody who tries the read-only administrator shares one account, which shows every order of the demo with shortened customer names and addresses.
 - Visitors' purchases never take a book below 3 copies, and `php bin/install.php` (or a container start) restocks the catalog.
 - Nothing is ever shipped: a demo order stays *processing* until an administrator marks it shipped and delivered on its order page, which only updates the order and sends its emails to the demo inbox.
 
