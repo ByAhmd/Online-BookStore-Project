@@ -338,10 +338,27 @@
     color: var(--color-text-muted);
 }
 
-.profile-page .order-total {
-    margin: 0;
+.profile-page .order-number a {
+    color: inherit;
+}
+
+.profile-page .order-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 16px;
     padding-top: 12px;
     border-top: 1px solid var(--color-surface-muted);
+}
+
+.profile-page .order-view {
+    font-weight: 700;
+}
+
+.profile-page .order-total {
+    margin: 0;
+    margin-inline-start: auto;
     text-align: end;
 }
 
@@ -353,6 +370,90 @@
 .profile-page .order-empty {
     border: 1px dashed var(--color-border);
     border-radius: var(--radius);
+}
+
+/* ---------------------------------------------------------------------
+   Delivery addresses
+   --------------------------------------------------------------------- */
+
+.profile-page .address-empty {
+    max-width: 60ch;
+    margin: 0;
+    padding: 16px 20px;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text-muted);
+}
+
+.profile-page .address-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+    gap: 16px;
+    max-width: 900px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.profile-page .address-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 18px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+}
+
+.profile-page .address-card.is-default {
+    border: 2px solid var(--color-primary);
+}
+
+.profile-page .address-text {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.profile-page .address-text .address-line {
+    display: block;
+}
+
+.profile-page .address-text .address-recipient {
+    font-weight: 700;
+}
+
+.profile-page .address-badge {
+    align-self: flex-start;
+    margin: 0;
+    padding: 2px 10px;
+    border-radius: var(--radius-lg);
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.profile-page .address-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.profile-page .address-actions form {
+    margin: 0;
+}
+
+.profile-page .btn-small {
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 0.95rem;
+}
+
+.profile-page .address-form .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 /* ---------------------------------------------------------------------

@@ -122,6 +122,7 @@ final class AccountLocalizationTest extends HttpTestCase
 
         $expected = [
             'account' => 'معلومات الحساب',
+            'addresses' => 'عناوين التوصيل',
             'payment' => 'طريقة الدفع المفضّلة',
             'orders' => 'طلباتي',
             'security' => 'الأمان',
@@ -137,7 +138,7 @@ final class AccountLocalizationTest extends HttpTestCase
         }
 
         $document = $customer->get('profilePage.php?section=account')->document();
-        self::assertSame(['الأمان', 'حذف الحساب'], array_slice($document->texts('//a[contains(@class, "profile-menu-link")]'), 3));
+        self::assertSame(['الأمان', 'حذف الحساب'], array_slice($document->texts('//a[contains(@class, "profile-menu-link")]'), 4));
         self::assertSame('اللغة', $document->text('//h3[@id="language-title"]'));
         self::assertSame('العربية', $document->text('//select[@id="locale"]/option[@lang="ar"]'));
         self::assertSame('هل تريد حذف حسابك نهائيًا؟ لا يمكن التراجع عن ذلك.', $document->first('//form[contains(@class, "delete-form")]')?->getAttribute('data-confirm'));
@@ -163,7 +164,7 @@ final class AccountLocalizationTest extends HttpTestCase
 
         $document = $this->assertHtmlPage($customer->get('profilePage.php?section=orders'));
         self::assertSame(['الطلب رقم ' . $orderId], $document->texts('//h3[contains(@class, "order-number")]'));
-        self::assertSame(['مدفوع'], $document->texts('//span[contains(@class, "status-badge")]'));
+        self::assertSame(['قيد التجهيز'], $document->texts('//span[contains(@class, "status-badge")]'));
         self::assertStringStartsWith('تاريخ الطلب ', $document->text('//p[@class="order-date"]'));
         self::assertSame('الإجمالي ' . number_format((float) $purchase['order']['total_amount'], 2) . ' ر.س', $document->text('//p[@class="order-total"]'));
     }

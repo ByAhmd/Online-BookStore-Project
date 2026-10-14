@@ -377,14 +377,34 @@ abstract class HttpTestCase extends DatabaseTestCase
     }
 
     /**
-     * Submits the cart page's checkout form and returns the Stripe (mock)
-     * Checkout Session id from the 303 redirect.
+     * Goes from the cart to the checkout page (checkout.php) and submits its
+     * form: with the address the page has chosen (the default one), or, for
+     * a customer without saved addresses, with a new address
+     * (SAMPLE_ADDRESS). Returns the response to the POST.
+     *
+     * @param array<string, scalar> $values Fields to change, e.g. ['address' => '7']
      */
-    protected function startCheckout(HttpClient $client): string
+    protected function submitCheckout(HttpClient $client, array $values = []): HttpResponse
     {
         $cart = $client->get('cart.php');
         $this->assertStatus(200, $cart);
-        $response = $client->submitForm($cart, 'checkout.php');
+        self::assertSame('checkout.php', $cart->document()->first('//a[' . HtmlDocument::hasClass('checkout-link') . ']')?->getAttribute('href'), 'The cart leads to the checkout page');
+        $page = $client->get('checkout.php');
+        $this->assertStatus(200, $page);
+        $form = $page->document()->form('checkout.php');
+        if (($values['address'] ?? $form->field('address')) === 'new') {
+            $values += self::SAMPLE_ADDRESS;
+        }
+        return $client->submitForm($page, 'checkout.php', $values);
+    }
+
+    /**
+     * Checks out through the checkout page (see submitCheckout()) and returns
+     * the Stripe (mock) Checkout Session id from the 303 redirect.
+     */
+    protected function startCheckout(HttpClient $client): string
+    {
+        $response = $this->submitCheckout($client);
         $this->assertStatus(303, $response);
         $location = (string) $response->header('Location');
         self::assertMatchesRegularExpression(

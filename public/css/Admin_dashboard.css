@@ -508,6 +508,11 @@
     margin: 0 0 12px;
 }
 
+.admin-page .order-filters .filters-hint {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
 .admin-page .order-list-table {
     min-width: 680px;
 }
@@ -568,6 +573,69 @@
     margin: 0;
 }
 
+/* Delivery address and fulfilment (processing -> shipped -> delivered). */
+.admin-page .address-text {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-page .address-text .address-line {
+    display: block;
+}
+
+.admin-page .address-text .address-recipient {
+    font-weight: 700;
+}
+
+.admin-page .address-call {
+    margin: 8px 0 0;
+    font-weight: 600;
+}
+
+.admin-page .address-call + h2,
+.admin-page .muted + h2 {
+    margin-top: 24px;
+}
+
+.admin-page .fulfilment-facts {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 16px;
+    margin: 0 0 20px;
+}
+
+.admin-page .fulfilment-facts dt {
+    font-weight: 700;
+    color: var(--color-text-muted);
+}
+
+.admin-page .fulfilment-facts dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-page .tracking-number {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight: 700;
+}
+
+.admin-page .order-fulfilment form {
+    margin: 0;
+}
+
+.admin-page .shipment-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 20px;
+    align-items: start;
+}
+
+.admin-page .shipment-form .form-hint,
+.admin-page .shipment-form .field-error {
+    margin: 0;
+}
+
 /* ---------------------------------------------------------------------
    Responsive
    --------------------------------------------------------------------- */
@@ -578,7 +646,15 @@
     }
 
     .admin-page .order-filters {
-        grid-template-columns: minmax(0, 12rem) minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 12rem) minmax(0, 12rem) minmax(0, 1fr) auto;
+    }
+
+    .admin-page .shipment-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-page .shipment-form .form-actions {
+        grid-column: 1 / -1;
     }
 
     .admin-page .form-field-wide {
@@ -599,7 +675,8 @@
         grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     }
 
-    .admin-page .order-detail-layout .order-refund {
+    .admin-page .order-detail-layout .order-refund,
+    .admin-page .order-detail-layout .order-fulfilment {
         grid-column: 1 / -1;
     }
 }

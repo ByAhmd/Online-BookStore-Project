@@ -101,7 +101,7 @@ final class AccessControlTest extends HttpTestCase
     {
         [$admin] = $this->signedInAdmin();
 
-        foreach (['Explore_Page.php', 'Selected.php?id=7', 'cart.php', 'profilePage.php', 'success_pay.php?session_id=cs_test_x', 'cancel_pay.php'] as $page) {
+        foreach (['Explore_Page.php', 'Selected.php?id=7', 'cart.php', 'checkout.php', 'order.php?id=1', 'profilePage.php', 'success_pay.php?session_id=cs_test_x', 'cancel_pay.php'] as $page) {
             $this->assertRedirect($admin->get($page), 'admin_dashboard.php', 303, "Admin GET $page");
         }
         $this->assertRedirect($admin->postWithToken('Selected.php?id=7', ['action' => 'add_to_cart', 'quantity' => '1']), 'admin_dashboard.php');

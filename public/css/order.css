@@ -1,0 +1,386 @@
+/* =====================================================================
+   A customer's order (order.php): status timeline, delivery address and
+   the receipt, scoped under .order-page. Loaded after checkout.css (the
+   .order-table and .address-text styles). Printing shows only the receipt
+   and the delivery address.
+   ===================================================================== */
+
+.order-page .order-back {
+    margin: 0 0 8px;
+}
+
+.order-page .order-back a {
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.order-page .order-back a:hover {
+    text-decoration: underline;
+}
+
+/* The arrow points towards the start of the line. */
+[dir="rtl"] .order-page .back-arrow {
+    display: inline-block;
+    transform: scaleX(-1);
+}
+
+.order-page .order-heading .page-title {
+    margin-bottom: 8px;
+}
+
+.order-page .order-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin: 0 0 20px;
+    color: var(--color-text-muted);
+}
+
+.order-page .order-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 24px;
+}
+
+.order-page .order-actions form {
+    margin: 0;
+}
+
+.order-page .order-actions .btn-pay {
+    background-color: var(--color-accent);
+}
+
+.order-page .order-actions .btn-pay:hover {
+    background-color: var(--color-accent-hover);
+}
+
+.order-page .order-actions-hint {
+    flex: 1 1 16rem;
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+}
+
+.order-page .order-layout {
+    display: grid;
+    gap: 24px;
+    align-items: start;
+}
+
+.order-page .order-card {
+    padding: 20px 24px;
+    min-width: 0;
+}
+
+.order-page .order-card-title {
+    margin: 0 0 16px;
+    font-size: 1.3rem;
+}
+
+.order-page .order-note {
+    margin: 0;
+    color: var(--color-text-muted);
+}
+
+.order-page .order-note + .order-note,
+.order-page .order-timeline + .order-note {
+    margin-top: 12px;
+}
+
+/* ---------------------------------------------------------------------
+   Status timeline
+   --------------------------------------------------------------------- */
+
+.order-page .order-timeline {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.order-page .timeline-step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    column-gap: 14px;
+    padding-bottom: 18px;
+}
+
+.order-page .timeline-step:last-child {
+    padding-bottom: 0;
+}
+
+/* The line joining the markers. */
+.order-page .timeline-step:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 24px;
+    bottom: 0;
+    inset-inline-start: 10px;
+    width: 2px;
+    background: var(--color-border);
+}
+
+.order-page .timeline-step.is-done:not(:last-child)::after {
+    background: var(--color-success-text);
+}
+
+.order-page .timeline-marker {
+    width: 22px;
+    height: 22px;
+    margin-top: 2px;
+    border: 3px solid var(--color-border);
+    border-radius: 50%;
+    background: var(--color-surface);
+}
+
+.order-page .is-done .timeline-marker {
+    border-color: var(--color-success-text);
+    background: var(--color-success-text);
+}
+
+.order-page .timeline-refunded.is-done .timeline-marker {
+    border-color: #7a4100;
+    background: #7a4100;
+}
+
+.order-page [aria-current="step"] .timeline-marker {
+    box-shadow: 0 0 0 4px var(--color-success-bg);
+}
+
+.order-page .timeline-body p {
+    margin: 0;
+}
+
+.order-page .timeline-label {
+    font-weight: 700;
+}
+
+.order-page .is-upcoming .timeline-label {
+    color: var(--color-text-muted);
+    font-weight: 600;
+}
+
+.order-page .timeline-upcoming {
+    font-weight: 400;
+}
+
+.order-page .timeline-date,
+.order-page .timeline-text {
+    font-size: 0.95rem;
+    color: var(--color-text-muted);
+}
+
+.order-page .tracking-number {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight: 700;
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------------
+   Delivery address and receipt
+   --------------------------------------------------------------------- */
+
+.order-page .address-text {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.order-page .receipt-store {
+    margin: -8px 0 12px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+}
+
+.order-page .receipt-facts {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 16px;
+    margin: 0 0 16px;
+}
+
+.order-page .receipt-facts dt {
+    font-weight: 700;
+    color: var(--color-text-muted);
+}
+
+.order-page .receipt-facts dd {
+    margin: 0;
+}
+
+.order-page .receipt-table {
+    width: 100%;
+    margin: 0 0 12px;
+    border-collapse: collapse;
+}
+
+.order-page .receipt-table th,
+.order-page .receipt-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid #ddd;
+    text-align: start;
+    vertical-align: middle;
+}
+
+.order-page .receipt-table thead th {
+    background-color: var(--color-bg);
+}
+
+.order-page .receipt-table .num {
+    text-align: end;
+    white-space: nowrap;
+}
+
+.order-page .receipt-table tfoot th {
+    text-align: end;
+    font-weight: 600;
+}
+
+.order-page .receipt-table tfoot th,
+.order-page .receipt-table tfoot td {
+    border-bottom: none;
+    padding-block: 4px;
+}
+
+.order-page .receipt-table .receipt-total th,
+.order-page .receipt-table .receipt-total td {
+    padding-top: 10px;
+    border-top: 2px solid var(--color-text);
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.order-page .receipt-book {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.order-page .receipt-cover {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 57px;
+    object-fit: cover;
+    border-radius: 3px;
+    background-color: var(--color-surface-muted);
+}
+
+.order-page .receipt-cover-placeholder {
+    display: block;
+    background: linear-gradient(135deg, var(--color-primary), #2f6168);
+}
+
+.order-page .order-book {
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.order-page .receipt-note {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+}
+
+@media (min-width: 900px) {
+    .order-page .order-layout {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .order-page .order-receipt {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 480px) {
+    .order-page .order-card {
+        padding: 16px;
+    }
+
+    .order-page .receipt-table th,
+    .order-page .receipt-table td {
+        padding: 8px 4px;
+    }
+
+    .order-page .receipt-cover,
+    .order-page .receipt-cover-placeholder {
+        display: none;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   Print: the receipt and the delivery address only
+   --------------------------------------------------------------------- */
+
+@media print {
+    .skip-link,
+    .demo-banner,
+    .site-header,
+    .site-footer,
+    .flash-stack,
+    .order-page .order-back,
+    .order-page .order-heading,
+    .order-page .order-actions,
+    .order-page .order-status {
+        display: none !important;
+    }
+
+    body {
+        background: #fff;
+        color: #000;
+    }
+
+    .order-page.page-container {
+        max-width: none;
+        padding: 0;
+    }
+
+    /* On paper the receipt comes first, then where it was delivered. */
+    .order-page .order-layout {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+    }
+
+    .order-page .order-receipt {
+        order: -1;
+    }
+
+    .order-page .order-card {
+        margin: 0 0 16px;
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+        break-inside: avoid;
+    }
+
+    .order-page .order-delivery {
+        padding-top: 12px;
+        border-top: 1px solid #000;
+    }
+
+    .order-page .status-badge {
+        border: 1px solid #000;
+        background: none;
+        color: #000;
+    }
+
+    .order-page a {
+        color: #000;
+        text-decoration: none;
+    }
+
+    .order-page .receipt-table thead th {
+        background: none;
+        border-bottom: 1px solid #000;
+    }
+
+    .order-page .receipt-cover,
+    .order-page .receipt-cover-placeholder {
+        display: none;
+    }
+}

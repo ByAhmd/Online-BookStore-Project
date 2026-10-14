@@ -22,6 +22,8 @@ final class ArabicPagesTest extends HttpTestCase
         'Add New Book', 'Book Title', 'Copies in stock', 'Cover Image', 'Order total', 'Refund order', 'Signed in as',
         'Continue exploring', 'View my orders', 'Grand Total', 'Rate this Book', 'Similar Books', 'Meet the Team',
         'Discover', 'Explore books', 'Search by title', 'Order summary', 'Payment not found', 'Checkout canceled',
+        'Proceed to Checkout', 'Continue to payment', 'Delivery address', 'Recipient', 'Mobile number', 'Postal code',
+        'Buy again', 'Receipt', 'Print receipt', 'Order status', 'Processing', 'Not yet', 'Mark as shipped', 'Tracking number',
     ];
 
     private static function arabic(HttpClient $client): HttpClient
@@ -191,7 +193,7 @@ final class ArabicPagesTest extends HttpTestCase
         $orders = $this->assertArabicPage($admin->get('admin_orders.php'), 'الطلبات');
         self::assertSame('عرض 1–1 من أصل طلب واحد.', $orders->text('//p[' . HtmlDocument::hasClass('table-summary') . ']'));
         $detail = $this->assertArabicPage($admin->get('admin_order.php?id=' . $orderId), 'الطلب رقم ' . $orderId);
-        self::assertSame('استرداد مبلغ الطلب', $detail->text('//form[@action="admin_order.php?id=' . $orderId . '"]//button'));
+        self::assertSame('استرداد مبلغ الطلب', $detail->text('//form[@action="admin_order.php?id=' . $orderId . '"][.//input[@value="refund"]]//button'));
 
         $invalid = $admin->submitForm($admin->get('admin_dashboard.php'), 'admin_dashboard.php', ['title' => '', 'stock' => 'x'], ['action' => 'add_book']);
         $form = $admin->follow($invalid);
@@ -201,6 +203,58 @@ final class ArabicPagesTest extends HttpTestCase
 
         $refund = $admin->submitForm($admin->get('admin_order.php?id=' . $orderId), 'admin_order.php?id=' . $orderId, [], ['action' => 'refund']);
         $this->assertFlash($admin->follow($refund), 'success', 'استُرد مبلغ الطلب رقم ' . $orderId . '.');
+    }
+
+    public function testCheckoutOrderAndAddressPagesInArabic(): void
+    {
+        [$customer, $user] = $this->signedInCustomer('قارئ عربي');
+        $address = ['recipient_name' => 'سارة أحمد', 'city' => 'الرياض', 'district' => 'العليا', 'street' => 'طريق الملك فهد'];
+        $this->createAddress((int) $user['id'], $address);
+        $orderId = (int) $this->purchase($customer, [51 => 1])['order']['id'];
+        self::arabic($customer);
+        $this->assertRedirect($this->addToCart($customer, 7, 1), 'cart.php');
+
+        $cart = $this->assertArabicPage($customer->get('cart.php'), 'سلتي');
+        self::assertSame('المتابعة لإتمام الطلب', $cart->text('//a[@href="checkout.php"]'));
+
+        $checkout = $this->assertArabicPage($customer->get('checkout.php'), 'إتمام الطلب');
+        self::assertSame(['السلة', 'التوصيل والمراجعة', 'الدفع'], $checkout->texts('//ol[' . HtmlDocument::hasClass('checkout-steps') . ']/li'));
+        self::assertSame('الإجمالي (شامل الضريبة) 5.50 ر.س', $checkout->text('//div[' . HtmlDocument::hasClass('summary-total') . ']'));
+        self::assertSame('يشمل ضريبة القيمة المضافة (15%) 0.72 ر.س', $checkout->text('//div[' . HtmlDocument::hasClass('summary-vat') . ']'));
+        self::assertStringContainsString('سارة أحمد 1234 طريق الملك فهد العليا الرياض 12345-6789 العنوان المختصر: RRRD2929', $checkout->text('//fieldset//label'));
+        self::assertSame('التوصيل إلى عنوان جديد', $checkout->text('//label[@for="address-new"]'));
+
+        // A mistake in a new address is explained in Arabic.
+        $refused = $customer->follow($customer->postWithToken('checkout.php', ['address' => 'new', 'phone' => '123'] + self::SAMPLE_ADDRESS));
+        $document = $this->assertArabicPage($refused, 'إتمام الطلب');
+        $this->assertFlash($refused, 'error', 'يُرجى تصحيح عنوان التوصيل. لم تبدأ عملية الدفع.');
+        self::assertSame('يُرجى إدخال رقم جوال سعودي، مثل 0512345678.', $document->fieldError('new-address-phone-error'));
+
+        $order = $this->assertArabicPage($customer->get('order.php?id=' . $orderId), 'الطلب رقم ' . $orderId);
+        self::assertSame('قيد التجهيز', $order->text('//p[' . HtmlDocument::hasClass('order-meta') . ']/span[' . HtmlDocument::hasClass('status-badge') . ']'));
+        self::assertSame(
+            ['مدفوع', 'قيد التجهيز', 'تم الشحن (لم يتم بعد)', 'تم التوصيل (لم يتم بعد)'],
+            $order->texts('//ol[' . HtmlDocument::hasClass('order-timeline') . ']//p[' . HtmlDocument::hasClass('timeline-label') . ']')
+        );
+        self::assertSame('الإيصال', $order->text('//h2[@id="receipt-title"]'));
+        self::assertSame(
+            ['الإجمالي قبل الضريبة 17.38 ر.س', 'ضريبة القيمة المضافة (15%) 2.61 ر.س', 'التوصيل مجاني', 'الإجمالي (شامل الضريبة) 19.99 ر.س'],
+            $order->texts('//table[' . HtmlDocument::hasClass('receipt-table') . ']/tfoot/tr')
+        );
+
+        $profile = $this->assertArabicPage($customer->get('profilePage.php?section=addresses'), 'إعدادات الحساب');
+        self::assertSame('عناوين التوصيل', $profile->text('//section[@id="section-addresses"]/h2'));
+        self::assertSame('الافتراضي', $profile->text('//li[' . HtmlDocument::hasClass('address-card') . ']//p[' . HtmlDocument::hasClass('address-badge') . ']'));
+        self::assertSame('الرمز البريدي', $profile->text('//label[@for="address-postal_code"]'));
+
+        [$admin] = $this->signedInAdmin();
+        self::arabic($admin);
+        $detail = $this->assertArabicPage($admin->get('admin_order.php?id=' . $orderId), 'الطلب رقم ' . $orderId);
+        self::assertSame('تحديد الطلب كمشحون', $detail->text('//form[.//input[@value="ship"]]//button'));
+        self::assertSame('قيد التجهيز', $detail->text('//span[' . HtmlDocument::hasClass('fulfilment-badge') . ']'));
+        $shipped = $admin->follow($admin->submitForm($admin->get('admin_order.php?id=' . $orderId), 'admin_order.php?id=' . $orderId, ['tracking_number' => 'SA1'], ['action' => 'ship']));
+        $this->assertFlash($shipped, 'success', 'حُدّد أن الطلب رقم ' . $orderId . ' قد شُحن.');
+        $this->assertArabicPage($admin->get('admin_orders.php?fulfilment=shipped'), 'الطلبات');
     }
 
     public function testNoTranslationKeysLeakInEnglish(): void

@@ -78,7 +78,7 @@ final class PaymentSimulatorTest extends HttpTestCase
         $cart = $client->get('cart.php');
         $this->assertPageText("Payments in this store are simulated: you will pay on the store's own payment page", $cart);
         $this->assertNotPageText('Stripe', $cart);
-        $response = $client->submitForm($cart, 'checkout.php');
+        $response = $this->submitCheckout($client);
         $this->assertStatus(303, $response);
         $location = (string) $response->header('Location');
         self::assertMatchesRegularExpression(
@@ -207,7 +207,7 @@ final class PaymentSimulatorTest extends HttpTestCase
 
         // Meanwhile no second payable checkout is opened.
         $this->assertRedirect($this->addToCart($customer, self::BIOLOGY, 1), 'cart.php');
-        $blocked = $customer->submitForm($customer->get('cart.php'), 'checkout.php');
+        $blocked = $this->submitCheckout($customer);
         $this->assertRedirect($blocked, 'cart.php');
         $this->assertFlash($customer->follow($blocked), 'error', 'We could not verify your previous checkout, so a new payment was not started. You have not been charged twice. Please try again in a few minutes.');
         self::assertSame(1, $this->countRows('orders'));
@@ -240,7 +240,7 @@ final class PaymentSimulatorTest extends HttpTestCase
         self::assertSame('pending', $this->orderBySession($first)['status']);
 
         // Checking out again expires the abandoned session, so it can never be paid.
-        $response = $customer->submitForm($customer->get('cart.php'), 'checkout.php');
+        $response = $this->submitCheckout($customer);
         $this->assertStatus(303, $response);
         $second = substr((string) $response->header('Location'), -strlen($first));
         self::assertNotSame($first, $second);
@@ -265,7 +265,7 @@ final class PaymentSimulatorTest extends HttpTestCase
         $this->assertPageText('This payment session has ended.', $this->paymentPage($customer, $sessionId));
         self::assertSame('Payment not completed', $customer->get('success_pay.php?session_id=' . $sessionId)->document()->text('//h1'));
 
-        $response = $customer->submitForm($customer->get('cart.php'), 'checkout.php');
+        $response = $this->submitCheckout($customer);
         $this->assertStatus(303, $response);
         self::assertSame('expired', $this->orderBySession($sessionId)['status']);
     }
@@ -351,7 +351,7 @@ final class PaymentSimulatorTest extends HttpTestCase
         // Checkout is refused instead of falling back to Stripe or to the simulator.
         $cart = $customer->get('cart.php');
         $this->assertNotPageText('simulated', $cart);
-        $refused = $customer->submitForm($cart, 'checkout.php');
+        $refused = $this->submitCheckout($customer);
         $this->assertRedirect($refused, 'cart.php');
         $this->assertFlash($customer->follow($refused), 'error', 'Online payments are not available in this environment.');
         self::assertSame(1, $this->countRows('orders'));

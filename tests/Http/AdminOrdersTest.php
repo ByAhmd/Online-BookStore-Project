@@ -90,7 +90,7 @@ final class AdminOrdersTest extends HttpTestCase
         self::assertSame('#' . $bobOrders[1], $cells[0]);
         self::assertSame('Jan 1, 2026, 10:24', $cells[1]);
         self::assertSame('Bob Buyer bob.buyer@example.org', $cells[2]);
-        self::assertSame(['1', 'SAR 50.00', 'Pending'], array_slice($cells, 3));
+        self::assertSame(['1', 'SAR 50.00', 'Pending', '—'], array_slice($cells, 3), 'Unpaid orders have no delivery stage');
         self::assertSame('admin_order.php?id=' . $bobOrders[1], $document->first($row . '/th/a')?->getAttribute('href'));
         $orphanRow = '//tbody/tr[th[normalize-space()="#' . $orphan . '"]]';
         self::assertSame('Deleted account', $document->text($orphanRow . '/td[2]'));
@@ -163,7 +163,7 @@ final class AdminOrdersTest extends HttpTestCase
         );
         self::assertSame('—', $document->text('//dl[' . HtmlDocument::hasClass('order-facts') . ']/dt[normalize-space()="Refunded"]/following-sibling::dd[1]'), 'Not refunded');
         self::assertSame(2, $document->count('//dl[' . HtmlDocument::hasClass('order-facts') . ']//time'), 'Created and paid timestamps');
-        $form = $document->first('//form[@action="admin_order.php?id=' . $orderId . '"]');
+        $form = $document->first('//form[@action="admin_order.php?id=' . $orderId . '"][.//input[@name="action"][@value="refund"]]');
         self::assertNotNull($form, 'Paid orders can be refunded');
         self::assertSame('Refund order #' . $orderId . ' in full (SAR 45.48)? This cannot be undone.', $form->getAttribute('data-confirm'));
 

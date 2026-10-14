@@ -20,7 +20,29 @@ $orderUrl = 'admin_order.php?id=' . $id;
 
 if (is_post()) {
     verify_csrf();
-    if (input_string($_POST, 'action', 50) !== 'refund') {
+    $action = input_string($_POST, 'action', 50);
+
+    if ($action === 'ship') {
+        // ship_order() only moves a paid order from processing to shipped.
+        [$shipment, $errors] = validate_shipment_input($_POST);
+        if ($errors !== []) {
+            remember_input($shipment);
+            remember_errors($errors);
+            flash('error', t('admin.fulfilment.not_saved'));
+            redirect($orderUrl . '#fulfilment');
+        }
+        $shipped = ship_order($id, $shipment['carrier'], $shipment['tracking_number']);
+        flash($shipped ? 'success' : 'info', t($shipped ? 'admin.fulfilment.shipped' : 'admin.fulfilment.not_processing', ['id' => $id]));
+        redirect($orderUrl . '#fulfilment');
+    }
+
+    if ($action === 'deliver') {
+        $delivered = deliver_order($id);
+        flash($delivered ? 'success' : 'info', t($delivered ? 'admin.fulfilment.delivered' : 'admin.fulfilment.not_shipped', ['id' => $id]));
+        redirect($orderUrl . '#fulfilment');
+    }
+
+    if ($action !== 'refund') {
         abort(400, t('admin.order.unknown_action'));
     }
     // refund_order() re-checks the order's state; nothing from the form is trusted but the id.
@@ -48,6 +70,14 @@ $reference = static function (?string $value): string {
 };
 $total = $money((string) $order['total_amount']);
 $status = (string) $order['status'];
+$address = is_array($order['address']) ? $order['address'] : null;
+$fulfilment = in_array($order['fulfilment_status'], FULFILMENT_STATUSES, true) ? (string) $order['fulfilment_status'] : null;
+$shipmentValues = ['carrier' => old('carrier'), 'tracking_number' => old('tracking_number')];
+$shipmentErrors = ['carrier' => form_error('carrier'), 'tracking_number' => form_error('tracking_number')];
+$shipmentAria = static function (string $field, string $hintId) use ($shipmentErrors): string {
+    $describedBy = array_filter([$hintId, $shipmentErrors[$field] !== null ? 'shipment-' . $field . '-error' : null]);
+    return ($shipmentErrors[$field] !== null ? ' aria-invalid="true"' : '') . ' aria-describedby="' . e(implode(' ', $describedBy)) . '"';
+};
 
 page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashboard.css']);
 ?>
@@ -111,6 +141,14 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
                     <p class="customer-name customer-deleted"><?= e(t('admin.orders.deleted_account')) ?></p>
 <?php endif; ?>
 
+                    <h2 id="order-address-title"><?= e(t('admin.order.address')) ?></h2>
+<?php if ($address !== null): ?>
+                    <p class="address-text"><?= address_html($address) ?></p>
+                    <p class="address-call"><a href="tel:<?= e((string) $address['phone']) ?>"><?= t_markup('admin.order.call', ['phone' => '<span dir="ltr">' . e(format_saudi_mobile((string) $address['phone'])) . '</span>']) ?></a></p>
+<?php else: ?>
+                    <p class="muted"><?= e(t('admin.order.no_address')) ?></p>
+<?php endif; ?>
+
                     <h2 id="order-payment-title"><?= e(t('admin.order.payment')) ?></h2>
                     <dl class="order-facts">
                         <dt><?= e(t('admin.order.status')) ?></dt>
@@ -128,6 +166,70 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
                         <dt><?= e(t('admin.order.refund_id')) ?></dt>
                         <dd><?= $reference($order['stripe_refund_id']) ?></dd>
                     </dl>
+                </section>
+
+                <section class="admin-content order-fulfilment" id="fulfilment" aria-labelledby="order-fulfilment-title">
+                    <h2 id="order-fulfilment-title"><?= e(t('admin.fulfilment.title')) ?></h2>
+<?php if ($fulfilment !== null): ?>
+                    <dl class="fulfilment-facts">
+                        <dt><?= e(t('admin.fulfilment.status')) ?></dt>
+                        <dd><span class="fulfilment-badge status-<?= e($fulfilment) ?>"><?= e(order_status_label($fulfilment)) ?></span></dd>
+                        <dt><?= e(t('admin.fulfilment.shipped_at')) ?></dt>
+                        <dd><?= $timestamp($order['shipped_at']) ?></dd>
+                        <dt><?= e(t('admin.fulfilment.carrier')) ?></dt>
+                        <dd><?= is_string($order['carrier']) && $order['carrier'] !== '' ? '<span dir="auto">' . e($order['carrier']) . '</span>' : '<span class="muted">' . e(t('admin.order.none')) . '</span>' ?></dd>
+                        <dt><?= e(t('admin.fulfilment.tracking_number')) ?></dt>
+                        <dd><?= is_string($order['tracking_number']) && $order['tracking_number'] !== '' ? '<span class="tracking-number" dir="ltr">' . e($order['tracking_number']) . '</span>' : '<span class="muted">' . e(t('admin.order.none')) . '</span>' ?></dd>
+                        <dt><?= e(t('admin.fulfilment.delivered_at')) ?></dt>
+                        <dd><?= $timestamp($order['delivered_at']) ?></dd>
+                    </dl>
+<?php endif; ?>
+<?php if ($status === 'paid' && $fulfilment === 'processing'): ?>
+                    <p id="ship-help"><?= e(t('admin.fulfilment.ship_text')) ?></p>
+                    <form class="shipment-form" method="post" action="<?= e($orderUrl) ?>" data-once>
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="ship">
+                        <div class="form-field">
+                            <label for="shipment-carrier"><?= e(t('admin.fulfilment.carrier')) ?></label>
+                            <input class="form-control" type="text" id="shipment-carrier" name="carrier" maxlength="<?= CARRIER_MAX_LENGTH ?>" list="carrier-options" autocomplete="off" dir="auto" value="<?= e($shipmentValues['carrier']) ?>"<?= $shipmentAria('carrier', 'shipment-carrier-hint') ?>>
+                            <datalist id="carrier-options">
+<?php foreach (CARRIER_SUGGESTIONS as $carrier): ?>
+                                <option value="<?= e($carrier) ?>"></option>
+<?php endforeach; ?>
+                            </datalist>
+                            <p class="form-hint" id="shipment-carrier-hint"><?= e(t('admin.fulfilment.carrier_hint')) ?></p>
+<?php if ($shipmentErrors['carrier'] !== null): ?>
+                            <p class="field-error" id="shipment-carrier-error"><?= e($shipmentErrors['carrier']) ?></p>
+<?php endif; ?>
+                        </div>
+                        <div class="form-field">
+                            <label for="shipment-tracking_number"><?= e(t('admin.fulfilment.tracking_number')) ?></label>
+                            <input class="form-control" type="text" id="shipment-tracking_number" name="tracking_number" maxlength="<?= TRACKING_NUMBER_MAX_LENGTH ?>" autocomplete="off" spellcheck="false" dir="ltr" value="<?= e($shipmentValues['tracking_number']) ?>"<?= $shipmentAria('tracking_number', 'shipment-tracking_number-hint') ?>>
+                            <p class="form-hint" id="shipment-tracking_number-hint"><?= e(t('admin.fulfilment.tracking_hint')) ?></p>
+<?php if ($shipmentErrors['tracking_number'] !== null): ?>
+                            <p class="field-error" id="shipment-tracking_number-error"><?= e($shipmentErrors['tracking_number']) ?></p>
+<?php endif; ?>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn admin-submit" aria-describedby="ship-help"><?= e(t('admin.fulfilment.ship_button')) ?></button>
+                        </div>
+                    </form>
+<?php elseif ($status === 'paid' && $fulfilment === 'shipped'): ?>
+                    <p id="deliver-help"><?= e(t('admin.fulfilment.deliver_text')) ?></p>
+                    <form method="post" action="<?= e($orderUrl) ?>" data-confirm="<?= e(t('admin.fulfilment.deliver_confirm', ['id' => (int) $order['id']])) ?>" data-once>
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="deliver">
+                        <button type="submit" class="btn admin-submit" aria-describedby="deliver-help"><?= e(t('admin.fulfilment.deliver_button')) ?></button>
+                    </form>
+<?php elseif ($status === 'refunded'): ?>
+                    <p><?= e(t('admin.fulfilment.refunded_note')) ?></p>
+<?php elseif ($fulfilment === 'delivered'): ?>
+                    <p><?= e(t('admin.fulfilment.delivered_note')) ?></p>
+<?php elseif ($status === 'paid'): ?>
+                    <p><?= e(t('admin.fulfilment.untracked_note')) ?></p>
+<?php else: ?>
+                    <p><?= e(t('admin.fulfilment.unpaid_note')) ?></p>
+<?php endif; ?>
                 </section>
 
                 <section class="admin-content order-refund" id="refund" aria-labelledby="order-refund-title">

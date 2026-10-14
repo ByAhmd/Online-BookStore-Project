@@ -188,7 +188,7 @@ final class CsrfAndMethodsTest extends HttpTestCase
     public function testPostOnlyEndpointsRejectGet(): void
     {
         [$customer] = $this->signedInCustomer();
-        foreach (['Register.php', 'reset_password.php', 'update_password.php', 'update_cart.php', 'delete_from_cart.php', 'checkout.php'] as $endpoint) {
+        foreach (['Register.php', 'reset_password.php', 'update_password.php', 'update_cart.php', 'delete_from_cart.php'] as $endpoint) {
             $response = $customer->get($endpoint . '?cart_id=1&quantity=2&email=x%40example.com');
             $this->assertHtmlPage($response, 405);
             self::assertSame('POST', $response->header('Allow'), "GET $endpoint must advertise Allow: POST");
@@ -213,6 +213,10 @@ final class CsrfAndMethodsTest extends HttpTestCase
 
         // Pages that accept GET and POST reject other verbs.
         $this->assertHtmlPage($customer->request('PUT', 'profilePage.php', ['action' => 'update_payment']), 405);
+        $put = $customer->request('PUT', 'checkout.php', ['address' => 'new']);
+        $this->assertHtmlPage($put, 405);
+        self::assertSame('GET, POST', $put->header('Allow'));
+        $this->assertHtmlPage($customer->request('DELETE', 'order.php?id=1'), 405);
         [$admin] = $this->signedInAdmin();
         $this->assertHtmlPage($admin->request('DELETE', 'admin_dashboard.php?id=7'), 405);
         $this->assertHtmlPage($admin->request('PATCH', 'edit_book.php?id=7'), 405);

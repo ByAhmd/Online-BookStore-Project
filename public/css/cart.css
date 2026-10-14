@@ -231,8 +231,10 @@
     font-weight: 700;
 }
 
-.cart-page .checkout-form {
-    margin: 0;
+.cart-page .vat-note {
+    margin: 0 0 14px;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
 }
 
 .cart-page .btn-pay,
@@ -245,24 +247,16 @@
     background-color: var(--color-accent-hover);
 }
 
-.cart-page .checkout-form .btn-pay {
+/* "Proceed to Checkout" leads to the delivery and review step (checkout.php). */
+.cart-page .checkout-link,
+.cart-page .cart-summary .btn-pay:disabled {
     width: 100%;
     font-size: 1.05rem;
 }
 
 .cart-page .btn-pay:disabled {
     background-color: #9e9e9e;
-    cursor: progress;
-}
-
-/* Loading state: common.js marks data-once buttons aria-disabled on submit. */
-.cart-page .btn-pay .label-busy,
-.cart-page .btn-pay[aria-disabled="true"] .label-idle {
-    display: none;
-}
-
-.cart-page .btn-pay[aria-disabled="true"] .label-busy {
-    display: inline;
+    cursor: not-allowed;
 }
 
 .cart-page .secure-note {

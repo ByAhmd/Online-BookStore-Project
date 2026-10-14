@@ -14,6 +14,7 @@ $userId = (int) $user['id'];
 
 $sections = [
     'account' => ['label' => t('account.sections.account'), 'icon' => 'imges/AccountInfo.png'],
+    'addresses' => ['label' => t('account.sections.addresses'), 'icon' => null],
     'payment' => ['label' => t('account.sections.payment'), 'icon' => 'imges/PaymentMethod.png'],
     'orders' => ['label' => t('account.sections.orders'), 'icon' => 'imges/Reading.png'],
     'security' => ['label' => t('account.sections.security'), 'icon' => null],
@@ -86,6 +87,46 @@ if (is_post()) {
         flash('success', t('account.language.saved'));
         use_locale(null);
         redirect('profilePage.php?section=account');
+    }
+
+    if ($action === 'save_address') {
+        // An address id edits that address (only one of the customer's own); none adds one.
+        $addressId = parse_int($_POST['address_id'] ?? null);
+        $formUrl = 'profilePage.php?section=addresses' . ($addressId !== null ? '&edit=' . $addressId : '') . '#address-form';
+        [$address, $errors] = validate_address_input($_POST);
+        $makeDefault = ($_POST['make_default'] ?? null) === '1';
+        if ($errors !== []) {
+            remember_input($address + ['make_default' => $makeDefault ? '1' : '']);
+            remember_errors($errors);
+            flash('error', t('account.addresses.invalid'));
+            redirect($formUrl);
+        }
+
+        $saved = save_customer_address($userId, $address, $addressId, $makeDefault);
+        if ($saved['status'] === 'limit') {
+            remember_input($address + ['make_default' => $makeDefault ? '1' : '']);
+            flash('error', tn('account.addresses.limit', ADDRESS_MAX_PER_CUSTOMER));
+            redirect('profilePage.php?section=addresses');
+        }
+        if ($saved['status'] === 'missing') {
+            flash('error', t('account.addresses.not_found'));
+            redirect('profilePage.php?section=addresses');
+        }
+        flash('success', t($saved['status'] === 'created' ? 'account.addresses.created' : 'account.addresses.updated'));
+        redirect('profilePage.php?section=addresses');
+    }
+
+    if ($action === 'default_address' || $action === 'delete_address') {
+        $addressId = parse_int($_POST['address_id'] ?? null);
+        $done = $addressId !== null && ($action === 'default_address'
+            ? set_default_address($userId, $addressId)
+            : delete_customer_address($userId, $addressId));
+        if (!$done) {
+            flash('error', t('account.addresses.not_found'));
+        } else {
+            flash('success', t($action === 'default_address' ? 'account.addresses.default_set' : 'account.addresses.deleted'));
+        }
+        redirect('profilePage.php?section=addresses');
     }
 
     if ($action === 'update_payment') {
@@ -201,9 +242,21 @@ $legacyPreference = $storedPreference !== '' && !in_array($storedPreference, PAY
 $selectedPreference = $legacyPreference ? '' : $storedPreference;
 
 $errors = [];
-foreach (['profile_image', 'name', 'favorite_genre', 'date_of_birth', 'locale', 'payment_method', 'current_password', 'new_password', 'new_password_confirmation', 'delete_password', 'confirm_delete'] as $field) {
+foreach (['profile_image', 'name', 'favorite_genre', 'date_of_birth', 'locale', 'payment_method', 'current_password', 'new_password', 'new_password_confirmation', 'delete_password', 'confirm_delete', ...ADDRESS_FIELDS] as $field) {
     $errors[$field] = form_error($field);
 }
+
+// Delivery addresses: ?edit=<id> fills the form with one of the customer's own addresses.
+$addresses = customer_addresses($userId);
+$editId = parse_int($_GET['edit'] ?? null);
+$editing = $editId !== null ? find_user_address($userId, $editId) : null;
+$canAddAddress = count($addresses) < ADDRESS_MAX_PER_CUSTOMER;
+$addressValues = [];
+foreach (ADDRESS_FIELDS as $field) {
+    $addressValues[$field] = old($field, (string) ($editing[$field] ?? ''));
+}
+$addressErrors = array_intersect_key($errors, array_flip(ADDRESS_FIELDS));
+$makeDefaultChecked = old('make_default') === '1';
 
 /**
  * Accessibility attributes linking a field to its hint and error messages.
@@ -226,6 +279,7 @@ $fieldError = static function (string $field) use ($errors): string {
 
 // Menu icons for sections without an image in imges/ (inline, decorative).
 $menuIcons = [
+    'addresses' => '<svg class="profile-menu-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
     'security' => '<svg class="profile-menu-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><path d="M12 15v2"/></svg>',
     'delete' => '<svg class="profile-menu-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>',
 ];
@@ -352,6 +406,77 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                         </section>
                     </section>
 
+                    <section class="profile-section" id="section-addresses" data-section-panel="addresses" aria-labelledby="addresses-title"<?= $section === 'addresses' ? '' : ' hidden' ?>>
+                        <h2 id="addresses-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.addresses')) ?></h2>
+                        <p class="profile-intro"><?= e(tn('account.addresses.intro', ADDRESS_MAX_PER_CUSTOMER)) ?></p>
+
+<?php if ($addresses === []): ?>
+                        <p class="address-empty"><?= e(t('account.addresses.empty')) ?></p>
+<?php else: ?>
+                        <ul class="address-list" aria-label="<?= e(t('account.addresses.list_label')) ?>">
+<?php foreach ($addresses as $address):
+    $addressId = (int) $address['id'];
+    $addressOf = t('account.addresses.address_of', ['name' => (string) $address['recipient_name']]);
+    $isDefault = (int) $address['is_default'] === 1;
+    ?>
+                            <li class="address-card<?= $isDefault ? ' is-default' : '' ?>">
+                                <p class="address-text"><?= address_html($address) ?></p>
+<?php if ($isDefault): ?>
+                                <p class="address-badge"><?= e(t('account.addresses.default_badge')) ?></p>
+<?php endif; ?>
+                                <div class="address-actions">
+                                    <a class="btn btn-secondary btn-small" href="profilePage.php?section=addresses&amp;edit=<?= $addressId ?>#address-form"><?= e(t('account.addresses.edit')) ?><span class="sr-only"> <?= e($addressOf) ?></span></a>
+<?php if (!$isDefault): ?>
+                                    <form method="post" action="profilePage.php">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="default_address">
+                                        <input type="hidden" name="address_id" value="<?= $addressId ?>">
+                                        <button type="submit" class="btn btn-small"><?= e(t('account.addresses.make_default')) ?><span class="sr-only"> <?= e($addressOf) ?></span></button>
+                                    </form>
+<?php endif; ?>
+                                    <form method="post" action="profilePage.php" data-confirm="<?= e(t('account.addresses.delete_confirm')) ?>">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="delete_address">
+                                        <input type="hidden" name="address_id" value="<?= $addressId ?>">
+                                        <button type="submit" class="btn btn-danger btn-small"><?= e(t('account.addresses.delete')) ?><span class="sr-only"> <?= e($addressOf) ?></span></button>
+                                    </form>
+                                </div>
+                            </li>
+<?php endforeach; ?>
+                        </ul>
+<?php endif; ?>
+
+                        <section class="profile-subsection" id="address-form" aria-labelledby="address-form-title">
+                            <h3 id="address-form-title" class="profile-subsection-title"><?= e(t($editing !== null ? 'account.addresses.edit_heading' : 'account.addresses.add_heading')) ?></h3>
+<?php if ($editing === null && !$canAddAddress): ?>
+                            <p class="profile-notice"><?= e(tn('account.addresses.limit', ADDRESS_MAX_PER_CUSTOMER)) ?></p>
+<?php else: ?>
+                            <form class="profile-form address-form" method="post" action="profilePage.php" data-once>
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="save_address">
+<?php if ($editing !== null): ?>
+                                <input type="hidden" name="address_id" value="<?= (int) $editing['id'] ?>">
+<?php endif; ?>
+                                <?php render('address_fields', ['values' => $addressValues, 'errors' => $addressErrors, 'prefix' => 'address', 'required' => true]); ?>
+<?php if ($addresses !== [] && ($editing === null || (int) $editing['is_default'] !== 1)): ?>
+                                <div class="form-field checkbox-field">
+                                    <div class="checkbox-row">
+                                        <input type="checkbox" id="address-make-default" name="make_default" value="1"<?= $makeDefaultChecked ? ' checked' : '' ?>>
+                                        <label for="address-make-default"><?= e(t('account.addresses.make_default_label')) ?></label>
+                                    </div>
+                                </div>
+<?php endif; ?>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn profile-submit"><?= e(t('account.addresses.submit')) ?></button>
+<?php if ($editing !== null): ?>
+                                    <a class="btn btn-secondary address-cancel" href="profilePage.php?section=addresses"><?= e(t('account.addresses.cancel')) ?></a>
+<?php endif; ?>
+                                </div>
+                            </form>
+<?php endif; ?>
+                        </section>
+                    </section>
+
                     <section class="profile-section" id="section-payment" data-section-panel="payment" aria-labelledby="payment-title"<?= $section === 'payment' ? '' : ' hidden' ?>>
                         <h2 id="payment-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.payment')) ?></h2>
                         <p class="profile-intro" id="payment-intro"><?= e(t(payment_simulator_enabled() ? 'shop.pay.profile_intro' : 'account.payment.intro', ['app' => $appName])) ?></p>
@@ -391,14 +516,15 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                         <ol class="order-list">
 <?php foreach ($orders as $order): ?>
 <?php
-    $status = (string) $order['status'];
+    // Paid orders show their delivery stage (processing, shipped, delivered).
+    $status = order_display_status($order);
     $placedAt = new DateTimeImmutable((string) $order['created_at']);
     $placedHtml = '<time datetime="' . e($placedAt->format(DATE_ATOM)) . '">' . e($placedAt->format(t('account.orders.date_format'))) . '</time>';
 ?>
                             <li class="order-card">
                                 <div class="order-head">
-                                    <h3 class="order-number"><?= e(t('account.orders.number', ['id' => (int) $order['id']])) ?></h3>
-                                    <span class="status-badge status-<?= e($status) ?>"><?= e(t('common.status.' . $status)) ?></span>
+                                    <h3 class="order-number"><a href="order.php?id=<?= (int) $order['id'] ?>"><?= e(t('account.orders.number', ['id' => (int) $order['id']])) ?></a></h3>
+                                    <span class="status-badge status-<?= e($status) ?>"><?= e(order_status_label($status)) ?></span>
                                 </div>
                                 <p class="order-date"><?= t_html('account.orders.placed', ['date' => $placedHtml]) ?></p>
 <?php if ($order['items'] !== []): ?>
@@ -415,7 +541,10 @@ page_header($sections[$section]['label'], ['profilePage.css']);
 <?php endforeach; ?>
                                 </ul>
 <?php endif; ?>
-                                <p class="order-total"><?= e(t('account.orders.total')) ?> <strong dir="auto"><?= e(format_money((string) $order['total_amount'], (string) $order['currency'])) ?></strong></p>
+                                <div class="order-foot">
+                                    <a class="order-view" href="order.php?id=<?= (int) $order['id'] ?>"><?= e(t('account.orders.view')) ?><span class="sr-only"> <?= e(t('account.orders.view_sr', ['id' => (int) $order['id']])) ?></span></a>
+                                    <p class="order-total"><?= e(t('account.orders.total')) ?> <strong dir="auto"><?= e(format_money((string) $order['total_amount'], (string) $order['currency'])) ?></strong></p>
+                                </div>
                             </li>
 <?php endforeach; ?>
                         </ol>

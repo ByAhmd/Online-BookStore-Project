@@ -114,8 +114,9 @@ final class StockPagesTest extends HttpTestCase
         self::assertSame('Only 2 copies are left. Lower the quantity to check out.', $document->text('//*[@id="stock-problem-' . $line . '"]'));
         $input = $document->first('//input[@id="qty-' . $line . '"]');
         self::assertSame(['2', 'true', 'stock-problem-' . $line], [$input?->getAttribute('max'), $input?->getAttribute('aria-invalid'), $input?->getAttribute('aria-describedby')]);
-        self::assertFalse($document->hasForm('checkout.php'), 'No checkout form while a line is short');
+        self::assertNull($document->first('//a[@href="checkout.php"]'), 'No way to the checkout page while a line is short');
         self::assertTrue($document->first('//button[' . HtmlDocument::hasClass('btn-pay') . ']')?->hasAttribute('disabled'));
+        $this->assertRedirect($customer->get('checkout.php'), 'cart.php', 303, 'The checkout page sends the customer back to the cart');
 
         // Posting to checkout anyway is refused, naming the book; nothing is charged.
         $refused = $customer->postWithToken('checkout.php');
@@ -130,7 +131,7 @@ final class StockPagesTest extends HttpTestCase
         $cart = $customer->follow($capped);
         $this->assertFlash($cart, 'info', 'Only 2 copies of “Esabella” are available, so the quantity was set to 2.');
         self::assertSame([7 => 1, self::ESABELLA => 2], $this->cartQuantities($userId));
-        self::assertTrue($cart->document()->hasForm('checkout.php'));
+        self::assertNotNull($cart->document()->first('//a[@href="checkout.php"]'));
         $this->assertPageText('Only 2 left', $cart);
 
         $sessionId = $this->startCheckout($customer);
@@ -149,7 +150,7 @@ final class StockPagesTest extends HttpTestCase
         $document = $this->assertHtmlPage($cart);
         self::assertSame('This book is out of stock. Remove it to check out.', $document->text('//*[@id="stock-problem-' . $line . '"]'));
         self::assertFalse($document->hasForm('update_cart.php', ['cart_id' => (string) $line]), 'No quantity form for a sold-out book');
-        self::assertFalse($document->hasForm('checkout.php'));
+        self::assertNull($document->first('//a[@href="checkout.php"]'));
 
         $update = $customer->postWithToken('update_cart.php', ['cart_id' => (string) $line, 'quantity' => '1']);
         $this->assertFlash($customer->follow($update), 'error', '“Esabella” is out of stock. Please remove it from your cart.');

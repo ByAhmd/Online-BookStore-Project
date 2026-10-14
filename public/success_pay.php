@@ -19,6 +19,9 @@ $orderMoney = static function (string|int|float $amount) use ($order): string {
 
 $items = $state === 'paid' && $order !== null ? order_items((int) $order['id']) : [];
 $refunded = $state === 'paid' && ($order['status'] ?? null) === 'refunded';
+$vatMinor = $order !== null ? vat_included_minor((int) $order['amount_minor']) : 0;
+// A paid order with a delivery address is now being prepared (see src/fulfilment.php).
+$delivering = $state === 'paid' && !$refunded && ($order['fulfilment_status'] ?? null) !== null;
 
 $paidAt = null;
 if ($state === 'paid' && !empty($order['paid_at'])) {
@@ -94,14 +97,22 @@ page_header($pageTitle, ['checkout.css']);
                             <th scope="row" colspan="2"><?= e(t('shop.result.total_paid')) ?></th>
                             <td class="num"><?= e($orderMoney((string) $order['total_amount'])) ?></td>
                         </tr>
+                        <tr class="order-vat">
+                            <th scope="row" colspan="2"><?= e(t('shop.totals.vat_included', ['rate' => VAT_RATE_PERCENT])) ?></th>
+                            <td class="num"><?= e($orderMoney(minor_to_decimal($vatMinor))) ?></td>
+                        </tr>
                     </tfoot>
                 </table>
 <?php endif; ?>
 
+<?php if ($delivering): ?>
+                <p class="result-note"><?= e(t('shop.result.delivery_note')) ?></p>
+<?php endif; ?>
 <?php if (!$refunded): ?>
                 <p class="result-note"><?= e(t('shop.result.paid_note')) ?></p>
 <?php endif; ?>
                 <div class="result-actions">
+                    <a class="btn btn-secondary" href="order.php?id=<?= (int) $order['id'] ?>"><?= e(t('shop.result.view_order')) ?></a>
                     <a class="btn btn-secondary" href="profilePage.php?section=orders"><?= e(t('shop.result.view_orders')) ?></a>
                     <a class="btn btn-pay" href="Explore_Page.php"><?= e(t('shop.result.continue')) ?></a>
                 </div>

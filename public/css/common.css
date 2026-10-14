@@ -549,6 +549,33 @@ textarea.form-control {
     color: #7a4100;
 }
 
+/* Delivery stages of paid orders. Admin pages show them next to the payment
+   status as .fulfilment-badge (same shape as .status-badge). */
+.fulfilment-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: var(--radius-lg);
+    font-size: 0.85rem;
+    font-weight: 700;
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+.status-processing {
+    background: var(--color-info-bg);
+    color: var(--color-info-text);
+}
+
+.status-shipped {
+    background: #ede7f6;
+    color: #4527a0;
+}
+
+.status-delivered {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
 .error-page {
     max-width: 640px;
     margin: 60px auto;

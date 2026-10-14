@@ -15,15 +15,20 @@ $status = input_string($_GET, 'status', 20);
 if (!in_array($status, ORDER_STATUS_FILTERS, true)) {
     $status = '';
 }
+// Delivery stage of paid orders (processing, shipped, delivered).
+$fulfilment = input_string($_GET, 'fulfilment', 20);
+if (!in_array($fulfilment, FULFILMENT_STATUSES, true)) {
+    $fulfilment = '';
+}
 $query = input_string($_GET, 'q', 255);
 
-$listing = admin_order_list($status, $query, $_GET['page'] ?? null);
+$listing = admin_order_list($status, $query, $_GET['page'] ?? null, $fulfilment);
 $orders = $listing['orders'];
 $pagination = $listing['pagination'];
-$filtered = $status !== '' || $query !== '';
+$filtered = $status !== '' || $fulfilment !== '' || $query !== '';
 
-$pageUrl = static function (int $page) use ($status, $query): string {
-    $params = array_filter(['status' => $status, 'q' => $query], static fn (string $value): bool => $value !== '');
+$pageUrl = static function (int $page) use ($status, $fulfilment, $query): string {
+    $params = array_filter(['status' => $status, 'fulfilment' => $fulfilment, 'q' => $query], static fn (string $value): bool => $value !== '');
     if ($page > 1) {
         $params['page'] = $page;
     }
@@ -63,6 +68,15 @@ page_header(t('admin.orders.title'), ['Admin_dashboard.css']);
                         </select>
                     </div>
                     <div class="form-field">
+                        <label for="order-fulfilment"><?= e(t('admin.orders.fulfilment_label')) ?></label>
+                        <select class="form-control" id="order-fulfilment" name="fulfilment" aria-describedby="order-fulfilment-hint">
+                            <option value=""<?= $fulfilment === '' ? ' selected' : '' ?>><?= e(t('admin.orders.fulfilment_all')) ?></option>
+<?php foreach (FULFILMENT_STATUSES as $option): ?>
+                            <option value="<?= e($option) ?>"<?= $fulfilment === $option ? ' selected' : '' ?>><?= e(order_status_label($option)) ?></option>
+<?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-field">
                         <label for="order-search"><?= e(t('admin.orders.search_label')) ?></label>
                         <input class="form-control" type="search" id="order-search" name="q" maxlength="255" dir="ltr" value="<?= e($query) ?>" placeholder="<?= e(t('admin.orders.search_placeholder')) ?>" autocomplete="off" spellcheck="false">
                     </div>
@@ -72,6 +86,7 @@ page_header(t('admin.orders.title'), ['Admin_dashboard.css']);
                         <a class="btn btn-secondary" href="admin_orders.php"><?= e(t('admin.orders.reset')) ?></a>
 <?php endif; ?>
                     </div>
+                    <p class="form-hint filters-hint" id="order-fulfilment-hint"><?= e(t('admin.orders.fulfilment_hint')) ?></p>
                 </form>
             </section>
 
@@ -96,6 +111,7 @@ page_header(t('admin.orders.title'), ['Admin_dashboard.css']);
                                 <th scope="col" class="num"><?= e(t('admin.orders.col_items')) ?></th>
                                 <th scope="col" class="num"><?= e(t('admin.orders.col_total')) ?></th>
                                 <th scope="col"><?= e(t('admin.orders.col_status')) ?></th>
+                                <th scope="col"><?= e(t('admin.orders.col_delivery')) ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -114,6 +130,11 @@ page_header(t('admin.orders.title'), ['Admin_dashboard.css']);
                                 <td class="num"><?= (int) $order['item_count'] ?></td>
                                 <td class="num"><?= e(format_money((string) $order['total_amount'], (string) $order['currency'])) ?></td>
                                 <td><span class="status-badge status-<?= e($order['status']) ?>"><?= e(t('common.status.' . $order['status'])) ?></span></td>
+<?php if ($order['status'] === 'paid' && in_array($order['fulfilment_status'], FULFILMENT_STATUSES, true)): ?>
+                                <td><span class="fulfilment-badge status-<?= e($order['fulfilment_status']) ?>"><?= e(order_status_label((string) $order['fulfilment_status'])) ?></span></td>
+<?php else: ?>
+                                <td><span class="muted"><?= e(t('admin.order.none')) ?></span></td>
+<?php endif; ?>
                             </tr>
 <?php endforeach; ?>
                         </tbody>

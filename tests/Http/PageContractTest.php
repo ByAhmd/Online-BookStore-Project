@@ -23,6 +23,7 @@ final class PageContractTest extends HttpTestCase
         'cart.php',
         'profilePage.php',
         'profilePage.php?section=orders',
+        'profilePage.php?section=addresses',
         'success_pay.php?session_id=cs_test_unknown',
         'cancel_pay.php',
     ];
@@ -40,7 +41,7 @@ final class PageContractTest extends HttpTestCase
         $this->assertHtmlPage($guest->get('reset_form.php'), 404);
         $this->assertHtmlPage($guest->get('reset_form.php?token=' . str_repeat('ab', 32)), 404);
 
-        foreach ([...self::CUSTOMER_PAGES, ...self::ADMIN_PAGES] as $path) {
+        foreach ([...self::CUSTOMER_PAGES, ...self::ADMIN_PAGES, 'checkout.php', 'order.php?id=1'] as $path) {
             $this->assertRedirect($guest->get($path), 'index.php?form=login', 303, "Guest GET $path");
         }
 
@@ -83,9 +84,12 @@ final class PageContractTest extends HttpTestCase
         // A filled cart and a paid order (success page, order history).
         $this->assertRedirect($this->addToCart($customer, 7, 2), 'cart.php');
         $this->assertHtmlPage($customer->get('cart.php'));
+        $this->assertHtmlPage($customer->get('checkout.php'));
         $this->assertRedirect($this->addToCart($customer, 51, 1), 'cart.php');
         $purchase = $this->purchase($customer, []);
         $this->assertHtmlPage($purchase['page']);
+        $this->assertHtmlPage($customer->get('order.php?id=' . $purchase['order']['id']));
+        $this->assertRedirect($customer->get('checkout.php'), 'cart.php', 303, 'Nothing left to check out');
         $this->assertHtmlPage($customer->get('profilePage.php?section=orders'));
         $this->assertHtmlPage($customer->get('cancel_pay.php?order=' . $purchase['order']['id']));
         $this->assertHtmlPage($customer->get('Selected.php?id=7')); // now with the review form

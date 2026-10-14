@@ -248,8 +248,13 @@ final class ProfileTest extends HttpTestCase
         $document = $this->assertHtmlPage($page);
         self::assertFalse($document->first('//section[@id="section-orders"]')?->hasAttribute('hidden'));
         self::assertSame(['Order #' . $orderId], $document->texts('//h3[contains(@class, "order-number")]'));
-        self::assertSame(['Paid'], $document->texts('//span[contains(@class, "status-badge")]'));
-        self::assertNotNull($document->first('//span[contains(@class, "status-badge") and contains(@class, "status-paid")]'));
+        // Paid orders show their delivery stage, and lead to their own page.
+        self::assertSame(['Processing'], $document->texts('//span[contains(@class, "status-badge")]'));
+        self::assertNotNull($document->first('//span[contains(@class, "status-badge") and contains(@class, "status-processing")]'));
+        self::assertSame(['order.php?id=' . $orderId, 'order.php?id=' . $orderId], array_map(
+            static fn (\DOMElement $link): string => $link->getAttribute('href'),
+            $document->elements('//li[contains(@class, "order-card")]//a[starts-with(@href, "order.php")]')
+        ));
         self::assertSame(['Esabella × 2', 'The Danger Bridge × 1'], $document->texts('//ul[@class="order-items"]/li'));
         $this->assertPageText('Total ' . format_money((string) $purchase['order']['total_amount']), $page);
 

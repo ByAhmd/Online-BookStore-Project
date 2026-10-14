@@ -11,10 +11,10 @@
 # BASE_URL must be the site's APP_URL: the payment page returns there.
 #
 # Checks: /health.php, the home page with the sample catalog, sign-up, add to
-# cart, checkout on the payment simulator's page (public/pay.php) to the paid
-# confirmation, that the payment page needs its CSRF token and refuses unknown
-# sessions, that the Stripe webhook is closed, that private files are not
-# served, and the security headers.
+# cart, the checkout page with a delivery address, checkout on the payment
+# simulator's page (public/pay.php) to the paid confirmation, that the payment
+# page needs its CSRF token and refuses unknown sessions, that the Stripe
+# webhook is closed, that private files are not served, and the security headers.
 
 set -euo pipefail
 
@@ -186,12 +186,28 @@ expect_status 302 303
 
 request GET cart.php
 expect_status 200
-grep -q 'action="checkout.php"' "$BODY" || fail "the cart has no checkout form"
+grep -q 'href="checkout.php"' "$BODY" || fail "the cart has no link to the checkout page"
 pass "book ${book_id} was added to the cart"
 
 # --- Checkout with the payment simulator -------------------------------------
+# The checkout page asks a new customer for a delivery address (Saudi National Address).
+request GET checkout.php
+expect_status 200
+grep -q 'action="checkout.php"' "$BODY" || fail "the checkout page has no checkout form"
+grep -q 'name="recipient_name"' "$BODY" || fail "the checkout page does not ask for a delivery address"
+pass "the checkout page asks for a delivery address"
+
 token="$(csrf_token)"
-request POST checkout.php --data-urlencode "_token=${token}"
+request POST checkout.php \
+    --data-urlencode "_token=${token}" \
+    --data-urlencode 'address=new' \
+    --data-urlencode 'recipient_name=Smoke Test' \
+    --data-urlencode 'phone=0512345678' \
+    --data-urlencode 'city=Riyadh' \
+    --data-urlencode 'district=Al Olaya' \
+    --data-urlencode 'street=King Fahd Road' \
+    --data-urlencode 'building_number=1234' \
+    --data-urlencode 'postal_code=12345'
 expect_status 303
 if [[ ! "$LOCATION" =~ /pay\.php\?session=(cs_test_[A-Za-z0-9]+)$ ]]; then
     fail "checkout did not redirect to the simulated payment page (Location: ${LOCATION})"

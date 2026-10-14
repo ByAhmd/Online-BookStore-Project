@@ -117,17 +117,12 @@ page_header(t('shop.cart.title'), ['cart.css']);
                             <dd><?= e(format_minor($totalMinor)) ?></dd>
                         </div>
                     </dl>
+                    <p class="vat-note"><?= e(t('shop.cart.vat_note', ['rate' => VAT_RATE_PERCENT])) ?></p>
 <?php if ($blocked): ?>
-                    <button type="button" class="btn btn-pay" disabled aria-disabled="true" aria-describedby="cart-stock-alert"><?= e(t('shop.cart.pay')) ?></button>
+                    <button type="button" class="btn btn-pay" disabled aria-disabled="true" aria-describedby="cart-stock-alert"><?= e(t('shop.cart.checkout')) ?></button>
                     <p class="checkout-blocked-note"><?= e(t('shop.cart.blocked_short')) ?></p>
 <?php else: ?>
-                    <form class="checkout-form" method="post" action="checkout.php" data-once>
-                        <?= csrf_field() ?>
-                        <button type="submit" class="btn btn-pay">
-                            <span class="label-idle"><?= e(t('shop.cart.pay')) ?></span>
-                            <span class="label-busy"><?= e(t(payment_simulator_enabled() ? 'shop.pay.cart_redirecting' : 'shop.cart.redirecting')) ?></span>
-                        </button>
-                    </form>
+                    <a class="btn btn-pay checkout-link" href="checkout.php"><?= e(t('shop.cart.checkout')) ?></a>
 <?php endif; ?>
                     <p class="secure-note"><?= e(payment_simulator_enabled() ? t('shop.pay.cart_note') : t('shop.cart.secure_note', ['app' => $appName])) ?></p>
                     <a class="continue-link" href="Explore_Page.php"><?= e(t('shop.cart.continue')) ?></a>

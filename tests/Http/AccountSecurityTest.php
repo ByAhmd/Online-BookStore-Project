@@ -292,6 +292,9 @@ final class AccountSecurityTest extends HttpTestCase
         $order = db_one('SELECT user_id, status, amount_minor, stripe_session_id FROM orders WHERE id = ?', [$orderId]);
         self::assertSame(['user_id' => null, 'status' => 'paid', 'amount_minor' => (int) $purchase['order']['amount_minor'], 'stripe_session_id' => $purchase['session']], $order);
         self::assertSame(1, $this->countRows('order_items', 'order_id = ?', [$orderId]));
+        // It is still on its way, so it keeps its delivery address until it is delivered; the address book is gone.
+        self::assertNotNull(order_address($orderId));
+        self::assertSame(0, $this->countRows('addresses', 'user_id = ?', [$userId]));
 
         // Other customers keep their data and still see their own review.
         self::assertNotNull(find_user($otherId));

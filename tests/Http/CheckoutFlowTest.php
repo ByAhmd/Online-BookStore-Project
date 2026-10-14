@@ -142,7 +142,8 @@ final class CheckoutFlowTest extends HttpTestCase
         $orders = $customer->get('profilePage.php?section=orders');
         $this->assertPageText('Order #' . $orderId, $orders);
         // The profile page renders status labels (common.status.*), so compare case-insensitively.
-        self::assertSame(['paid'], array_map('strtolower', $orders->document()->texts('//span[' . HtmlDocument::hasClass('status-badge') . ']')));
+        // A paid order is being prepared for delivery.
+        self::assertSame(['processing'], array_map('strtolower', $orders->document()->texts('//span[' . HtmlDocument::hasClass('status-badge') . ']')));
         $this->assertPageText('Sold: 3 times', $this->bookPage($customer, self::ESABELLA));
         [$admin] = $this->signedInAdmin();
         $dashboard = $admin->get('admin_dashboard.php');
@@ -154,6 +155,7 @@ final class CheckoutFlowTest extends HttpTestCase
     public function testEmptyCartCannotBeCheckedOut(): void
     {
         [$customer] = $this->signedInCustomer();
+        $this->assertRedirect($customer->get('checkout.php'), 'cart.php', 303, 'Nothing to review');
         $response = $customer->postWithToken('checkout.php');
         $this->assertRedirect($response, 'cart.php');
         $this->assertFlash($customer->follow($response), 'error', 'Your cart is empty.');
