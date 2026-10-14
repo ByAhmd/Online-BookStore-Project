@@ -27,7 +27,7 @@ final class PageContractTest extends HttpTestCase
         'cancel_pay.php',
     ];
 
-    private const ADMIN_PAGES = ['admin_dashboard.php', 'edit_book.php?id=7'];
+    private const ADMIN_PAGES = ['admin_dashboard.php', 'edit_book.php?id=7', 'admin_orders.php', 'admin_order.php?id=1'];
 
     public function testGuestPages(): void
     {
@@ -73,6 +73,9 @@ final class PageContractTest extends HttpTestCase
         }
         $this->assertHtmlPage($customer->get('Explore_Page.php?q=Olivia'));
         $this->assertHtmlPage($customer->get('Explore_Page.php?genre=Mystery&q=zzz-no-match'));
+        foreach (['2', '3', '99', '0', 'x'] as $page) {
+            $this->assertHtmlPage($customer->get('Explore_Page.php?page=' . $page));
+        }
         $this->assertHtmlPage($customer->get('profilePage.php?section=payment'));
         $this->assertHtmlPage($customer->get('Selected.php?id=999999'), 404);
         $this->assertHtmlPage($customer->get('success_pay.php'), 404);
@@ -109,11 +112,24 @@ final class PageContractTest extends HttpTestCase
         [$admin] = $this->signedInAdmin();
 
         $this->assertRedirect($admin->get('index.php'), 'admin_dashboard.php');
-        foreach (['admin_dashboard.php', 'edit_book.php?id=7', 'edit_book.php?id=61', 'Home_Page.php', 'About_us.php'] as $path) {
+        $customer = $this->createUser();
+        db_run(
+            "INSERT INTO orders (user_id, status, currency, total_amount, amount_minor, stripe_session_id, stripe_payment_intent, paid_at)
+             VALUES (?, 'paid', 'sar', '19.99', 1999, 'cs_test_contract', 'pi_test_contract', NOW())",
+            [$customer['id']]
+        );
+        $orderId = (int) db()->lastInsertId();
+        db_run("INSERT INTO order_items (order_id, book_id, title, unit_price, quantity) VALUES (?, 51, 'Esabella', '19.99', 1)", [$orderId]);
+        foreach ([
+            'admin_dashboard.php', 'admin_dashboard.php?page=2', 'admin_dashboard.php?page=3', 'edit_book.php?id=7', 'edit_book.php?id=61',
+            'admin_orders.php', 'admin_orders.php?status=paid&q=' . $orderId, 'admin_orders.php?status=refunded', 'admin_order.php?id=' . $orderId,
+            'Home_Page.php', 'About_us.php',
+        ] as $path) {
             $this->assertHtmlPage($admin->get($path));
         }
         $this->assertHtmlPage($admin->get('edit_book.php?id=999999'), 404);
         $this->assertHtmlPage($admin->get('edit_book.php'), 404);
+        $this->assertHtmlPage($admin->get('admin_order.php?id=999999'), 404);
 
         foreach (self::CUSTOMER_PAGES as $path) {
             $this->assertRedirect($admin->get($path), 'admin_dashboard.php', 303, "Admin GET $path");

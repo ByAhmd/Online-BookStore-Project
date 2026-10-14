@@ -765,7 +765,8 @@ function confirmed_full_refund(string $paymentIntent, int $amountMinor, string $
             continue;
         }
         $total += (int) ($refund->amount ?? 0);
-        if ((int) ($refund->created ?? 0) >= $newestCreated) {
+        // Stripe lists newest first, so the first refund wins a tie on "created".
+        if ((int) ($refund->created ?? 0) > $newestCreated) {
             $newestCreated = (int) ($refund->created ?? 0);
             $newest = (string) $refund->id;
         }

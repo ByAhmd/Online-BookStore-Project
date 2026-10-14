@@ -1,0 +1,197 @@
+<?php
+
+declare(strict_types=1);
+
+namespace BookWise\Tests\Http;
+
+use BookWise\Tests\Support\HtmlDocument;
+use BookWise\Tests\Support\HttpClient;
+use BookWise\Tests\Support\HttpResponse;
+use BookWise\Tests\Support\HttpTestCase;
+
+/**
+ * The shop and admin pages in Arabic: right-to-left documents, Arabic text
+ * (including flashes, errors and the JSON API) and no untranslated keys or
+ * leftover English interface text.
+ */
+final class ArabicPagesTest extends HttpTestCase
+{
+    /** English interface phrases that must not appear on an Arabic page. */
+    private const ENGLISH = [
+        'Add to cart', 'Proceed to Pay', 'Showing ', 'In stock', 'Out of stock', 'Only ', 'Manage Books', 'Recent Orders',
+        'Add New Book', 'Book Title', 'Copies in stock', 'Cover Image', 'Order total', 'Refund order', 'Signed in as',
+        'Continue exploring', 'View my orders', 'Grand Total', 'Rate this Book', 'Similar Books', 'Meet the Team',
+        'Discover', 'Explore books', 'Search by title', 'Order summary', 'Payment not found', 'Checkout canceled',
+    ];
+
+    private static function arabic(HttpClient $client): HttpClient
+    {
+        $client->setCookie(LOCALE_COOKIE, 'ar');
+        return $client;
+    }
+
+    /**
+     * Interface text of a page: visible text and labelling attributes, but not
+     * catalog or customer text (always marked dir="auto"), which stays as entered.
+     */
+    private static function interfaceText(HttpResponse $page): string
+    {
+        $dom = new \DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="UTF-8">' . $page->body, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        $xpath = new \DOMXPath($dom);
+        $outsideCatalogText = '[not(ancestor-or-self::*[@dir="auto"])][not(ancestor::script)]';
+        $parts = [];
+        foreach ($xpath->query('//title | //body//text()' . $outsideCatalogText) ?: [] as $node) {
+            $parts[] = $node->textContent;
+        }
+        foreach ($xpath->query('//*' . $outsideCatalogText . '/@*[name()="aria-label" or name()="placeholder" or name()="title" or name()="alt"]') ?: [] as $node) {
+            $parts[] = $node->textContent;
+        }
+        return HtmlDocument::normalize(implode(' ', $parts));
+    }
+
+    /**
+     * The page contract, an Arabic right-to-left document, the expected
+     * heading, and neither raw translation keys nor English interface text.
+     */
+    private function assertArabicPage(HttpResponse $page, string $heading, int $status = 200): HtmlDocument
+    {
+        $document = $this->assertHtmlPage($page, $status);
+        $html = $document->first('/html');
+        self::assertSame(['ar', 'rtl'], [$html?->getAttribute('lang'), $html?->getAttribute('dir')], $page->url);
+        self::assertSame($heading, $document->text('//h1'), $page->url);
+
+        self::assertDoesNotMatchRegularExpression('/\b(?:shop|admin|common)\.[a-z_]+\.[a-z_]/', $page->body, "Untranslated key on {$page->url}");
+        $text = self::interfaceText($page);
+        self::assertStringContainsString('رفيقك الشخصي في القراءة', $text, 'The scan sees the interface (footer tagline)');
+        foreach (self::ENGLISH as $english) {
+            self::assertStringNotContainsString($english, $text, "English interface text on {$page->url}");
+        }
+        return $document;
+    }
+
+    public function testTheLanguageSwitchRemembersArabic(): void
+    {
+        $guest = $this->client();
+        $switch = $guest->get('About_us.php?lang=ar');
+        $this->assertRedirect($switch, 'About_us.php');
+        $document = $this->assertArabicPage($guest->follow($switch), 'من نحن');
+        self::assertSame(['أحمد مساعد', 'نواف الزهراني', 'حسن الحربي', 'سلمان الفقيه', 'ضيف الله نعمان'], $document->texts('//li[' . HtmlDocument::hasClass('about-member') . ']'));
+        $this->assertPageText('بإشراف د. خالد رياض', $guest->get('About_us.php'));
+
+        $home = $guest->get('Home_Page.php');
+        $document = $this->assertArabicPage($home, 'اكتشف كتابك القادم مع BookWise');
+        self::assertSame('55 كتابًا متاحًا لك للاستكشاف', $document->text('//p[' . HtmlDocument::hasClass('home-hero-count') . ']'));
+        self::assertSame(['أنشئ حسابًا مجانيًا', 'تسجيل الدخول'], $document->texts('//div[' . HtmlDocument::hasClass('home-hero-actions') . ']/a'));
+        self::assertContains('متوفر', $document->texts('//*[' . HtmlDocument::hasClass('stock-badge') . ']'));
+    }
+
+    public function testCustomerPagesInArabic(): void
+    {
+        [$customer] = $this->signedInCustomer('قارئة عربية');
+        self::arabic($customer);
+
+        $home = $this->assertArabicPage($customer->get('Home_Page.php'), 'اكتشف كتابك القادم مع BookWise');
+        self::assertSame('مرحبًا، قارئة عربية!', $home->text('//p[' . HtmlDocument::hasClass('home-hero-greeting') . ']'));
+
+        $explore = $this->assertArabicPage($customer->get('Explore_Page.php'), 'اكتشف قراءات جديدة');
+        self::assertSame('عرض 1–24 من أصل 55 كتابًا في جميع التصنيفات.', $explore->text('//*[@id="explore-status"]'));
+        self::assertSame(['السابق', '1', '2', '3', 'التالي'], $explore->texts('//nav[' . HtmlDocument::hasClass('pager') . ']//li'));
+        self::assertSame('الصفحة 2', $explore->first('//nav[' . HtmlDocument::hasClass('pager') . ']//a[@data-page="2"][' . HtmlDocument::hasClass('pager-number') . ']')?->getAttribute('aria-label'));
+        $root = $explore->first('//*[@data-explore]');
+        self::assertSame(['جارٍ تحميل الكتب…', 'الصفحة :page', 'صفحات النتائج'], [$root?->getAttribute('data-i18n-loading'), $root?->getAttribute('data-i18n-page'), $root?->getAttribute('data-i18n-pager-label')]);
+        self::assertSame('عرض 16 كتابًا في Romantic.', $customer->get('Explore_Page.php?genre=Romantic')->document()->text('//*[@id="explore-status"]'));
+        $search = $this->assertArabicPage($customer->get('Explore_Page.php?q=love'), 'اكتشف قراءات جديدة');
+        self::assertSame('عرض 6 كتب في جميع التصنيفات تطابق «love».', $search->text('//*[@id="explore-status"]'));
+        $none = $this->assertArabicPage($customer->get('Explore_Page.php?q=zzz-nothing'), 'اكتشف قراءات جديدة');
+        self::assertSame('لا توجد كتب في جميع التصنيفات تطابق «zzz-nothing».', $none->text('//*[@id="explore-status"]'));
+        self::assertSame('لا توجد كتب تطابق بحثك', $none->text('//p[' . HtmlDocument::hasClass('explore-empty-title') . ']'));
+
+        $book = $this->assertArabicPage($this->bookPage($customer, 7), 'Biology');
+        self::assertSame('أضف إلى السلة', $book->text('//button[' . HtmlDocument::hasClass('cart-button') . ']'));
+        self::assertSame('متوفر', $book->text('//*[@id="stock-status"]'));
+        self::assertSame('تأليف anishtain', $book->text('//p[' . HtmlDocument::hasClass('book-author') . ']'));
+
+        $this->assertArabicPage($customer->get('cart.php'), 'سلتي');
+        $this->assertArabicPage($customer->get('success_pay.php?session_id=cs_test_unknown'), 'الدفعة غير موجودة', 404);
+        $this->assertArabicPage($customer->get('cancel_pay.php'), 'أُلغيت عملية الدفع');
+    }
+
+    public function testFlashesErrorsAndTheJsonApiInArabic(): void
+    {
+        [$customer, $user] = $this->signedInCustomer();
+        self::arabic($customer);
+
+        $added = $customer->follow($this->addToCart($customer, 7, 2));
+        $this->assertFlash($added, 'success', 'أُضيف 2 × Biology إلى سلتك.');
+        $document = $this->assertArabicPage($added, 'سلتي');
+        self::assertSame(['الكتاب', 'السعر', 'الكمية', 'الإجمالي', 'الإجراءات'], $document->texts('//table[' . HtmlDocument::hasClass('cart-table') . ']/thead//th'));
+
+        $line = $this->cartLineId((int) $user['id'], 7);
+        $this->assertFlash($customer->follow($customer->postWithToken('update_cart.php', ['cart_id' => (string) $line, 'quantity' => '3'])), 'success', 'حُدّثت كمية «Biology» إلى 3 نسخ.');
+        $this->assertFlash($customer->follow($customer->postWithToken('update_cart.php', ['cart_id' => (string) $line, 'quantity' => '0'])), 'error', 'اختر كمية بين 1 و10.');
+
+        db_run('UPDATE books SET stock = 1 WHERE id = 7');
+        $cart = $customer->get('cart.php');
+        $this->assertArabicPage($cart, 'سلتي');
+        $this->assertPageText('تبقّت نسخة واحدة فقط. قلّل الكمية لإتمام الشراء.', $cart);
+        $refused = $customer->follow($customer->postWithToken('checkout.php'));
+        $this->assertFlash($refused, 'error', 'لا تتوفر نسخ كافية من «Biology» في المخزون. يُرجى تقليل الكمية أو إزالة الكتاب من سلتك ثم المحاولة مرة أخرى.');
+
+        $json = $customer->get('fetch_books.php?page=3')->json();
+        self::assertSame('عرض 49–55 من أصل 55 كتابًا في جميع التصنيفات.', $json['summary']);
+        self::assertContains('متوفر', array_column($json['books'], 'availability'));
+        $favorites = $this->client();
+        $favorites->setCookie(LOCALE_COOKIE, 'ar');
+        self::assertSame(['error' => 'يُرجى تسجيل الدخول بحساب عميل لعرض مفضلتك.'], $favorites->get('fetch_books.php?genre=Favorites')->json());
+    }
+
+    public function testAdminPagesInArabic(): void
+    {
+        [$customer] = $this->signedInCustomer('Arabic Buyer');
+        $purchase = $this->purchase($customer, [51 => 1]);
+        $orderId = (int) $purchase['order']['id'];
+        [$admin] = $this->signedInAdmin('مشرف المتجر');
+        self::arabic($admin);
+
+        $dashboard = $this->assertArabicPage($admin->get('admin_dashboard.php'), 'لوحة تحكم المشرف');
+        self::assertSame(['الكتب', '55', 'التصنيفات', '8', 'الطلبات المدفوعة', '1', 'الإيرادات', 'SAR 19.99'], $dashboard->texts('//section[' . HtmlDocument::hasClass('admin-stats') . ']//p'));
+        self::assertSame('مسجّل الدخول باسم مشرف المتجر', $dashboard->text('//p[' . HtmlDocument::hasClass('admin-welcome') . ']'));
+        self::assertSame('مدفوع', $dashboard->text('//table[' . HtmlDocument::hasClass('orders-table') . ']//span[' . HtmlDocument::hasClass('status-badge') . ']'));
+        self::assertSame('عرض 1–20 من أصل 55 كتابًا.', $dashboard->text('//p[' . HtmlDocument::hasClass('table-summary') . ']'));
+
+        $this->assertArabicPage($admin->get('edit_book.php?id=7'), 'تعديل الكتاب');
+        $orders = $this->assertArabicPage($admin->get('admin_orders.php'), 'الطلبات');
+        self::assertSame('عرض 1–1 من أصل طلب واحد.', $orders->text('//p[' . HtmlDocument::hasClass('table-summary') . ']'));
+        $detail = $this->assertArabicPage($admin->get('admin_order.php?id=' . $orderId), 'الطلب رقم ' . $orderId);
+        self::assertSame('استرداد مبلغ الطلب', $detail->text('//form[@action="admin_order.php?id=' . $orderId . '"]//button'));
+
+        $invalid = $admin->submitForm($admin->get('admin_dashboard.php'), 'admin_dashboard.php', ['title' => '', 'stock' => 'x'], ['action' => 'add_book']);
+        $form = $admin->follow($invalid);
+        $this->assertFlash($form, 'error', 'لم يُضف الكتاب. يُرجى تصحيح الحقول المميزة.');
+        self::assertSame('حقل العنوان مطلوب.', $form->document()->fieldError('book-title-error'));
+        self::assertSame('يجب أن يكون المخزون عددًا صحيحًا من 0 إلى 100000.', $form->document()->fieldError('book-stock-error'));
+
+        $refund = $admin->submitForm($admin->get('admin_order.php?id=' . $orderId), 'admin_order.php?id=' . $orderId, [], ['action' => 'refund']);
+        $this->assertFlash($admin->follow($refund), 'success', 'استُرد مبلغ الطلب رقم ' . $orderId . '.');
+    }
+
+    public function testNoTranslationKeysLeakInEnglish(): void
+    {
+        [$customer] = $this->signedInCustomer();
+        $this->assertRedirect($this->addToCart($customer, 7, 1), 'cart.php');
+        [$admin] = $this->signedInAdmin();
+        foreach ([
+            $customer->get('Home_Page.php'), $customer->get('About_us.php'), $customer->get('Explore_Page.php'),
+            $customer->get('Selected.php?id=7'), $customer->get('cart.php'), $customer->get('cancel_pay.php'),
+            $admin->get('admin_dashboard.php'), $admin->get('admin_orders.php'), $admin->get('edit_book.php?id=7'),
+        ] as $page) {
+            $document = $this->assertHtmlPage($page);
+            self::assertSame('en', $document->first('/html')?->getAttribute('lang'));
+            self::assertDoesNotMatchRegularExpression('/\b(?:shop|admin|common)\.[a-z_]+\.[a-z_]/', $page->body, "Untranslated key on {$page->url}");
+        }
+    }
+}

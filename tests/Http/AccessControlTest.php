@@ -75,11 +75,26 @@ final class AccessControlTest extends HttpTestCase
         $this->assertHtmlPage($customer->postWithToken('edit_book.php?id=7', ['action' => 'update_book', 'title' => 'Hijacked']), 403);
         self::assertSame('Biology', db_value('SELECT title FROM books WHERE id = 7'));
 
+        // The order pages and the refund action are staff-only too.
+        db_run(
+            "INSERT INTO orders (user_id, status, currency, total_amount, amount_minor, stripe_payment_intent, paid_at)
+             SELECT id, 'paid', 'sar', '19.99', 1999, 'pi_test_access', NOW() FROM users LIMIT 1"
+        );
+        $orderId = (int) db()->lastInsertId();
+        $this->assertHtmlPage($customer->get('admin_orders.php'), 403);
+        $this->assertHtmlPage($customer->get('admin_order.php?id=' . $orderId), 403);
+        $this->assertHtmlPage($customer->postWithToken('admin_order.php?id=' . $orderId, ['action' => 'refund']), 403);
+        self::assertSame('paid', db_value('SELECT status FROM orders WHERE id = ?', [$orderId]));
+
         // Guests are sent to the login form instead.
         $guest = $this->client();
         $this->assertRedirect($guest->get('admin_dashboard.php'), 'index.php?form=login');
         $this->assertRedirect($guest->postWithToken('admin_dashboard.php', ['action' => 'delete_book', 'id' => '7']), 'index.php?form=login');
         self::assertNotNull(find_book(7));
+        $this->assertRedirect($guest->get('admin_orders.php'), 'index.php?form=login');
+        $this->assertRedirect($guest->postWithToken('admin_order.php?id=' . $orderId, ['action' => 'refund']), 'index.php?form=login');
+        self::assertSame('paid', db_value('SELECT status FROM orders WHERE id = ?', [$orderId]));
+        self::assertSame([], $this->stripe->refunds());
     }
 
     public function testAdministratorsAreKeptOutOfCustomerPages(): void

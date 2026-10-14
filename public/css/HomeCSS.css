@@ -269,6 +269,28 @@
     color: #fff;
 }
 
+/* Availability: "In stock", "Only N left" or "Out of stock". */
+.home-book .stock-badge {
+    align-self: flex-start;
+    margin: 6px 0 0;
+    padding: 2px 8px;
+    border-radius: var(--radius-lg);
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+.home-book .stock-badge.stock-low {
+    background: #fff4e5;
+    color: #7a4100;
+}
+
+.home-book .stock-badge.stock-out {
+    background: var(--color-error-bg);
+    color: var(--color-error-text);
+}
+
 /* ---------------------------------------------------------------------
    Responsive
    --------------------------------------------------------------------- */

@@ -52,10 +52,24 @@
     color: var(--color-text-muted);
 }
 
+/* Letter spacing pulls joined Arabic letters apart. */
+[dir="rtl"] .checkout-result .result-eyebrow {
+    letter-spacing: normal;
+}
+
 .checkout-result .result-title {
     font-size: 1.9rem;
     line-height: 1.25;
     margin: 0 0 12px;
+}
+
+.checkout-result .result-refunded {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: var(--radius-lg);
+    background: #fff4e5;
+    color: #7a4100;
+    font-weight: 700;
 }
 
 .checkout-result .result-lead {
@@ -92,7 +106,7 @@
     width: 100%;
     margin: 24px 0 16px;
     border-collapse: collapse;
-    text-align: left;
+    text-align: start;
 }
 
 .checkout-result .order-table th,
@@ -107,7 +121,7 @@
 }
 
 .checkout-result .order-table .num {
-    text-align: right;
+    text-align: end;
     white-space: nowrap;
 }
 
@@ -131,7 +145,7 @@
 }
 
 .checkout-result .order-table tfoot th {
-    text-align: right;
+    text-align: end;
 }
 
 @media (max-width: 600px) {

@@ -154,6 +154,21 @@ final class CsrfAndMethodsTest extends HttpTestCase
         $this->assertRejectedWithoutToken($admin, 'admin_dashboard.php', ['action' => 'delete_book', 'id' => '7'], $catalog);
         $this->assertRejectedWithoutToken($admin, 'edit_book.php?id=7', ['action' => 'update_book'] + $book, $catalog);
         self::assertNotNull(find_book(7));
+
+        // Refunds move money: never without the token.
+        $customer = $this->createUser();
+        db_run(
+            "INSERT INTO orders (user_id, status, currency, total_amount, amount_minor, stripe_payment_intent, paid_at)
+             VALUES (?, 'paid', 'sar', '19.99', 1999, 'pi_test_csrf', NOW())",
+            [$customer['id']]
+        );
+        $orderId = (int) db()->lastInsertId();
+        $this->assertRejectedWithoutToken(
+            $admin,
+            'admin_order.php?id=' . $orderId,
+            ['action' => 'refund'],
+            fn (): array => [find_order($orderId), $this->stripe->refunds()]
+        );
     }
 
     public function testTokenMayComeFromTheXCsrfTokenHeader(): void

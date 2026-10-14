@@ -42,11 +42,11 @@
 }
 
 .cart-page .cart-table thead th:first-child {
-    text-align: left;
+    text-align: start;
 }
 
 .cart-page .cart-table .cart-book {
-    text-align: left;
+    text-align: start;
 }
 
 .cart-page .cart-book-link {
@@ -138,11 +138,58 @@
 }
 
 .cart-page .total-row th {
-    text-align: right;
+    text-align: end;
 }
 
 .cart-page .total-row-amount {
     white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------
+   Stock: lines asking for more copies than are left block checkout
+   --------------------------------------------------------------------- */
+
+.cart-page .cart-alert {
+    margin: 0 0 16px;
+    padding: 12px 16px;
+    border: 1px solid #f5c2c0;
+    border-radius: var(--radius);
+    background: var(--color-error-bg);
+    color: var(--color-error-text);
+    font-weight: 700;
+}
+
+.cart-page .cart-row-unavailable {
+    background-color: #fff8f7;
+}
+
+.cart-page .cart-stock-problem {
+    margin: 8px 0 0;
+    color: var(--color-error-text);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.cart-page .stock-badge {
+    display: inline-block;
+    margin: 8px 0 0;
+    padding: 2px 10px;
+    border-radius: var(--radius-lg);
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: #fff4e5;
+    color: #7a4100;
+}
+
+.cart-page .cart-qty-static {
+    font-weight: 700;
+}
+
+.cart-page .checkout-blocked-note {
+    margin: 8px 0 0;
+    color: var(--color-error-text);
+    font-weight: 600;
+    text-align: center;
 }
 
 /* ---------------------------------------------------------------------
@@ -297,14 +344,14 @@
         gap: 12px;
         padding: 6px 0;
         border-bottom: none;
-        text-align: right;
+        text-align: end;
     }
 
     .cart-page .cart-table td[data-label]::before {
         content: attr(data-label);
         font-weight: 700;
         color: var(--color-text-muted);
-        text-align: left;
+        text-align: start;
     }
 
     .cart-page .cart-table .cart-book {
@@ -327,7 +374,7 @@
     .cart-page .cart-table .total-row th,
     .cart-page .cart-table .total-row td {
         padding: 0;
-        text-align: left;
+        text-align: start;
     }
 
     .cart-page .cart-table .total-row-spacer {
@@ -339,7 +386,7 @@
     }
 }
 
-/* Tablet: book on the left, price/quantity/total/remove stacked on the right. */
+/* Tablet: book first, price/quantity/total/remove stacked beside it (mirrored in right-to-left pages). */
 @media (min-width: 561px) and (max-width: 860px) {
     .cart-page .cart-table tbody tr {
         display: grid;

@@ -236,6 +236,136 @@ final class UploadsTest extends TestCase
         self::assertFileDoesNotExist(BASE_PATH . '/public/' . $path);
     }
 
+    /* -----------------------------------------------------------------
+     * Book covers
+     * --------------------------------------------------------------- */
+
+    private function storeCover(array $file): string
+    {
+        $path = store_cover_upload($file);
+        $this->storedPaths[] = $path;
+        return $path;
+    }
+
+    #[DataProvider('imageTypes')]
+    public function testCoversAreReencodedIntoTheirOwnDirectory(string $type, string $extension, string $mime): void
+    {
+        $path = $this->storeCover($this->upload($this->image($type, 30, 48), "cover.$extension", 'application/octet-stream'));
+
+        self::assertMatchesRegularExpression('#^uploads/covers/[a-f0-9]{32}\.' . $extension . '$#', $path);
+        $info = getimagesize(BASE_PATH . '/public/' . $path);
+        self::assertIsArray($info);
+        self::assertSame([$mime, 30, 48], [$info['mime'], $info[0], $info[1]]);
+        self::assertSame($path, image_url($path, 'fallback.png'));
+        self::assertNull(validate_cover_image($path), 'A stored cover is a valid cover_image value');
+        self::assertTrue(is_generated_upload($path, COVER_DIR));
+        self::assertFalse(is_generated_upload($path, AVATAR_DIR));
+    }
+
+    public function testCoversMayBeLargerThanProfilePictures(): void
+    {
+        $png = $this->image('png');
+        $contents = $png . str_repeat("\0", 3 * 1024 * 1024 - strlen($png));
+
+        self::assertStringEndsWith('.png', $this->storeCover($this->upload($contents)));
+        try {
+            $this->store($this->upload($contents));
+            self::fail('A 3 MB profile picture must be rejected');
+        } catch (UploadException $e) {
+            self::assertSame('Profile pictures must be 2 MB or smaller.', $e->getMessage());
+        }
+    }
+
+    public function testOversizeCoverIsRejected(): void
+    {
+        $this->expectException(UploadException::class);
+        $this->expectExceptionMessage('Cover images must be 5 MB or smaller.');
+
+        $this->storeCover($this->upload($this->image('png') . str_repeat("\0", COVER_MAX_BYTES)));
+    }
+
+    public function testPhpScriptNamedLikeACoverIsRejected(): void
+    {
+        $before = glob(BASE_PATH . '/public/uploads/covers/*') ?: [];
+        try {
+            $this->storeCover($this->upload(self::PHP_PAYLOAD, 'cover.png', 'image/png'));
+            self::fail('Expected UploadException');
+        } catch (UploadException $e) {
+            self::assertSame('Please upload a JPEG, PNG, GIF or WebP image.', $e->getMessage());
+        }
+        self::assertSame($before, glob(BASE_PATH . '/public/uploads/covers/*') ?: [], 'Nothing is stored');
+    }
+
+    public function testPhpPayloadInsideACoverImageIsStripped(): void
+    {
+        $path = $this->storeCover($this->upload($this->image('jpeg') . self::PHP_PAYLOAD, 'cover.jpg', 'image/jpeg'));
+
+        $stored = (string) file_get_contents(BASE_PATH . '/public/' . $path);
+        self::assertStringNotContainsString('<?php', $stored);
+        self::assertStringStartsWith("\xFF\xD8", $stored);
+    }
+
+    public function testCoverUploadErrorsHaveCoverMessages(): void
+    {
+        foreach ([
+            [['error' => UPLOAD_ERR_INI_SIZE, 'tmp_name' => ''], 'Cover images must be 5 MB or smaller.'],
+            [['error' => UPLOAD_ERR_PARTIAL, 'tmp_name' => ''], 'The cover image could not be uploaded. Please try again.'],
+            [['error' => UPLOAD_ERR_OK, 'tmp_name' => ['x']], 'The cover image could not be uploaded. Please try again.'],
+        ] as [$file, $message]) {
+            try {
+                $this->storeCover($file);
+                self::fail('Expected UploadException: ' . $message);
+            } catch (UploadException $e) {
+                self::assertSame($message, $e->getMessage());
+            }
+        }
+    }
+
+    public function testDeleteUploadedCoverOnlyRemovesGeneratedCoverNames(): void
+    {
+        $decoy = BASE_PATH . '/public/uploads/covers/keep-me-' . bin2hex(random_bytes(4)) . '.png';
+        file_put_contents($decoy, $this->image('png'));
+        $avatar = $this->store($this->upload($this->image('png')));
+        try {
+            delete_uploaded_cover('uploads/covers/' . basename($decoy));
+            delete_uploaded_cover($avatar);
+            delete_uploaded_cover('imges/All_section/biology.png');
+            delete_uploaded_cover(null);
+
+            self::assertFileExists($decoy);
+            self::assertFileExists(BASE_PATH . '/public/' . $avatar, 'Avatars are not covers');
+            self::assertFileExists(BASE_PATH . '/public/imges/All_section/biology.png');
+        } finally {
+            unlink($decoy);
+        }
+
+        $cover = $this->storeCover($this->upload($this->image('png')));
+        delete_uploaded_cover($cover);
+        self::assertFileDoesNotExist(BASE_PATH . '/public/' . $cover);
+    }
+
+    public function testHasUploadedFileIgnoresEmptyFileInputs(): void
+    {
+        self::assertFalse(has_uploaded_file([], 'cover_upload'));
+        self::assertFalse(has_uploaded_file(['cover_upload' => ['error' => UPLOAD_ERR_NO_FILE, 'tmp_name' => '']], 'cover_upload'));
+        self::assertFalse(has_uploaded_file(['cover_upload' => 'not-an-upload'], 'cover_upload'));
+        self::assertTrue(has_uploaded_file(['cover_upload' => ['error' => UPLOAD_ERR_OK, 'tmp_name' => '/tmp/x']], 'cover_upload'));
+        self::assertTrue(has_uploaded_file(['cover_upload' => ['error' => UPLOAD_ERR_INI_SIZE]], 'cover_upload'), 'A failed upload is still an upload (and reported)');
+    }
+
+    public function testUploadMessagesFollowTheActiveLanguage(): void
+    {
+        use_locale('ar');
+        try {
+            $this->storeCover($this->upload(self::PHP_PAYLOAD));
+            self::fail('Expected UploadException');
+        } catch (UploadException $e) {
+            self::assertSame('يُرجى رفع صورة بصيغة JPEG أو PNG أو GIF أو WebP.', $e->getMessage());
+        } finally {
+            use_locale(null);
+        }
+    }
+
     public function testAvatarUrlFallsBackToTheDefault(): void
     {
         self::assertSame(DEFAULT_AVATAR, avatar_url(null));

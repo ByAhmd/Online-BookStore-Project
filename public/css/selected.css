@@ -26,7 +26,7 @@
 }
 
 /* ---------------------------------------------------------------------
-   Book panel: cover left, details right
+   Book panel: cover first, details next (mirrored in right-to-left pages)
    --------------------------------------------------------------------- */
 
 .book-panel {
@@ -146,7 +146,7 @@
 .stars-fill {
     position: absolute;
     top: 0;
-    left: 0;
+    inset-inline-start: 0;
     bottom: 0;
     overflow: hidden;
     color: var(--star-on);
@@ -199,6 +199,50 @@
     max-width: 260px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+/* Letter spacing pulls joined Arabic letters apart. */
+[dir="rtl"] .btn-danger.cart-button {
+    letter-spacing: normal;
+}
+
+.btn-danger.cart-button:disabled,
+.btn-danger.cart-button:disabled:hover {
+    background-color: #6b6b6b;
+    cursor: not-allowed;
+}
+
+/* Availability: "In stock", "Only N left" or "Out of stock". */
+.book-detail-page .stock-badge {
+    justify-self: start;
+    margin: 0;
+    padding: 2px 12px;
+    border-radius: var(--radius-lg);
+    font-size: 0.9rem;
+    font-weight: 700;
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+.book-detail-page .stock-badge.stock-low {
+    background: #fff4e5;
+    color: #7a4100;
+}
+
+.book-detail-page .stock-badge.stock-out {
+    background: var(--color-error-bg);
+    color: var(--color-error-text);
+}
+
+.book-item .stock-badge {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 0.8rem;
+}
+
+.stock-note {
+    margin: 0;
+    font-weight: 600;
 }
 
 .add-to-cart-box .field-error,
@@ -588,8 +632,7 @@
     }
 
     .page-container.book-detail-page {
-        padding-left: 12px;
-        padding-right: 12px;
+        padding-inline: 12px;
     }
 
     .rating-comments-section,

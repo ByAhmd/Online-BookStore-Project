@@ -268,6 +268,150 @@ final class StripeWebhookTest extends CheckoutTestCase
         self::assertSame('pending', $this->reloadOrder((int) $order['id'])['status']);
     }
 
+    /* -----------------------------------------------------------------
+     * charge.refunded
+     * --------------------------------------------------------------- */
+
+    /**
+     * An order paid (and fulfilled) through the webhook.
+     *
+     * @return array{0: array<string, mixed>, 1: string} [order, payment intent]
+     */
+    private function paidThroughWebhook(): array
+    {
+        [, $sessionId, $order] = $this->pendingCheckout();
+        $session = $this->stripe->pay($sessionId);
+        self::assertSame(200, $this->deliver('checkout.session.completed', $session));
+        return [$this->reloadOrder((int) $order['id']), (string) $session['payment_intent']];
+    }
+
+    /**
+     * @return array<string, mixed> A Stripe Charge as sent in charge.refunded
+     */
+    private static function charge(string $paymentIntent, int $amount, int $refunded): array
+    {
+        return [
+            'id' => 'ch_test_' . substr(hash('sha256', $paymentIntent), 0, 16),
+            'object' => 'charge',
+            'payment_intent' => $paymentIntent,
+            'amount' => $amount,
+            'amount_refunded' => $refunded,
+            'refunded' => $refunded >= $amount,
+            'currency' => 'sar',
+        ];
+    }
+
+    private static function stock(int $bookId): int
+    {
+        return (int) db_value('SELECT stock FROM books WHERE id = ?', [$bookId]);
+    }
+
+    public function testChargeRefundedRecordsAFullRefundExactlyOnce(): void
+    {
+        [$order, $intent] = $this->paidThroughWebhook();
+        $orderId = (int) $order['id'];
+        $stock = self::stock(self::ESABELLA);
+        $refund = $this->stripe->refundPayment($intent); // e.g. refunded in the Stripe Dashboard
+        $charge = self::charge($intent, (int) $order['amount_minor'], (int) $order['amount_minor']);
+
+        self::assertSame(200, $this->deliver('charge.refunded', $charge));
+
+        $after = $this->reloadOrder($orderId);
+        self::assertSame('refunded', $after['status']);
+        self::assertSame($refund['id'], $after['stripe_refund_id']);
+        self::assertNotNull($after['refunded_at']);
+        self::assertSame([], $this->salesForOrder($orderId));
+        self::assertSame($stock + 2, self::stock(self::ESABELLA), 'The copies are back in stock');
+        self::assertCount(1, $this->stripe->http->requests('GET', '#^/v1/refunds$#'), 'The refund is confirmed with the API');
+
+        // Stripe retries and duplicate events change nothing and need no API call.
+        self::assertSame(200, $this->deliver('charge.refunded', $charge));
+        self::assertSame(200, $this->deliver('charge.refunded', $charge));
+        self::assertSame($stock + 2, self::stock(self::ESABELLA));
+        self::assertCount(1, $this->stripe->http->requests('GET', '#^/v1/refunds$#'));
+        self::assertSame($after, $this->reloadOrder($orderId));
+    }
+
+    public function testForgedChargeRefundedEventIsNotTrusted(): void
+    {
+        // Simulates a leaked webhook secret: the event claims a refund Stripe never made.
+        [$order, $intent] = $this->paidThroughWebhook();
+        $stock = self::stock(self::ESABELLA);
+
+        self::assertSame(200, $this->deliver('charge.refunded', self::charge($intent, (int) $order['amount_minor'], (int) $order['amount_minor'])));
+
+        self::assertSame('paid', $this->reloadOrder((int) $order['id'])['status']);
+        self::assertSame([self::ESABELLA => 2], $this->salesForOrder((int) $order['id']));
+        self::assertSame($stock, self::stock(self::ESABELLA));
+        self::assertCount(1, $this->stripe->http->requests('GET', '#^/v1/refunds$#'), 'Stripe was asked, and said no');
+    }
+
+    public function testPartialRefundsAreLeftToStaff(): void
+    {
+        [$order, $intent] = $this->paidThroughWebhook();
+        $this->stripe->refundPayment($intent, 1000);
+
+        self::assertSame(200, $this->deliver('charge.refunded', self::charge($intent, (int) $order['amount_minor'], 1000)));
+
+        self::assertSame('paid', $this->reloadOrder((int) $order['id'])['status']);
+        self::assertSame([], $this->stripe->http->requests('GET', '#^/v1/refunds$#'));
+
+        // A forged "full" event is still checked against Stripe's real refunds (only 10.00 of 39.98).
+        self::assertSame(200, $this->deliver('charge.refunded', self::charge($intent, (int) $order['amount_minor'], (int) $order['amount_minor'])));
+        self::assertSame('paid', $this->reloadOrder((int) $order['id'])['status']);
+    }
+
+    public function testChargeRefundedForUnknownPaymentsOrUnpaidOrdersIsIgnored(): void
+    {
+        [, , $order] = $this->pendingCheckout();
+
+        self::assertSame(200, $this->deliver('charge.refunded', self::charge('pi_test_unknown', 1000, 1000)));
+        self::assertSame(200, $this->deliver('charge.refunded', ['id' => 'ch_test_no_intent', 'object' => 'charge', 'amount' => 1000, 'amount_refunded' => 1000]));
+        self::assertSame(200, $this->deliver('charge.refunded', self::charge("pi_x' OR '1'='1", 1000, 1000)));
+
+        self::assertSame('pending', $this->reloadOrder((int) $order['id'])['status']);
+        self::assertSame([], $this->stripe->http->requests('GET', '#^/v1/refunds$#'));
+    }
+
+    public function testAStripeOutageWhileConfirmingMakesStripeRetry(): void
+    {
+        [$order, $intent] = $this->paidThroughWebhook();
+        $this->stripe->refundPayment($intent);
+        $charge = self::charge($intent, (int) $order['amount_minor'], (int) $order['amount_minor']);
+        $this->stripe->http->failNext('GET', '#^/v1/refunds$#', 500);
+
+        self::assertSame(503, $this->deliver('charge.refunded', $charge));
+        self::assertSame('paid', $this->reloadOrder((int) $order['id'])['status']);
+
+        self::assertSame(200, $this->deliver('charge.refunded', $charge), 'The retry succeeds');
+        self::assertSame('refunded', $this->reloadOrder((int) $order['id'])['status']);
+    }
+
+    public function testChargeRefundedNeedsAValidSignature(): void
+    {
+        [$order, $intent] = $this->paidThroughWebhook();
+        $this->stripe->refundPayment($intent);
+        $payload = self::payload('charge.refunded', self::charge($intent, (int) $order['amount_minor'], (int) $order['amount_minor']));
+
+        self::assertSame(400, handle_stripe_webhook($payload, self::signature($payload, 'whsec_attacker')));
+        self::assertSame(400, handle_stripe_webhook($payload, ''));
+        self::assertSame('paid', $this->reloadOrder((int) $order['id'])['status']);
+    }
+
+    public function testAnAdminRefundAndItsWebhookAreRecordedOnce(): void
+    {
+        [$order, $intent] = $this->paidThroughWebhook();
+        self::assertSame('refunded', refund_order((int) $order['id']));
+        $stock = self::stock(self::ESABELLA);
+        $refundId = $this->reloadOrder((int) $order['id'])['stripe_refund_id'];
+
+        self::assertSame(200, $this->deliver('charge.refunded', self::charge($intent, (int) $order['amount_minor'], (int) $order['amount_minor'])));
+
+        self::assertSame($stock, self::stock(self::ESABELLA), 'Not restocked twice');
+        self::assertSame($refundId, $this->reloadOrder((int) $order['id'])['stripe_refund_id']);
+        self::assertCount(1, $this->stripe->refunds());
+    }
+
     public function testNonCheckoutEventsAreIgnoredAndCheckoutEventsSyncWithStripe(): void
     {
         [, $sessionId, $order] = $this->pendingCheckout();

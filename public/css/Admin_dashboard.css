@@ -81,12 +81,12 @@
     background: var(--color-surface);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    border-left: 5px solid var(--color-primary);
+    border-inline-start: 5px solid var(--color-primary);
     padding: 14px 18px;
 }
 
 .admin-page .stat-card:nth-child(even) {
-    border-left-color: var(--color-accent);
+    border-inline-start-color: var(--color-accent);
 }
 
 .admin-page .stat-label {
@@ -202,7 +202,7 @@
 .admin-page .admin-table th,
 .admin-page .admin-table td {
     padding: 12px 14px;
-    text-align: left;
+    text-align: start;
     vertical-align: middle;
     border: 1px solid var(--admin-border);
 }
@@ -222,7 +222,7 @@
 }
 
 .admin-page .admin-table .num {
-    text-align: right;
+    text-align: end;
     white-space: nowrap;
 }
 
@@ -361,7 +361,7 @@
     grid-template-columns: auto minmax(0, 1fr);
     gap: 6px 12px;
     margin: 0;
-    text-align: left;
+    text-align: start;
 }
 
 .admin-page .book-meta dt {
@@ -375,12 +375,210 @@
 }
 
 /* ---------------------------------------------------------------------
+   Stock, cover upload, section heads and table summaries
+   --------------------------------------------------------------------- */
+
+.admin-page .stock-cell.stock-low {
+    color: #7a4100;
+    font-weight: 700;
+}
+
+.admin-page .stock-cell.stock-out {
+    color: var(--color-error-text);
+    font-weight: 700;
+}
+
+.admin-page .form-file {
+    padding: 8px 10px;
+    background: var(--color-surface);
+}
+
+.admin-page .section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 16px;
+    margin-bottom: 16px;
+}
+
+.admin-page .section-head h2 {
+    margin: 0;
+}
+
+.admin-page .section-link {
+    font-weight: 700;
+}
+
+.admin-page .table-summary {
+    margin: 0 0 12px;
+    color: var(--color-text-muted);
+    font-weight: 600;
+}
+
+.admin-page .customer-deleted {
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+/* The back arrow points the way the page flows. */
+[dir="rtl"] .admin-page .back-arrow {
+    display: inline-block;
+    transform: scaleX(-1);
+}
+
+/* Letter spacing pulls joined Arabic letters apart. */
+[dir="rtl"] .admin-page .stat-label {
+    letter-spacing: normal;
+}
+
+/* ---------------------------------------------------------------------
+   Pager (admin books and orders tables)
+   --------------------------------------------------------------------- */
+
+.admin-page .pager {
+    margin: 16px 0 0;
+}
+
+.admin-page .pager-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.admin-page .pager-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px 14px;
+    border: 1px solid #000;
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.admin-page .pager-link:hover {
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+.admin-page .pager-link[aria-current="page"] {
+    background: var(--color-chrome);
+    border-color: var(--color-chrome);
+    color: #fff;
+}
+
+.admin-page .pager-link.is-disabled {
+    border-color: var(--color-border);
+    background: transparent;
+    color: #5c5c5c;
+    cursor: not-allowed;
+}
+
+.admin-page .pager-gap {
+    padding: 0 4px;
+    color: var(--color-text-muted);
+}
+
+/* ---------------------------------------------------------------------
+   Orders list and order page
+   --------------------------------------------------------------------- */
+
+.admin-page .order-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 20px;
+    align-items: end;
+}
+
+.admin-page .order-filters .form-field {
+    margin-bottom: 12px;
+}
+
+.admin-page .order-filters .form-actions {
+    margin: 0 0 12px;
+}
+
+.admin-page .order-list-table {
+    min-width: 680px;
+}
+
+.admin-page .order-detail-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0 24px;
+    align-items: start;
+}
+
+.admin-page .order-items-table {
+    min-width: 480px;
+}
+
+.admin-page .order-items-table tfoot th,
+.admin-page .order-items-table tfoot td {
+    font-weight: 700;
+    text-align: end;
+}
+
+.admin-page .item-deleted {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+.admin-page .order-facts {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 16px;
+    margin: 0;
+}
+
+.admin-page .order-facts dt {
+    font-weight: 700;
+    color: var(--color-text-muted);
+}
+
+.admin-page .order-facts dd {
+    margin: 0;
+    min-width: 0;
+}
+
+.admin-page .order-facts + h2,
+.admin-page .customer-email + h2,
+.admin-page .customer-deleted + h2 {
+    margin-top: 24px;
+}
+
+.admin-page .stripe-ref {
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
+
+.admin-page .order-refund form {
+    margin: 0;
+}
+
+/* ---------------------------------------------------------------------
    Responsive
    --------------------------------------------------------------------- */
 
 @media (min-width: 768px) {
     .admin-page .book-form {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-page .order-filters {
+        grid-template-columns: minmax(0, 12rem) minmax(0, 1fr) auto;
     }
 
     .admin-page .form-field-wide {
@@ -395,6 +593,14 @@
 @media (min-width: 960px) {
     .admin-page .edit-layout {
         grid-template-columns: 280px minmax(0, 1fr);
+    }
+
+    .admin-page .order-detail-layout {
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    }
+
+    .admin-page .order-detail-layout .order-refund {
+        grid-column: 1 / -1;
     }
 }
 

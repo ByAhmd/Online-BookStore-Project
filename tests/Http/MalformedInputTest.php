@@ -61,20 +61,25 @@ final class MalformedInputTest extends HttpTestCase
     public function testArrayValuedQueryParametersAreHandled(): void
     {
         $guest = $this->client();
-        foreach (['index.php?form[]=login', 'Home_Page.php?x[]=1', 'fetch_books.php?genre[]=Mystery', 'fetch_books.php?q[]=a', 'reset_form.php?token[]=abc'] as $url) {
+        foreach (['index.php?form[]=login', 'Home_Page.php?x[]=1', 'fetch_books.php?genre[]=Mystery', 'fetch_books.php?q[]=a', 'fetch_books.php?page[]=2', 'reset_form.php?token[]=abc'] as $url) {
             $this->assertHandled($guest->get($url), "Guest GET $url");
         }
 
         [$customer] = $this->signedInCustomer();
         foreach ([
-            'Explore_Page.php?genre[]=Mystery', 'Explore_Page.php?q[]=Olivia', 'Selected.php?id[]=7', 'profilePage.php?section[]=orders',
+            'Explore_Page.php?genre[]=Mystery', 'Explore_Page.php?q[]=Olivia', 'Explore_Page.php?page[]=2', 'Selected.php?id[]=7', 'profilePage.php?section[]=orders',
             'success_pay.php?session_id[]=cs_test_x', 'cancel_pay.php?order[]=1',
         ] as $url) {
             $this->assertHandled($customer->get($url), "Customer GET $url");
         }
 
         [$admin] = $this->signedInAdmin();
-        $this->assertHandled($admin->get('edit_book.php?id[]=7'), 'Admin GET edit_book.php?id[]=7');
+        foreach ([
+            'edit_book.php?id[]=7', 'admin_dashboard.php?page[]=2', 'admin_orders.php?status[]=paid', 'admin_orders.php?q[]=1',
+            'admin_orders.php?page[]=2', 'admin_order.php?id[]=1',
+        ] as $url) {
+            $this->assertHandled($admin->get($url), "Admin GET $url");
+        }
     }
 
     public function testArrayValuedFormFieldsAreHandled(): void
@@ -107,7 +112,12 @@ final class MalformedInputTest extends HttpTestCase
         [$admin] = $this->signedInAdmin();
         $this->assertHandled($this->postRaw($admin, 'admin_dashboard.php', ['action' => 'add_book', 'title[]' => 'x', 'price[]' => '1', 'cover_image[]' => 'y']), 'add book with arrays');
         $this->assertHandled($this->postRaw($admin, 'admin_dashboard.php', ['action' => 'delete_book', 'id[]' => '7']), 'delete with array id');
-        $this->assertHandled($this->postRaw($admin, 'edit_book.php?id=7', ['action' => 'update_book', 'title[]' => 'x']), 'edit with arrays');
+        $this->assertHandled($this->postRaw($admin, 'edit_book.php?id=7', ['action' => 'update_book', 'title[]' => 'x', 'stock[]' => '5']), 'edit with arrays');
+        $this->assertHandled($this->postRaw($admin, 'admin_dashboard.php', ['action' => 'delete_book', 'id' => '999999', 'page[]' => '2']), 'delete with array page');
+        db_run("INSERT INTO orders (user_id, status, currency, total_amount, amount_minor) VALUES (?, 'pending', 'sar', '19.99', 1999)", [$user['id']]);
+        $orderId = (int) db()->lastInsertId();
+        $this->assertHandled($this->postRaw($admin, 'admin_order.php?id=' . $orderId, ['action[]' => 'refund']), 'refund with array action');
+        self::assertSame('pending', db_value('SELECT status FROM orders WHERE id = ?', [$orderId]));
         self::assertNotNull(find_book(7));
         self::assertSame(self::SEED_BOOK_COUNT, $this->countRows('books'));
     }
