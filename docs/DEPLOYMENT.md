@@ -63,9 +63,10 @@ It ends with the [limits of the free demo](#limits-of-the-free-demo), [security 
 3. **Database**: it waits until the database answers, retrying every 3 seconds for up to `DB_WAIT_SECONDS` (default 60).
    Each failed attempt is logged with the driver's reason, for example `Connection refused` or `Access denied`. Passwords are never logged.
    If the database is still unreachable after that time, the container exits with an error.
-4. **Schema**: it runs `php bin/install.php --seed`:
-   - **Empty database:** creates the latest schema and loads the 55-book sample catalog.
-   - **Existing BookWise database:** applies pending migrations, and loads the sample catalog only if the `books` table is empty.
+4. **Schema**: it runs `php bin/install.php` (with `--seed` in demo mode or when `BOOKWISE_SEED=true`):
+   - **Empty database:** creates the latest schema. With `--seed` it also loads the 55-book sample catalog; a real store starts with an empty catalog.
+   - **Existing BookWise database:** applies pending migrations. If the first installation was interrupted, it stops with a message instead of guessing; drop the half-created tables and start again.
+   - **Demo mode:** puts the stock of every book back to at least its sample level, so visitors' simulated purchases never leave the catalog sold out.
    - **Administrator:** if both `BOOKWISE_ADMIN_EMAIL` and `BOOKWISE_ADMIN_PASSWORD` are set, it creates that administrator, or resets the administrator's password when it differs from the stored one.
 5. **Logs**: it copies new lines of `storage/logs/app.log` and `php-error.log` to the container output, so they appear in `docker compose logs` and in the Render dashboard.
    `mail.log` is deliberately not copied: with `MAIL_DRIVER=log` it contains password-reset links.
@@ -240,7 +241,7 @@ Starting from the demo setup (or from `docker-compose.yml` for a self-hosted ser
 1. **Leave demo mode:** set `APP_DEMO=false`. The banner disappears and `/stripe-sim` is no longer served.
 2. **Stripe:**
    - Set `STRIPE_SECRET_KEY` to your secret key. Live keys (`sk_live_…`) are accepted only with `APP_ENV=production`; use a test key (`sk_test_…`) for a staging copy.
-   - In the Stripe Dashboard, add a webhook endpoint at `APP_URL/stripe_webhook.php` for these events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed` and `checkout.session.expired`.
+   - In the Stripe Dashboard, add a webhook endpoint at `APP_URL/stripe_webhook.php` for these events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired` and `charge.refunded`.
      Set `STRIPE_WEBHOOK_SECRET` to its signing secret (`whsec_…`).
    - Keep `STRIPE_CURRENCY` (default `sar`) or set another two-decimal currency.
    - Make sure `STRIPE_API_BASE` is **not** set.
@@ -249,13 +250,14 @@ Starting from the demo setup (or from `docker-compose.yml` for a self-hosted ser
      SendGrid is reached over HTTPS, so Render's block on outgoing SMTP does not affect it.
    - Turn email verification back on with `REQUIRE_EMAIL_VERIFICATION=true`, or remove the variable (true is the default).
 4. **Address:** set `APP_URL` to the public HTTPS address. It is used in Stripe return URLs and email links.
-5. **Persistent uploads:** profile pictures are stored in `public/uploads/`. Render's free filesystem is wiped on every restart, so a real store needs persistent storage there.
+5. **Persistent uploads:** profile pictures and uploaded book covers are stored in `public/uploads/`. Render's free filesystem is wiped on every restart, so a real store needs persistent storage there.
    On Render that means a paid instance with a disk mounted at `/var/www/bookwise/public/uploads`; with Docker, the `uploads` volume does this.
 6. **Database:**
    - Use a database plan with backups.
    - The entrypoint creates and migrates the schema at start-up. The configured user therefore needs schema privileges (`CREATE`, `ALTER`, `INDEX`, `REFERENCES`) as well as `SELECT, INSERT, UPDATE, DELETE`.
 7. **Administrator:** create it once with `BOOKWISE_ADMIN_EMAIL` and `BOOKWISE_ADMIN_PASSWORD`, then remove both variables so the password is not reset at every start.
    Alternatively, use `php bin/create-admin.php` in a shell on the server.
+8. **Catalog:** outside demo mode the sample books are not loaded into a new database. If you started from the demo database, delete the sample books in the admin dashboard (or start with an empty database).
 
 For a Render Blueprint, put these settings in `render.yaml` of your own copy.
 Change the `APP_DEMO` value, and add the new secrets as `sync: false` entries, never with their values. Use a paid `plan:` if you need a disk.
@@ -267,11 +269,12 @@ Change the `APP_DEMO` value, and add the new secrets as `sync: false` entries, n
 - The service sleeps after 15 minutes without traffic. The next visit wakes it, which takes about a minute (the "cold start").
 - Free instances share 750 free instance-hours per month.
 - The filesystem is ephemeral. On every restart, redeploy or wake-up, the following are lost:
-  - **uploaded profile pictures**, so customers fall back to the default picture;
+  - **uploaded profile pictures and book covers**: customers fall back to the default picture and books to a placeholder cover (the book can still be edited; upload the cover again if you like);
   - **log files**;
   - **sessions**, so everyone is signed out;
   - **the simulator's state**. A checkout started before a restart can no longer be paid: its payment page answers "Unknown checkout session".
     Starting a new checkout from the cart works normally; the old order is then marked as failed.
+    Refunding an order paid before the restart still works: the simulator no longer knows the payment, so the refund is recorded in the database only (no money moved in the first place).
 - Outbound SMTP is blocked. The demo sends no email (`MAIL_DRIVER=null`).
 
 **Aiven (free MySQL):**
@@ -309,6 +312,7 @@ These variables are specific to the container. The application settings (`DB_*`,
 | `DB_WAIT_SECONDS` | `60` | How long the entrypoint waits for the database |
 | `DB_SSL_CA_PEM` / `DB_SSL_CA` | — | CA certificate text / file for TLS database connections (Aiven) |
 | `BOOKWISE_ADMIN_EMAIL` / `BOOKWISE_ADMIN_PASSWORD` | — | Administrator created (or its password reset) at every start when both are set |
+| `BOOKWISE_SEED` | `false` | `true`: load the sample catalog into a new, empty database also outside demo mode |
 | `LOG_DIR` | `storage/logs` | Where `app.log`, `php-error.log` and `mail.log` are written; the first two are copied to the container output |
 | `MAIL_DRIVER` | `log` | `null` in the Render demo, `log` locally, `sendgrid` for a real store |
 | `APP_ENV` | `production` | Must be `production` for live Stripe keys (the local Compose file uses `local`) |

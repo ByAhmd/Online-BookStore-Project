@@ -6,7 +6,11 @@
 BookWise is an online bookstore written in plain PHP with MySQL/MariaDB.
 Customers browse a catalog, search and filter by genre, keep favorites, buy books
 through **Stripe Checkout** and review the books they bought. Administrators manage the
-catalog and see recent orders.
+catalog, stock and covers, follow orders and refund them. The whole interface is
+available in **English and Arabic** (right-to-left).
+
+It runs locally with PHP's built-in server or Docker, and can be published as a free
+**live demo** with simulated payments (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
 
 It started as a team project for the *Fundamentals of Web Programming* course at
 King Faisal University (see the in-app **About** page). It has since been audited
@@ -21,9 +25,12 @@ page architecture is unchanged; there is no framework.
 - [Technology stack](#technology-stack)
 - [Project structure](#project-structure)
 - [Getting started](#getting-started)
+- [Running with Docker and the live demo](#running-with-docker-and-the-live-demo)
 - [Configuration reference](#configuration-reference)
+- [Languages](#languages)
 - [Payments with Stripe (test mode)](#payments-with-stripe-test-mode)
 - [Email](#email)
+- [Database migrations](#database-migrations)
 - [Upgrading a database from the original project](#upgrading-a-database-from-the-original-project)
 - [Testing and quality checks](#testing-and-quality-checks)
 - [Security notes](#security-notes)
@@ -38,27 +45,40 @@ page architecture is unchanged; there is no framework.
 
 **Customers**
 - Sign up, log in and log out. Passwords are hashed with `password_hash()`, failed logins are throttled, and the session ID is regenerated on login.
+- Email verification: new accounts confirm their address through a link that expires after 24 hours (can be turned off with `REQUIRE_EMAIL_VERIFICATION=false`).
+  The link asks for the account's password before it confirms and signs in, so mail scanners that open links, or someone who registered another person's address, cannot use it.
+  Signing up with an address that is already registered sends a notice to that address instead of revealing the account on screen.
 - Password reset by email, using single-use links that expire after 60 minutes.
 - Home page with the real catalog size, genre shortcuts, recommended books (by rating) and best sellers (by sales).
 - Explore page:
   - Search by title or author.
   - Genre tabs generated from the catalog, plus **Favorites**.
+  - 24 books per page with page links.
   - Works without JavaScript; with JavaScript, results update in place.
 - Book pages:
-  - Description, price, average rating and copies sold.
+  - Description, price, average rating, copies sold and stock ("Only 3 left", "Out of stock").
   - Add to cart with a quantity, and add to or remove from favorites.
   - Reviews with a 1–5 star rating, only for customers who bought the book and only once per book. Other readers can like or dislike a review.
-- Cart: change quantities (1–10 per title), remove items, and see totals computed from catalog prices on the server.
+- Cart: change quantities (1–10 per title, never more than in stock), remove items, and see totals computed from catalog prices on the server.
 - Checkout on Stripe's hosted payment page. An order is confirmed only after BookWise has verified the payment with Stripe.
 - Profile:
   - Name, favorite genre, date of birth and profile picture (JPEG/PNG/GIF/WebP, max 2 MB, re-encoded on upload).
   - A payment-method *preference* (no card data is ever stored).
-  - Order history with status.
+  - Order history with status, including refunds.
+  - Interface language (English or Arabic), remembered on the account.
+  - Change password (signs out every other session) and delete the account (asks for the password; past orders are kept anonymously for the store's records).
 
 **Administrators**
-- Add, edit and delete books, with server-side validation.
-- Dashboard with catalog and sales totals and the 20 most recent orders.
-- Accounts are created from the command line (`bin/create-admin.php`); there is no public admin sign-up.
+- Add, edit and delete books, with server-side validation, stock levels and cover uploads (JPEG/PNG/GIF/WebP, max 5 MB, re-encoded).
+- Dashboard with catalog and sales totals, stock per book and the 20 most recent orders.
+- Orders page: filter by status, search by order number or customer email, and open any order.
+  A paid order can be refunded in full through Stripe from its page; the copies go back into stock.
+  Refunds made in the Stripe Dashboard are picked up by the `charge.refunded` webhook.
+- Accounts are created from the command line (`bin/create-admin.php`, or `bin/install.php` in containers); there is no public admin sign-up.
+
+**Everywhere**
+- English and Arabic interface with a language switch in the header, Arabic plural forms, Arabic dates, amounts and genre names, and a mirrored right-to-left layout.
+- Optional demo mode (`APP_DEMO=true`) for a public showcase: a banner, and a built-in payment simulator instead of Stripe.
 
 ## Technology stack
 
@@ -82,23 +102,30 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 │   ├── *.php               Pages and form handlers (index.php = login/sign-up, Home_Page.php, Explore_Page.php, …)
 │   ├── css/  js/           Stylesheets and scripts (common.css/common.js are shared)
 │   ├── imges/              Catalog covers and UI images (folder name kept: database rows reference it)
-│   └── uploads/avatars/    Uploaded profile pictures (git-ignored, must be writable)
+│   └── uploads/            Uploaded avatars/ and covers/ (git-ignored, must be writable)
 ├── src/                    Shared PHP code (autoloaded by Composer)
-│   ├── bootstrap.php       Loaded by every page: config, error handling, session, security headers
+│   ├── bootstrap.php       Loaded by every page: config, error handling, session, security headers, language
 │   ├── auth.php users.php password_reset.php csrf.php validation.php
-│   ├── books.php cart.php orders.php   Catalog, cart and Stripe order logic
+│   ├── books.php cart.php orders.php   Catalog, stock, cart, Stripe orders and refunds
+│   ├── i18n.php            Translations (t(), tn()), Arabic plurals, language switching
+│   ├── migrations.php      Schema migration runner
 │   ├── db.php env.php helpers.php mailer.php uploads.php
 │   └── views/              Shared header (navigation), footer and error page
+├── lang/en/  lang/ar/      Interface text, one file per area (common, auth, account, shop, admin)
 ├── database/
-│   ├── schema.sql          Database schema (fresh installs)
-│   └── seed.sql            Sample catalog: 55 books, no user data
+│   ├── schema.sql          Latest database schema (fresh installs)
+│   ├── seed.sql            Sample catalog: 55 books with stock, no user data
+│   └── migrations/         Changes applied to existing databases, in order
 ├── bin/
+│   ├── install.php         Create the schema on an empty database, or migrate an existing one
+│   ├── migrate.php         Apply pending migrations
 │   ├── create-admin.php    Create an administrator or reset an administrator's password
 │   ├── upgrade-legacy-db.php  Upgrade a database created by the original project
 │   └── lint.php            `php -l` over the whole project
-├── docs/                   AUDIT.md (audit and remediation record), screenshots/
+├── docker/  Dockerfile  docker-compose.yml  render.yaml   Container image, local Compose setup, Render Blueprint
+├── docs/                   DEPLOYMENT.md (Docker and live demo), AUDIT.md (audit record), screenshots/
 ├── storage/logs/           app.log, php-error.log and mail.log (git-ignored)
-├── tests/                  PHPUnit suites (unit, integration, http) and a local Stripe API mock
+├── tests/                  PHPUnit suites (unit, integration, http, deploy) and a local Stripe API stand-in
 ├── .env.example            Configuration template
 └── .github/workflows/ci.yml
 ```
@@ -131,17 +158,6 @@ CREATE USER 'bookwise'@'localhost' IDENTIFIED BY 'choose-a-password';
 GRANT SELECT, INSERT, UPDATE, DELETE ON bookwise.* TO 'bookwise'@'localhost';
 ```
 
-Import the schema and, optionally, the sample catalog. Use an account that can create tables, for example `root`:
-
-```bash
-mysql -u root -p bookwise < database/schema.sql
-mysql -u root -p bookwise < database/seed.sql
-```
-
-Windows PowerShell has no `<` redirection, so run each import through `cmd`:
-`cmd /c "mysql -u root -p bookwise < database\schema.sql"`, then do the same for `seed.sql`.
-On XAMPP you can instead use phpMyAdmin → *Import* with the same two files, in that order.
-
 ### 4. Configure the environment
 
 ```bash
@@ -149,6 +165,20 @@ cp .env.example .env
 ```
 
 Edit `.env`: set the `DB_*` values, `APP_URL`, and your Stripe **test** keys. See the [configuration reference](#configuration-reference).
+For local development you can set `REQUIRE_EMAIL_VERIFICATION=false`, or open the verification links from `storage/logs/mail.log`.
+
+Then create the tables and, with `--seed`, the sample catalog:
+
+```bash
+php bin/install.php --seed
+```
+
+This needs a database account that may create tables (`CREATE, ALTER, INDEX, REFERENCES, DROP` on the database).
+Either run it once with an administrative account in the environment, for example `DB_USER=root DB_PASS=... php bin/install.php --seed`, or grant those rights to the application user.
+On an existing BookWise database the same command applies pending [migrations](#database-migrations) instead.
+
+You can also import the SQL files by hand: `mysql -u root -p bookwise < database/schema.sql`, then `database/seed.sql`
+(on Windows PowerShell run them through `cmd /c "..."`, or use phpMyAdmin → *Import*, in that order).
 
 ### 5. Create an administrator
 
@@ -193,6 +223,20 @@ In production, point the virtual host's `DocumentRoot` at `public/`.
 
 Customers register through the **Sign Up** button. Administrators log in on the same form.
 
+## Running with Docker and the live demo
+
+The repository includes a production-style image (PHP 8.3 + Apache, serving only `public/`) and a Compose setup with MySQL:
+
+```bash
+docker compose up --build
+```
+
+Open <http://localhost:8080>. The container creates or migrates the database on start-up, loads the sample catalog and runs in demo mode, with payments simulated instead of sent to Stripe.
+In demo mode the stock is topped up at every start and simulated purchases never take a book below 3 copies, so visitors cannot sell the shared catalog out.
+
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) explains the image and how to publish a free public demo on **Render** (Docker web service) with a free **Aiven** MySQL database.
+It also covers switching from demo mode to real Stripe test payments and email.
+
 ## Configuration reference
 
 All settings come from environment variables. `src/env.php` loads `.env` for
@@ -205,10 +249,14 @@ convenience, and variables already set in the real environment take precedence.
 | `APP_DEBUG` | `false` | Show exception details in the browser. **Never enable in production.** |
 | `APP_URL` | `http://localhost:8000` | Public URL of `public/` without a trailing slash. Used for Stripe return URLs and password-reset links. |
 | `APP_TIMEZONE` | `Asia/Riyadh` | PHP and database-session timezone |
+| `APP_DEFAULT_LOCALE` | `en` | Interface language for visitors who have not chosen one: `en` or `ar` |
+| `APP_DEMO` | `false` | Public demo mode: shows a banner; meant to be used with the payment simulator ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)) |
+| `REQUIRE_EMAIL_VERIFICATION` | `true` | New customers must confirm their email address before signing in. Needs working email in production. |
 | `LOG_DIR` | `storage/logs` | Directory for `app.log`, `php-error.log` and `mail.log` (relative paths start at the project root) |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `3306` | Database server |
 | `DB_NAME` | `bookwise` | Database name |
 | `DB_USER` / `DB_PASS` | `root` / *(empty)* | Database credentials |
+| `DB_SSL_CA` / `DB_SSL_CA_PEM` | — | TLS for hosted databases: path to the CA certificate, or the certificate text itself. The server certificate is then verified. |
 | `STRIPE_SECRET_KEY` | — | Stripe secret key (`sk_test_…` for development) |
 | `STRIPE_WEBHOOK_SECRET` | — | Signing secret of the webhook endpoint (`whsec_…`) |
 | `STRIPE_CURRENCY` | `sar` | ISO code of a **two-decimal** currency that book prices are charged in (zero- and three-decimal currencies such as JPY or KWD are refused) |
@@ -216,7 +264,22 @@ convenience, and variables already set in the real environment take precedence.
 | `MAIL_DRIVER` | `log` | `log` (write to `mail.log`), `sendgrid`, or `null` (discard) |
 | `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | `no-reply@example.com` / `BookWise` | Sender of outgoing email |
 | `SENDGRID_API_KEY` | — | Needed when `MAIL_DRIVER=sendgrid` |
-| `BOOKWISE_ADMIN_PASSWORD` | — | Optional; used only by `bin/create-admin.php` |
+| `BOOKWISE_ADMIN_PASSWORD` | — | Optional; used by `bin/create-admin.php`, and with `BOOKWISE_ADMIN_EMAIL` by `bin/install.php` |
+
+The container adds a few settings of its own (`PORT`, `DB_WAIT_SECONDS`, `BOOKWISE_ADMIN_EMAIL` and others); they are listed in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#container-settings-reference).
+
+## Languages
+
+Every page, form message, email and error page is available in English and Arabic.
+
+- Visitors switch language with the link in the header (`?lang=ar` / `?lang=en`). The choice is kept in a cookie and, for signed-in customers, on the account, so emails arrive in the same language.
+- Arabic pages use `dir="rtl"`, the Tajawal font, Arabic plural forms (zero, one, two, few, many, other), Arabic month names and amounts written as `19.99 ر.س`.
+  The stylesheets use logical CSS properties (`margin-inline-start` and so on), so the layout mirrors without separate RTL files.
+- Catalog content (titles, authors, descriptions) is shown as entered. Common genre names are translated (`shop.genres` in `lang/<language>/shop.php`); other genres appear as stored.
+- Text lives in `lang/<language>/<area>.php` and is looked up with `t('shop.cart.title')`, or `tn('shop.book.sold_times', $count)` for plurals.
+  Placeholders such as `:title` are escaped when the text is printed.
+- To add a language, copy `lang/en/` to the new code, translate the files, and add the code to `SUPPORTED_LOCALES` in `src/i18n.php` (and to `RTL_LOCALES` if it is written right to left).
+  The unit tests check that every language defines the same keys and placeholders.
 
 ## Payments with Stripe (test mode)
 
@@ -244,6 +307,7 @@ Register `APP_URL/stripe_webhook.php` for these events:
 - `checkout.session.async_payment_succeeded`
 - `checkout.session.async_payment_failed`
 - `checkout.session.expired`
+- `charge.refunded` (records full refunds made in the Stripe Dashboard)
 
 Put the endpoint's signing secret in `STRIPE_WEBHOOK_SECRET`. For local development, use the [Stripe CLI](https://docs.stripe.com/stripe-cli):
 
@@ -252,15 +316,31 @@ stripe listen --forward-to localhost:8000/stripe_webhook.php
 ```
 
 `stripe listen` prints a `whsec_…` secret to use. Every webhook request's signature is verified, and unsigned requests are rejected.
-A webhook is treated only as a notification: BookWise re-fetches the Checkout Session from the Stripe API and acts on that state.
-A leaked webhook secret alone therefore cannot mark an unpaid order as paid, and out-of-order deliveries are harmless.
+A webhook is treated only as a notification: BookWise re-fetches the Checkout Session (or the refunds) from the Stripe API and acts on that state.
+A leaked webhook secret alone therefore cannot mark an unpaid order as paid or a paid order as refunded, and out-of-order deliveries are harmless.
+
+**Stock.** Adding to the cart and starting a checkout check the stock. The copies are taken out of stock when the payment is confirmed, and put back when an order is refunded.
+Two customers can still pay for the last copy at the same moment; the second order is then recorded and logged as `OVERSOLD` in `app.log` so that staff can restock or refund it.
 
 ## Email
 
-- `MAIL_DRIVER=log` (default) writes every email, including password-reset links, to `storage/logs/mail.log`. Nothing is sent.
+- `MAIL_DRIVER=log` (default) writes every email, including password-reset and verification links, to `storage/logs/mail.log`. Nothing is sent.
 - `MAIL_DRIVER=sendgrid` sends through SendGrid. It needs `SENDGRID_API_KEY` and a verified sender (`MAIL_FROM_ADDRESS`).
+- `MAIL_DRIVER=null` discards every email (the public demo uses this, with `REQUIRE_EMAIL_VERIFICATION=false`).
 
-The app sends two emails: a welcome email after sign-up and the password-reset email.
+The app sends, in the customer's language: the email-verification (or welcome) email, a notice when someone tries to sign up with an existing address, the password-reset email, a password-changed notice and an account-deleted confirmation.
+
+## Database migrations
+
+`database/schema.sql` always describes the latest schema. Changes for existing databases live in `database/migrations/` and are recorded in the `schema_migrations` table:
+
+```bash
+php bin/migrate.php        # apply pending migrations (safe to run repeatedly)
+php bin/install.php        # the same on an existing database; creates the schema on an empty one
+```
+
+Back up the database first (`mysqldump`), and run the command with an account that may alter tables.
+Databases created before migrations existed are recognised automatically and treated as being at version `001_initial`.
 
 ## Upgrading a database from the original project
 
@@ -313,10 +393,11 @@ The suites are:
 
 - **unit:** pure functions.
 - **integration:** domain code against a real database.
-- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up and login, CSRF, access control, cart, checkout, webhooks, password reset, profile uploads and admin actions.
+- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, checkout, refunds, webhooks, password reset and change, account deletion, uploads, admin pages and the Arabic interface.
+- **deploy:** checks of the Docker and Render files (line endings, configuration, the entrypoint's database check). The image itself is built and smoke-tested by the CI's Docker job.
 
 Stripe is never contacted by the tests. `tests/Support/stripe_mock_router.php` is a small local stand-in
-for the Checkout Session API, started automatically by the suites. You can also run it by hand to click
+for the Checkout Session and Refund APIs, started automatically by the suites. You can also run it by hand to click
 through checkout without Stripe keys:
 
 ```bash
@@ -327,7 +408,7 @@ php -S 127.0.0.1:12111 tests/Support/stripe_mock_router.php
 The mock shows a "Pay (simulate success)" / "Cancel" page in place of Stripe's hosted checkout. Use it for local testing only.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs `composer validate`, `composer audit`, lint, PHPStan and all test suites.
-It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service.
+It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job builds the Docker image and smoke-tests the running container.
 
 ## Security notes
 
@@ -343,10 +424,13 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service.
   Login is throttled after 5 failures for one email from one IP address, 20 failures from one IP, or 100 failures for one email from anywhere, within 15 minutes.
   Attackers elsewhere therefore cannot lock the real owner out.
   `bin/create-admin.php` clears an administrator's lockout.
-- **Password-reset tokens:** 256-bit random, stored only as SHA-256 hashes, single use and expiring after 60 minutes.
-  Reset requests do not reveal whether an account exists.
+- **Password-reset and email-verification tokens:** 256-bit random, stored only as SHA-256 hashes, single use, expiring after 60 minutes (reset) or 24 hours (verification).
+  Opening a link only shows a form; the token is used when the form is submitted (with the new password, or the account's password for a confirmation).
+  Reset requests, sign-ups, verification resends and sign-in attempts on unconfirmed accounts do not reveal whether an account exists.
+  Emails greet the customer by name only once the address is confirmed, because the name of an unconfirmed account may have been typed by someone else.
+- **Account changes:** changing the password or deleting the account requires the current password, and both sign out every other session.
 - **Uploads:**
-  - The type is detected from the file contents, and only images up to 2 MB and 4000×4000 pixels are accepted.
+  - The type is detected from the file contents, and only images up to 2 MB (avatars) or 5 MB (covers) and 4000×4000 pixels are accepted.
   - Files get random names and are re-encoded with GD, so only decoded pixels are stored.
   - `public/uploads/.htaccess` prevents script execution on Apache.
 - **Input encoding:** text that is not valid UTF-8 is rejected as empty input rather than reaching the database.
@@ -362,7 +446,10 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service.
 - Serve **only** `public/` as the document root, over HTTPS.
 - Set `APP_ENV=production` and `APP_DEBUG=false`, and set `APP_URL` to the public HTTPS URL.
 - Use a dedicated database user with only `SELECT, INSERT, UPDATE, DELETE` on the application database.
-- Make `storage/logs/` and `public/uploads/avatars/` writable by the web server, and keep them out of version control.
+  Run `bin/install.php` / `bin/migrate.php` with an account that may also `CREATE, ALTER, INDEX, REFERENCES, DROP`.
+  (The Docker image runs `bin/install.php` at every start, so there the configured user needs those rights too.)
+- Make `storage/logs/`, `public/uploads/avatars/` and `public/uploads/covers/` writable by the web server, and keep them out of version control.
+- Set `REQUIRE_EMAIL_VERIFICATION=true` only together with a working mail driver, or new customers cannot sign in.
 - On **nginx** or any server that ignores `.htaccess`, deny PHP execution under `/uploads/` in the server config, for example:
   `location ^~ /uploads/ { location ~ \.php$ { deny all; } }`
 - Configure the Stripe webhook endpoint and secret. Use live keys only in production.
@@ -371,17 +458,14 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service.
 
 ## Known limitations
 
-- **No stock tracking:** the original schema has no inventory, so any catalog book can always be bought (quantity is capped at 10 per title per order).
+- **Stock is not reserved during checkout:** it is taken when the payment is confirmed, so two simultaneous payments for the last copy can oversell it (logged as `OVERSOLD`).
 - **Single currency:** prices are stored without a currency and charged in `STRIPE_CURRENCY` (SAR by default).
-- **No account self-service:** customers cannot change their email, delete their account or export data. Administrators cannot manage customers from the UI.
-- **Refunds and disputes** are handled in the Stripe Dashboard and are not reflected back into orders automatically.
+- **Limited account self-service:** customers cannot change their email address or export their data. Administrators cannot manage customers from the UI.
+- **Refunds are full refunds only.** Partial refunds and disputes are handled in the Stripe Dashboard and are not reflected in orders.
   A payment that does not match its order is marked `failed` and logged as `MANUAL REVIEW REQUIRED` in `app.log`.
-- **Admin cover images** are referenced by path (`imges/...`) or `https://` URL; there is no image upload for book covers.
-- **Login throttling** counts attempts per IP address. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server.
-- **No email verification or sign-up rate limit:** sign-up reports when an email is already registered, which reveals that the account exists.
-  Login and password reset do not reveal this.
-  The welcome email contains no user-supplied text, so it cannot be abused to send crafted messages.
-  Adding email verification would close the enumeration gap.
+- **Login throttling** counts attempts per IP address. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server (the Docker image does this for Render).
+- **No sign-up rate limit:** only verification and sign-up notice emails are limited, to one per account every few minutes.
+- **The free live demo** sleeps after 15 minutes without visitors (the first request then takes about a minute) and loses uploaded images on every restart. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#limits-of-the-free-demo).
 - **The original database could not be fully recovered:** the original repository shipped raw MariaDB data files instead of an SQL export.
   The table definitions and the 55-book catalog were recovered from them and form `schema.sql`/`seed.sql`.
   The original foreign-key definitions could not be recovered (they lived in the missing InnoDB system tablespace).
