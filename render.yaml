@@ -1,0 +1,63 @@
+# Render Blueprint for the public BookWise demo (see docs/DEPLOYMENT.md):
+# one free web service built from the Dockerfile, using a free Aiven for
+# MySQL database. Payments are SIMULATED (APP_DEMO=true) and no email is sent.
+#
+# Values marked "sync: false" are entered in the Render Dashboard when the
+# Blueprint is first created; they are never stored in this repository.
+#
+# STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are deliberately not listed:
+# in demo mode docker/entrypoint.sh generates a random sk_test_ key and webhook
+# secret at every start (the payment simulator's state is not kept across
+# restarts either). Render's generateValue would not do here: it produces
+# base64 text, not an sk_test_ key (the entrypoint would convert it anyway).
+
+services:
+  - type: web
+    name: bookwise-demo
+    runtime: docker
+    plan: free
+    # Choose the region closest to your Aiven database; it cannot be changed later.
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    branch: main
+    autoDeployTrigger: commit
+    healthCheckPath: /health.php
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_DEMO
+        value: "true"
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "false"
+      - key: MAIL_DRIVER
+        value: "null"
+      - key: STRIPE_CURRENCY
+        value: sar
+      # APP_URL is derived from RENDER_EXTERNAL_URL by the entrypoint; set it
+      # in the Dashboard only when you add a custom domain.
+
+      # Aiven for MySQL: Service overview > Connection information.
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false
+      # The CA certificate text (-----BEGIN CERTIFICATE----- ...). Aiven
+      # requires TLS; the app verifies the server certificate with it.
+      - key: DB_SSL_CA_PEM
+        sync: false
+
+      # Optional: an administrator created (or its password reset) at start-up.
+      # Leave both empty to skip.
+      - key: BOOKWISE_ADMIN_EMAIL
+        sync: false
+      - key: BOOKWISE_ADMIN_PASSWORD
+        sync: false
