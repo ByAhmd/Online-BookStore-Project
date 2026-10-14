@@ -109,7 +109,7 @@ page_header($pageTitle, ['checkout.css']);
 <?php elseif ($state === 'processing'): ?>
                 <span class="result-icon" aria-hidden="true">&hellip;</span>
                 <h1 id="result-title" class="result-title"><?= e(t('shop.result.processing_heading')) ?></h1>
-                <p class="result-lead"><?= e(t('shop.result.processing_lead')) ?></p>
+                <p class="result-lead"><?= e(t(payment_simulator_enabled() ? 'shop.pay.processing_lead' : 'shop.result.processing_lead')) ?></p>
                 <p class="result-note"><?= e(t('shop.result.processing_note')) ?></p>
                 <div class="result-actions">
                     <a class="btn btn-pay" href="success_pay.php?session_id=<?= e(rawurlencode($sessionId)) ?>"><?= e(t('shop.result.refresh')) ?></a>

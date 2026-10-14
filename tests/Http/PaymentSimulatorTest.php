@@ -74,7 +74,11 @@ final class PaymentSimulatorTest extends HttpTestCase
         foreach ($quantities as $bookId => $quantity) {
             $this->assertRedirect($this->addToCart($client, $bookId, $quantity), 'cart.php');
         }
-        $response = $client->submitForm($client->get('cart.php'), 'checkout.php');
+        // The cart does not promise Stripe's checkout.
+        $cart = $client->get('cart.php');
+        $this->assertPageText("Payments in this store are simulated: you will pay on the store's own payment page", $cart);
+        $this->assertNotPageText('Stripe', $cart);
+        $response = $client->submitForm($cart, 'checkout.php');
         $this->assertStatus(303, $response);
         $location = (string) $response->header('Location');
         self::assertMatchesRegularExpression(
@@ -195,6 +199,8 @@ final class PaymentSimulatorTest extends HttpTestCase
         $processing = $customer->follow($slow);
         $this->assertHtmlPage($processing);
         self::assertSame("We're confirming your payment…", $processing->document()->text('//h1'));
+        $this->assertPageText('Your simulated slow payment is being confirmed, as some banks do.', $processing);
+        $this->assertNotPageText('Stripe', $processing);
         self::assertSame('pending', $this->orderBySession($sessionId)['status']);
         self::assertSame(['complete', 'unpaid'], [$this->simulatorSession($sessionId)['status'], $this->simulatorSession($sessionId)['payment_status']]);
         $this->assertPageText('This payment is being confirmed.', $this->paymentPage($customer, $sessionId));
@@ -282,6 +288,19 @@ final class PaymentSimulatorTest extends HttpTestCase
         self::assertSame('refunded', $order['status']);
         self::assertCount(1, $refunds);
         self::assertSame([$order['stripe_refund_id'], 1999, $order['stripe_payment_intent']], [$refunds[0]['id'], $refunds[0]['amount'], $refunds[0]['payment_intent']]);
+
+        // A payment the simulator has forgotten (its state file was lost) is refunded in the store only:
+        // no money ever moved.
+        $second = $this->checkoutToPaymentPage($customer, [self::BIOLOGY => 1]);
+        $this->assertRedirect($this->press($customer, $this->paymentPage($customer, $second), $second, 'pay'), $this->successUrl($second));
+        $customer->get('success_pay.php?session_id=' . $second);
+        $secondOrderId = (int) $this->orderBySession($second)['id'];
+        unlink($this->store());
+
+        $page = $admin->get('admin_order.php?id=' . $secondOrderId);
+        $response = $admin->submitForm($page, 'admin_order.php?id=' . $secondOrderId, [], ['action' => 'refund']);
+        $this->assertFlash($admin->follow($response), 'success', 'Order #' . $secondOrderId . ' was refunded.');
+        self::assertStringStartsWith('re_demo_', (string) $this->orderBySession($second)['stripe_refund_id']);
     }
 
     public function testThePaymentPageIsTranslatedIntoArabic(): void

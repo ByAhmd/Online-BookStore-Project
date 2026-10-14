@@ -125,11 +125,11 @@ page_header(t('shop.cart.title'), ['cart.css']);
                         <?= csrf_field() ?>
                         <button type="submit" class="btn btn-pay">
                             <span class="label-idle"><?= e(t('shop.cart.pay')) ?></span>
-                            <span class="label-busy"><?= e(t('shop.cart.redirecting')) ?></span>
+                            <span class="label-busy"><?= e(t(payment_simulator_enabled() ? 'shop.pay.cart_redirecting' : 'shop.cart.redirecting')) ?></span>
                         </button>
                     </form>
 <?php endif; ?>
-                    <p class="secure-note"><?= e(t('shop.cart.secure_note', ['app' => $appName])) ?></p>
+                    <p class="secure-note"><?= e(payment_simulator_enabled() ? t('shop.pay.cart_note') : t('shop.cart.secure_note', ['app' => $appName])) ?></p>
                     <a class="continue-link" href="Explore_Page.php"><?= e(t('shop.cart.continue')) ?></a>
                 </aside>
             </div>

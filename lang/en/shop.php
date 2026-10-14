@@ -367,6 +367,10 @@ return [
             'expired' => 'This payment session has ended. You have not been charged.',
         ],
         'back_to_store' => 'Return to the store',
+        // Other pages while the simulator takes the payments (instead of their Stripe wording).
+        'cart_redirecting' => 'Opening the payment page…',
+        'cart_note' => "Payments in this store are simulated: you will pay on the store's own payment page, no money is taken and no card details are needed.",
+        'processing_lead' => 'Your simulated slow payment is being confirmed, as some banks do. This takes about 15 seconds.',
     ],
 
     'about' => [
