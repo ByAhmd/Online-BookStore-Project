@@ -12,8 +12,10 @@ declare(strict_types=1);
  * Copies at least as new as their image are skipped, so the script is safe to
  * run repeatedly. Commit what it writes under public/imges. Uploaded covers
  * get their copies when they are uploaded; run it on uploads/covers once for
- * covers uploaded before that (as at upload time, the larger copy of an
- * upload is at most COVER_COPY_MAX_WIDTH pixels wide).
+ * covers uploaded before that. As at upload time, the larger copy of an
+ * upload is at most COVER_COPY_MAX_WIDTH pixels wide, and an uploaded WebP
+ * cover, its own full-size copy, gets the thumbnail and, when wider than
+ * that, the capped -w780.webp copy.
  *
  * Usage: php bin/optimize-images.php [--force] [directory ...]
  *   directory  folders to scan, relative to public/ (default: imges)
@@ -43,7 +45,8 @@ if (!function_exists('imagewebp')) {
 /**
  * Images under public/$directory that get WebP copies, as paths relative to
  * public/, sorted: PNG, JPEG and GIF files, and uploaded WebP covers (their
- * own full-size copy; they only need the thumbnail).
+ * own full-size copy; they only need the thumbnail and, when wide, the capped
+ * copy). The copies themselves are not images to copy.
  *
  * @return list<string>
  */
@@ -57,7 +60,8 @@ $findImages = static function (string $directory): array {
         }
         $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
         $extension = strtolower($file->getExtension());
-        if (in_array($extension, ['png', 'jpg', 'jpeg', 'gif'], true) || ($extension === 'webp' && is_generated_upload($relative, COVER_DIR))) {
+        $uploadedWebp = $extension === 'webp' && str_starts_with($relative, 'uploads/') && webp_copy_source(base_path('public/' . $relative)) === null;
+        if (in_array($extension, ['png', 'jpg', 'jpeg', 'gif'], true) || $uploadedWebp) {
             $images[] = $relative;
         }
     }

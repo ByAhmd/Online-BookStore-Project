@@ -472,7 +472,7 @@ The catalog covers in `public/imges` are 380×605 PNG files of about 330 KB each
 a full-size `.webp` (about a tenth of the size) and, for images wider than 190 pixels, a `-w190.webp` thumbnail for book cards, the cart and admin tables.
 Pages show covers with `cover_picture()`: a `<picture>` whose `<source>` offers the WebP copies (`srcset` with their widths, and the `sizes` the page displays them at), with the original as the `<img>` for browsers without WebP.
 `fetch_books.php` returns the same sources (`cover_image`, `cover_webp_srcset`), so the Explore page's script builds the same markup.
-Uploaded covers get their copies when they are uploaded (the larger copy at most 780 pixels wide, which also bounds the memory GD needs), and the copies are deleted with the cover when it is replaced or its book is deleted.
+Uploaded covers get their copies when they are uploaded (the larger copy at most 780 pixels wide, which also bounds the memory GD needs; a WebP upload is its own full-size copy, and one wider than that is offered as a `-w780.webp` copy), and the copies are deleted with the cover when it is replaced or its book is deleted.
 
 ```bash
 php bin/optimize-images.php                  # after adding or changing images in public/imges; commit the .webp files
@@ -480,7 +480,8 @@ php bin/optimize-images.php uploads/covers   # once, for covers uploaded before 
 php bin/optimize-images.php --force          # rewrite every copy, e.g. after changing WEBP_QUALITY
 ```
 
-The script needs `gd` with WebP support and skips copies that are at least as new as their image. A unit test fails when an image in `public/imges` has no current copy.
+The script needs `gd` with WebP support and skips copies that are at least as new as their image, so it can be run again at any time.
+A unit test fails when an image in `public/imges` has no current copy.
 
 Pages link their CSS, scripts and images with `asset()`, which adds `?v=<file modification time>`, so a changed file gets a new URL.
 `public/.htaccess` (and `docker/apache/site.conf` in the Docker image) therefore let browsers keep versioned URLs for a year (`Cache-Control: public, max-age=31536000, immutable`).

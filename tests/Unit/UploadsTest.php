@@ -377,6 +377,33 @@ final class UploadsTest extends TestCase
         self::assertSame([COVER_COPY_MAX_WIDTH, 1248, 'image/webp'], self::dimensions($copies['full']));
         self::assertSame([COVER_THUMB_WIDTH, 304, 'image/webp'], self::dimensions($copies['thumb']));
         self::assertStringEndsWith('.webp 780w', webp_srcset($cover));
+        self::assertFileDoesNotExist($copies['capped'], 'Only a WebP cover gets the capped copy');
+    }
+
+    public function testALargeWebpCoverIsOfferedAsAScaledDownCopy(): void
+    {
+        if (!function_exists('imagewebp')) {
+            self::markTestSkipped('GD cannot write WebP here.');
+        }
+        $cover = $this->storeCover($this->upload($this->image('webp', 1000, 1600), 'large.webp', 'image/webp'));
+        $file = BASE_PATH . '/public/' . $cover;
+        $copies = webp_variant_paths($file);
+
+        self::assertSame($file, $copies['full'], 'A WebP cover is its own full-size copy');
+        self::assertSame([1000, 1600, 'image/webp'], self::dimensions($file), 'The cover itself keeps its size');
+        self::assertSame([COVER_COPY_MAX_WIDTH, 1248, 'image/webp'], self::dimensions($copies['capped']));
+        self::assertSame([COVER_THUMB_WIDTH, 304, 'image/webp'], self::dimensions($copies['thumb']));
+        $relative = static fn (string $path): string => substr($path, strlen(BASE_PATH . '/public/'));
+        self::assertSame(
+            asset($relative($copies['thumb'])) . ' 190w, ' . asset($relative($copies['capped'])) . ' 780w',
+            webp_srcset($cover),
+            'Browsers get the 780-pixel copy, never the 1000-pixel upload'
+        );
+
+        // A WebP cover within the limit is offered itself.
+        $small = $this->storeCover($this->upload($this->image('webp', 400, 640), 'small.webp', 'image/webp'));
+        self::assertFileDoesNotExist(webp_variant_paths(BASE_PATH . '/public/' . $small)['capped']);
+        self::assertStringEndsWith($small . ' 400w', webp_srcset($small));
     }
 
     public function testDeletingACoverDeletesItsWebpCopies(): void
@@ -384,14 +411,11 @@ final class UploadsTest extends TestCase
         if (!function_exists('imagewebp')) {
             self::markTestSkipped('GD cannot write WebP here.');
         }
-        foreach (['png' => 2, 'webp' => 1] as $type => $copyCount) {
-            $cover = $this->storeCover($this->upload($this->image($type, 400, 640), "cover.$type", "image/$type"));
+        foreach ([['png', 400, 2], ['webp', 400, 1], ['webp', 1000, 2]] as [$type, $width, $copyCount]) {
+            $cover = $this->storeCover($this->upload($this->image($type, $width, (int) ($width * 1.6)), "cover.$type", "image/$type"));
             $file = BASE_PATH . '/public/' . $cover;
-            $copies = array_filter(webp_variant_paths($file), static fn (string $copy): bool => $copy !== $file);
-            self::assertCount($copyCount, $copies, "A $type cover is its own full-size copy only when it is WebP");
-            foreach ($copies as $copy) {
-                self::assertFileExists($copy, $type);
-            }
+            $copies = array_filter(webp_variant_paths($file), static fn (string $copy): bool => $copy !== $file && is_file($copy));
+            self::assertCount($copyCount, $copies, "A $width-pixel $type cover");
 
             delete_uploaded_cover($cover);
             self::assertFileDoesNotExist($file, $type);

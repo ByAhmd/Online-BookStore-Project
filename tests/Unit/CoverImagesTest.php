@@ -91,16 +91,50 @@ final class CoverImagesTest extends TestCase
     public function testCopiesAreNamedAfterTheImage(): void
     {
         self::assertSame(
-            ['full' => 'imges/All_section/biology.webp', 'thumb' => 'imges/All_section/biology-w190.webp'],
+            ['full' => 'imges/All_section/biology.webp', 'thumb' => 'imges/All_section/biology-w190.webp', 'capped' => 'imges/All_section/biology-w780.webp'],
             webp_variant_paths(self::SEED_COVER)
         );
-        self::assertSame(['full' => '/srv/a/b.webp', 'thumb' => '/srv/a/b-w190.webp'], webp_variant_paths('/srv/a/b.jpeg'));
-        self::assertSame(['full' => 'my cover.webp', 'thumb' => 'my cover-w190.webp'], webp_variant_paths('my cover.JPG'));
+        self::assertSame(['full' => '/srv/a/b.webp', 'thumb' => '/srv/a/b-w190.webp', 'capped' => '/srv/a/b-w780.webp'], webp_variant_paths('/srv/a/b.jpeg'));
+        self::assertSame(['full' => 'my cover.webp', 'thumb' => 'my cover-w190.webp', 'capped' => 'my cover-w780.webp'], webp_variant_paths('my cover.JPG'));
 
         // A WebP image is its own full-size copy.
         $upload = 'uploads/covers/' . str_repeat('ab', 16) . '.webp';
         self::assertSame($upload, webp_variant_paths($upload)['full']);
         self::assertSame('x.WEBP', webp_variant_paths('x.WEBP')['full']);
+    }
+
+    public function testCopiesKnowTheImageTheyWereMadeFrom(): void
+    {
+        $cover = $this->image('cover.png', 380, 605);
+        create_webp_variants($cover);
+        $upload = $this->image('upload.webp', 1000, 1600);
+        create_webp_variants($upload, false, 500);
+        // An image whose own name looks like a thumbnail.
+        $odd = $this->image('odd-w190.jpg', 400, 300);
+        create_webp_variants($odd);
+        $scan = $this->image('scan.PNG', 300, 400);
+        create_webp_variants($scan);
+
+        foreach (webp_variant_paths($cover) as $kind => $copy) {
+            if ($kind !== 'capped') {
+                self::assertSame($cover, webp_copy_source($copy), $kind);
+            }
+        }
+        self::assertSame($upload, webp_copy_source(webp_variant_paths($upload)['thumb']));
+        self::assertSame($upload, webp_copy_source(webp_variant_paths($upload)['capped']));
+        self::assertSame($odd, webp_copy_source($this->directory . '/odd-w190.webp'));
+        self::assertSame($odd, webp_copy_source($this->directory . '/odd-w190-w190.webp'));
+        // Windows finds "scan.png" for "scan.PNG": file names are case-insensitive there.
+        self::assertEqualsIgnoringCase($scan, webp_copy_source($this->directory . '/scan.webp'));
+
+        // Images are not copies, and neither are WebP files without their image.
+        foreach ([$cover, $upload, $odd, $scan] as $image) {
+            self::assertNull(webp_copy_source($image), basename($image));
+        }
+        foreach (['lonely.webp', 'stray-w190.webp', 'odd.webp', 'cover-w300.webp'] as $name) {
+            file_put_contents($this->directory . '/' . $name, 'not checked');
+            self::assertNull(webp_copy_source($this->directory . '/' . $name), $name);
+        }
     }
 
     /* -----------------------------------------------------------------
@@ -161,6 +195,37 @@ final class CoverImagesTest extends TestCase
         self::assertSame([$paths['thumb']], create_webp_variants($image));
         self::assertSame($before, file_get_contents($image), 'The image itself is not rewritten');
         self::assertSame([190, 304, 'image/webp'], self::dimensions($paths['thumb']));
+        self::assertFileDoesNotExist($paths['capped']);
+    }
+
+    public function testAWebpImageWiderThanTheLimitGetsACappedCopy(): void
+    {
+        $image = $this->image('upload.webp', 1000, 1600);
+        $before = (string) file_get_contents($image);
+        $paths = webp_variant_paths($image);
+
+        self::assertSame([$paths['capped'], $paths['thumb']], create_webp_variants($image, false, 500));
+        self::assertSame($before, file_get_contents($image), 'The image itself is not rewritten');
+        self::assertSame([500, 800, 'image/webp'], self::dimensions($paths['capped']));
+        self::assertSame([190, 304, 'image/webp'], self::dimensions($paths['thumb']));
+        self::assertSame([], create_webp_variants($image, false, 500), 'Up to date');
+
+        // A WebP image within the limit is its own full-size copy.
+        $narrow = $this->image('narrow.webp', 400, 640);
+        self::assertSame([webp_variant_paths($narrow)['thumb']], create_webp_variants($narrow, false, 500));
+
+        delete_webp_variants($image);
+        self::assertSame(['narrow-w190.webp', 'narrow.webp', 'upload.webp'], self::fileNames($this->directory));
+    }
+
+    /**
+     * @return list<string> Sorted names of the files in $directory
+     */
+    private static function fileNames(string $directory): array
+    {
+        $names = array_map('basename', glob($directory . '/*') ?: []);
+        sort($names);
+        return $names;
     }
 
     public function testTransparencyIsKept(): void
@@ -168,7 +233,7 @@ final class CoverImagesTest extends TestCase
         foreach (['truecolor.png' => false, 'palette.png' => true] as $name => $palette) {
             $paths = webp_variant_paths($this->image($name, 380, 605, $palette));
             create_webp_variants($this->directory . '/' . $name);
-            foreach ($paths as $kind => $copy) {
+            foreach (['full' => $paths['full'], 'thumb' => $paths['thumb']] as $kind => $copy) {
                 $image = imagecreatefromwebp($copy);
                 self::assertNotFalse($image);
                 $corner = imagecolorsforindex($image, imagecolorat($image, 0, 0));
@@ -245,10 +310,16 @@ final class CoverImagesTest extends TestCase
         $checked = 0;
         $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
         foreach ($files as $file) {
-            if (!$file instanceof SplFileInfo || !in_array(strtolower($file->getExtension()), ['png', 'jpg', 'jpeg', 'gif'], true)) {
+            if (!$file instanceof SplFileInfo) {
                 continue;
             }
             $image = str_replace('\\', '/', $file->getPathname());
+            if (strtolower($file->getExtension()) === 'webp') {
+                self::assertNotNull(webp_copy_source($image), "$image is not the copy of an image: delete it, or add its image.");
+            }
+            if (!in_array(strtolower($file->getExtension()), ['png', 'jpg', 'jpeg', 'gif'], true)) {
+                continue;
+            }
             $paths = webp_variant_paths($image);
             [$width, $height] = self::dimensions($image);
             $hint = "Run php bin/optimize-images.php and commit the copies of $image.";
@@ -265,6 +336,7 @@ final class CoverImagesTest extends TestCase
             } else {
                 self::assertFileDoesNotExist($paths['thumb']);
             }
+            self::assertFileDoesNotExist($paths['capped']);
             $checked++;
         }
         self::assertGreaterThanOrEqual(self::seedCoverCount(), $checked);

@@ -203,9 +203,12 @@ function decode_image(string $file, string $mime): GdImage|false
  * Where the WebP copies of an image go, next to it: "imges/a/b.png" has the
  * full-size copy "imges/a/b.webp" and the thumbnail "imges/a/b-w190.webp"
  * (COVER_THUMB_WIDTH pixels wide). Works on absolute paths and on paths
- * relative to public/. A WebP image is its own full-size copy.
+ * relative to public/. A WebP image is its own full-size copy; an uploaded
+ * one wider than COVER_COPY_MAX_WIDTH also gets the capped copy "b-w780.webp"
+ * (that wide), which pages offer in its place. Other images never get a
+ * capped copy: their full-size copy is scaled down instead.
  *
- * @return array{full: string, thumb: string}
+ * @return array{full: string, thumb: string, capped: string}
  */
 function webp_variant_paths(string $image): array
 {
@@ -213,15 +216,47 @@ function webp_variant_paths(string $image): array
     return [
         'full' => preg_match('/\.webp$/iD', $image) === 1 ? $image : $stem . '.webp',
         'thumb' => $stem . '-w' . COVER_THUMB_WIDTH . '.webp',
+        'capped' => $stem . '-w' . COVER_COPY_MAX_WIDTH . '.webp',
     ];
+}
+
+/**
+ * The image that $file (an absolute path) is a WebP copy of, see
+ * webp_variant_paths(); null when it is not a copy. "b.webp" and
+ * "b-w190.webp" are copies of a "b.png", "b.jpg", "b.jpeg" or "b.gif" next to
+ * them (with a lower- or upper-case extension), and "b-w190.webp" and
+ * "b-w780.webp" of a WebP "b.webp". An uploaded WebP cover has no such image
+ * next to it: it is an image of its own.
+ */
+function webp_copy_source(string $file): ?string
+{
+    if (preg_match('/\.webp$/iD', $file) !== 1) {
+        return null;
+    }
+    $stems = [substr($file, 0, -strlen('.webp'))];
+    // "b-w190.webp" is the full-size copy of a "b-w190.png", or the thumbnail of a "b.png".
+    if (preg_match('/^(.+)-w(?:' . COVER_THUMB_WIDTH . '|' . COVER_COPY_MAX_WIDTH . ')$/sD', $stems[0], $match) === 1) {
+        $stems[] = $match[1];
+    }
+    foreach ($stems as $stem) {
+        foreach (['png', 'jpg', 'jpeg', 'gif', 'webp', 'PNG', 'JPG', 'JPEG', 'GIF', 'WEBP'] as $extension) {
+            $image = $stem . '.' . $extension;
+            if ($image !== $file && in_array($file, webp_variant_paths($image), true) && is_file($image)) {
+                return $image;
+            }
+        }
+    }
+    return null;
 }
 
 /**
  * Writes the WebP copies of a JPEG, PNG, GIF or WebP file (an absolute path,
  * see webp_variant_paths()): the full-size copy, scaled down to $maxWidth
- * when given, and, for images wider than COVER_THUMB_WIDTH, the thumbnail.
- * A copy at least as new as the image is kept unless $force is set. Returns
- * the files written; none when this PHP's GD cannot write WebP.
+ * when given (a WebP image is its own full-size copy, so one wider than
+ * $maxWidth gets the capped copy instead), and, for images wider than
+ * COVER_THUMB_WIDTH, the thumbnail. A copy at least as new as the image is
+ * kept unless $force is set. Returns the files written; none when this PHP's
+ * GD cannot write WebP.
  *
  * @return list<string>
  */
@@ -241,6 +276,8 @@ function create_webp_variants(string $image, bool $force = false, ?int $maxWidth
     $targets = [];
     if ($paths['full'] !== $image) {
         $targets[$paths['full']] = max(1, min($width, $maxWidth ?? $width));
+    } elseif ($maxWidth !== null && $width > $maxWidth) {
+        $targets[$paths['capped']] = max(1, $maxWidth);
     }
     if ($width > COVER_THUMB_WIDTH) {
         $targets[$paths['thumb']] = COVER_THUMB_WIDTH;
@@ -331,7 +368,8 @@ function delete_webp_variants(string $image): void
 /**
  * srcset of the WebP copies of a local image (a path relative to public/, as
  * image_url() returns it), smallest first, e.g.
- * "imges/a/b-w190.webp?v=… 190w, imges/a/b.webp?v=… 380w". Empty for
+ * "imges/a/b-w190.webp?v=… 190w, imges/a/b.webp?v=… 380w". A WebP image
+ * with a capped copy is offered as that copy instead of itself. Empty for
  * external URLs and for images without a full-size copy.
  */
 function webp_srcset(string $src): string
@@ -340,8 +378,9 @@ function webp_srcset(string $src): string
         return '';
     }
     $variants = webp_variant_paths($src);
-    $full = base_path('public/' . $variants['full']);
-    $size = is_file($full) ? @getimagesize($full) : false;
+    $largest = $variants['full'] === $src && is_file(base_path('public/' . $variants['capped'])) ? $variants['capped'] : $variants['full'];
+    $file = base_path('public/' . $largest);
+    $size = is_file($file) ? @getimagesize($file) : false;
     if ($size === false) {
         return '';
     }
@@ -349,7 +388,7 @@ function webp_srcset(string $src): string
     if ($size[0] > COVER_THUMB_WIDTH && is_file(base_path('public/' . $variants['thumb']))) {
         $candidates[] = asset($variants['thumb']) . ' ' . COVER_THUMB_WIDTH . 'w';
     }
-    $candidates[] = asset($variants['full']) . ' ' . $size[0] . 'w';
+    $candidates[] = asset($largest) . ' ' . $size[0] . 'w';
     return implode(', ', $candidates);
 }
 
