@@ -66,3 +66,104 @@ jobs:
 
       - name: Tests
         run: composer test
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint shell scripts
+        run: |
+          for script in docker/entrypoint.sh tests/Docker/smoke.sh tests/Docker/entrypoint_test.sh; do
+            bash -n "$script"
+          done
+          shellcheck --severity=warning docker/entrypoint.sh tests/Docker/smoke.sh tests/Docker/entrypoint_test.sh
+
+      - name: Entrypoint configuration tests
+        run: bash tests/Docker/entrypoint_test.sh
+
+      - name: Build the image
+        run: docker compose build
+
+      - name: Start the store (MySQL + app in demo mode)
+        run: docker compose up -d --wait --wait-timeout 300
+
+      - name: Wait for /health.php
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 5 http://localhost:8080/health.php; then
+              echo
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "/health.php did not answer in time" >&2
+          exit 1
+
+      - name: The app runs as www-data
+        run: test "$(docker compose exec -T app id -un)" = www-data
+
+      - name: Smoke test
+        env:
+          BASE_URL: http://localhost:8080
+        run: bash tests/Docker/smoke.sh
+
+      - name: The order is stored as paid
+        run: |
+          status="$(docker compose exec -T db mysql -N -u bookwise -pbookwise-local-only bookwise \
+            -e "SELECT status FROM orders ORDER BY id DESC LIMIT 1")"
+          echo "latest order: $status"
+          test "$status" = paid
+
+      - name: Without APP_DEMO the simulator is not served (and PORT is honoured)
+        run: |
+          docker compose run -d --no-deps --name bookwise-real -p 8081:9090 \
+            -e PORT=9090 -e APP_DEMO=false -e APP_URL=http://localhost:8081 \
+            -e STRIPE_SECRET_KEY=sk_test_not_a_real_key -e BOOKWISE_ADMIN_EMAIL= -e BOOKWISE_ADMIN_PASSWORD= \
+            app
+          for attempt in $(seq 1 60); do
+            curl -fsS --max-time 5 http://localhost:8081/health.php && break
+            sleep 2
+          done
+          echo
+          curl -fsS --max-time 5 http://localhost:8081/health.php
+          echo
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8081/stripe-sim/v1/checkout/sessions)"
+          echo "/stripe-sim without APP_DEMO: HTTP $code"
+          test "$code" = 404
+          if curl -s --max-time 5 http://localhost:8081/Home_Page.php | grep -q 'demo-banner'; then
+            echo "the demo banner must not be shown without APP_DEMO" >&2
+            exit 1
+          fi
+
+      - name: /health.php reports an unavailable database
+        run: |
+          docker compose stop db
+          for attempt in $(seq 1 20); do
+            code="$(curl -s -o /tmp/health.json -w '%{http_code}' --max-time 70 http://localhost:8080/health.php || true)"
+            if [ "$code" = 503 ]; then
+              cat /tmp/health.json
+              echo
+              grep -q '"status":"unavailable"' /tmp/health.json
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "/health.php did not report 503 after the database stopped (last HTTP $code)" >&2
+          exit 1
+
+      - name: Container logs
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --timestamps
+          docker logs bookwise-real 2>&1 || true
+
+      - name: Stop the containers
+        if: always()
+        run: |
+          docker rm -f bookwise-real || true
+          docker compose down -v
