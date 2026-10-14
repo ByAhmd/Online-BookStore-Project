@@ -482,7 +482,7 @@ php bin/optimize-images.php --force          # rewrite every copy, e.g. after ch
 ```
 
 The script needs `gd` with WebP support and skips copies that are at least as new as their image, so it can be run again at any time.
-A unit test fails when an image in `public/imges` has no current copy.
+A unit test fails when an image in `public/imges` has no copy, or a copy that no longer shows it: git does not keep file times, so the test compares both pictures reduced to 8×8 cells.
 
 Pages link their CSS, scripts and images with `asset()`, which adds `?v=<file modification time>`, so a changed file gets a new URL.
 `public/.htaccess` (and `docker/apache/site.conf` in the Docker image) therefore let browsers keep versioned URLs for a year (`Cache-Control: public, max-age=31536000, immutable`).

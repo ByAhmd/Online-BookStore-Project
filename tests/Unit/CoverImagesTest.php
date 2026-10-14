@@ -26,6 +26,13 @@ final class CoverImagesTest extends TestCase
 {
     private const SEED_COVER = 'imges/All_section/biology.png';
 
+    /**
+     * Largest difference (0-255) of one colour in one cell of two thumbprints
+     * that still show the same picture. The committed copies differ from
+     * their images by at most 3; the two closest covers of the catalog by 64.
+     */
+    private const PICTURE_TOLERANCE = 16;
+
     private string $directory = '';
 
     protected function setUp(): void
@@ -323,9 +330,11 @@ final class CoverImagesTest extends TestCase
             $paths = webp_variant_paths($image);
             [$width, $height] = self::dimensions($image);
             $hint = "Run php bin/optimize-images.php and commit the copies of $image.";
+            $picture = self::thumbprint($image);
 
             self::assertFileExists($paths['full'], $hint);
             self::assertSame([$width, $height, 'image/webp'], self::dimensions($paths['full']), $hint);
+            self::assertSamePicture($picture, $paths['full'], $hint);
             if ($width > COVER_THUMB_WIDTH) {
                 self::assertFileExists($paths['thumb'], $hint);
                 self::assertSame(
@@ -333,6 +342,7 @@ final class CoverImagesTest extends TestCase
                     self::dimensions($paths['thumb']),
                     $hint
                 );
+                self::assertSamePicture($picture, $paths['thumb'], $hint);
             } else {
                 self::assertFileDoesNotExist($paths['thumb']);
             }
@@ -342,9 +352,76 @@ final class CoverImagesTest extends TestCase
         self::assertGreaterThanOrEqual(self::seedCoverCount(), $checked);
     }
 
+    public function testCopiesOfAReplacedImageNoLongerShowIt(): void
+    {
+        $cover = $this->image('cover.png', 380, 605);
+        create_webp_variants($cover);
+        $copy = webp_variant_paths($cover)['full'];
+        self::assertLessThanOrEqual(self::PICTURE_TOLERANCE, self::pictureDifference(self::thumbprint($cover), self::thumbprint($copy)));
+
+        // A new picture under the same name and size, its copies not rewritten.
+        $replacement = imagecreatetruecolor(380, 605);
+        self::assertNotFalse($replacement);
+        imagefilledrectangle($replacement, 0, 0, 379, 302, (int) imagecolorallocate($replacement, 40, 60, 198));
+        imagefilledrectangle($replacement, 0, 303, 379, 604, (int) imagecolorallocate($replacement, 198, 40, 40));
+        imagepng($replacement, $cover);
+        self::assertGreaterThan(self::PICTURE_TOLERANCE, self::pictureDifference(self::thumbprint($cover), self::thumbprint($copy)));
+
+        // The two catalog covers closest to each other are far apart too.
+        $a = self::thumbprint(BASE_PATH . '/public/imges/All_section/wonderbloom.png');
+        $b = self::thumbprint(BASE_PATH . '/public/imges/Mystery_Section/those.png');
+        self::assertGreaterThan(self::PICTURE_TOLERANCE * 2, self::pictureDifference($a, $b));
+    }
+
     private static function seedCoverCount(): int
     {
         return substr_count((string) file_get_contents(BASE_PATH . '/database/seed.sql'), "', 'imges/");
+    }
+
+    /**
+     * An image reduced to 8×8 cells over grey, as their red, green and blue
+     * values: enough to tell two pictures apart without telling a WebP copy
+     * from its PNG. Git does not keep file times, so the copies of a replaced
+     * image can only be found out of date by their content.
+     *
+     * @return list<int>
+     */
+    private static function thumbprint(string $file): array
+    {
+        $image = imagecreatefromstring((string) file_get_contents($file));
+        $cells = imagecreatetruecolor(8, 8);
+        self::assertNotFalse($image, "$file is not an image");
+        self::assertNotFalse($cells);
+        imagefill($cells, 0, 0, (int) imagecolorallocate($cells, 128, 128, 128));
+        imagealphablending($cells, true);
+        imagecopyresampled($cells, $image, 0, 0, 0, 0, 8, 8, imagesx($image), imagesy($image));
+
+        $values = [];
+        for ($y = 0; $y < 8; $y++) {
+            for ($x = 0; $x < 8; $x++) {
+                $rgb = imagecolorat($cells, $x, $y);
+                array_push($values, ($rgb >> 16) & 0xFF, ($rgb >> 8) & 0xFF, $rgb & 0xFF);
+            }
+        }
+        return $values;
+    }
+
+    /**
+     * @param list<int> $a
+     * @param list<int> $b
+     */
+    private static function pictureDifference(array $a, array $b): int
+    {
+        return max(array_map(static fn (int $x, int $y): int => abs($x - $y), $a, $b));
+    }
+
+    /**
+     * @param list<int> $picture Thumbprint of the image
+     */
+    private static function assertSamePicture(array $picture, string $copy, string $hint): void
+    {
+        $difference = self::pictureDifference($picture, self::thumbprint($copy));
+        self::assertLessThanOrEqual(self::PICTURE_TOLERANCE, $difference, "$copy no longer shows its image. $hint");
     }
 
     /* -----------------------------------------------------------------
