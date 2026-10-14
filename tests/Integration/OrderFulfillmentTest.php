@@ -319,7 +319,7 @@ final class OrderFulfillmentTest extends CheckoutTestCase
         [$sessionId, $order] = $this->checkout($user);
         $this->stripe->pay($sessionId); // paid, but the customer never came back
 
-        $redirect = start_checkout($user);
+        $redirect = start_checkout($user, $this->deliveryAddressId($user));
 
         self::assertSame('success_pay.php?session_id=' . $sessionId, $redirect);
         self::assertSame('paid', $this->reloadOrder((int) $order['id'])['status']);
@@ -335,7 +335,7 @@ final class OrderFulfillmentTest extends CheckoutTestCase
         $this->stripe->pay($firstSession);
         cart_add((int) $user['id'], self::BRIDGE, 2);
 
-        $secondSession = self::sessionIdFromUrl(start_checkout($user));
+        $secondSession = self::sessionIdFromUrl(start_checkout($user, $this->deliveryAddressId($user)));
 
         self::assertSame('paid', $this->reloadOrder((int) $firstOrder['id'])['status']);
         $secondOrder = $this->orderForSession($secondSession);
@@ -346,7 +346,7 @@ final class OrderFulfillmentTest extends CheckoutTestCase
     public function testPendingOrderWithoutASessionIsMarkedFailed(): void
     {
         $user = $this->customerWithCart([self::ESABELLA => 1]);
-        $orphan = create_pending_order((int) $user['id'], cart_lines((int) $user['id']));
+        $orphan = create_pending_order((int) $user['id'], cart_lines((int) $user['id']), $this->deliveryAddress($user));
 
         $this->checkout($user);
 
@@ -372,7 +372,7 @@ final class OrderFulfillmentTest extends CheckoutTestCase
         $this->stripe->http->failNext('GET', self::RETRIEVE_SESSION, 500);
 
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
         } catch (CheckoutException) {
             // Refusing to continue is acceptable too.
         }
@@ -397,7 +397,7 @@ final class OrderFulfillmentTest extends CheckoutTestCase
         $this->stripe->http->failNext('GET', self::RETRIEVE_SESSION, 500);
 
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
         } catch (CheckoutException) {
             // Refusing to continue is the safe outcome.
         }

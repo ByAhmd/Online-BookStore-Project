@@ -54,14 +54,15 @@ abstract class CheckoutTestCase extends DatabaseTestCase
     }
 
     /**
-     * Starts checkout for the user and returns [session id, order row].
+     * Starts checkout for the user (delivering to their default address, which
+     * is created when they have none) and returns [session id, order row].
      *
      * @param array<string, mixed> $user
      * @return array{0: string, 1: array<string, mixed>}
      */
     protected function checkout(array $user): array
     {
-        $sessionId = self::sessionIdFromUrl(start_checkout($user));
+        $sessionId = self::sessionIdFromUrl(start_checkout($user, $this->deliveryAddressId($user)));
         return [$sessionId, $this->orderForSession($sessionId)];
     }
 

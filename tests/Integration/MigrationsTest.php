@@ -65,6 +65,37 @@ final class MigrationsTest extends DatabaseTestCase
         self::assertSame([], run_migrations(), 'Applied once');
     }
 
+    public function testMigration006CreatesTheSameTablesAndColumnsAsTheSchema(): void
+    {
+        $tables = ['orders' => 'orders', 'addresses' => 'addresses', 'order_addresses' => 'order_addresses'];
+        $definitions = static fn (): array => array_map(
+            static fn (string $table): string => (string) preg_replace('/ AUTO_INCREMENT=\d+/', '', (string) db_one('SHOW CREATE TABLE ' . $table)['Create Table']),
+            $tables
+        );
+        $fresh = $definitions();
+        $user = $this->createUser();
+        db_run(
+            "INSERT INTO orders (user_id, status, currency, total_amount, amount_minor, paid_at) VALUES (?, 'paid', 'sar', '19.99', 1999, NOW())",
+            [$user['id']]
+        );
+        $paid = (int) db()->lastInsertId();
+
+        // A database from before 006.
+        db()->exec('DROP TABLE order_addresses');
+        db()->exec('DROP TABLE addresses');
+        db()->exec('ALTER TABLE orders DROP KEY idx_orders_fulfilment');
+        db()->exec('ALTER TABLE orders DROP COLUMN fulfilment_status, DROP COLUMN shipped_at, DROP COLUMN delivered_at, DROP COLUMN carrier, DROP COLUMN tracking_number');
+        db_run('DELETE FROM schema_migrations WHERE version = ?', ['006_order_fulfilment']);
+
+        self::assertSame(['006_order_fulfilment'], run_migrations());
+        self::assertSame($fresh, $definitions());
+        $order = find_order($paid);
+        self::assertNotNull($order);
+        self::assertArrayHasKey('fulfilment_status', $order);
+        self::assertNull($order['fulfilment_status'], 'Orders paid before 006 have no delivery to track');
+        self::assertSame([], run_migrations(), 'Applied once');
+    }
+
     public function testACompleteDatabaseWithoutRecordsStartsFromTheBaseline(): void
     {
         // A database created from the first published schema has no record of

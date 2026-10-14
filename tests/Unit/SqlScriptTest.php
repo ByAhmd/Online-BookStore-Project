@@ -59,7 +59,7 @@ final class SqlScriptTest extends TestCase
         $schema = SqlScript::split((string) file_get_contents(BASE_PATH . '/database/schema.sql'));
         $creates = array_values(array_filter($schema, static fn (string $s): bool => str_starts_with($s, 'CREATE TABLE')));
         self::assertCount(count($schema) - 2, $creates, 'SET NAMES, one CREATE TABLE per table, and the migrations record');
-        self::assertCount(15, $creates);
+        self::assertCount(17, $creates);
         self::assertStringStartsWith('INSERT INTO schema_migrations', (string) end($schema));
 
         $seed = SqlScript::split((string) file_get_contents(BASE_PATH . '/database/seed.sql'));

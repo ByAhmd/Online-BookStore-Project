@@ -36,7 +36,9 @@
             "src/users.php",
             "src/books.php",
             "src/cart.php",
+            "src/addresses.php",
             "src/orders.php",
+            "src/fulfilment.php",
             "src/payment_simulator.php",
             "src/uploads.php"
         ]

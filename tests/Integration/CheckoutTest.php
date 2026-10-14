@@ -22,7 +22,7 @@ final class CheckoutTest extends CheckoutTestCase
         $user = $this->customerWithCart([self::ESABELLA => 3, self::BIOLOGY => 1]);
         $expectedMinor = 3 * 1999 + 550;
 
-        $url = start_checkout($user);
+        $url = start_checkout($user, $this->deliveryAddressId($user));
 
         self::assertStringStartsWith($this->stripe->baseUrl . '/pay/cs_test_', $url, 'The browser is sent to the hosted page');
         $sessionId = self::sessionIdFromUrl($url);
@@ -96,7 +96,7 @@ final class CheckoutTest extends CheckoutTestCase
         $user = $this->createUser();
 
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertSame('Your cart is empty.', $e->getMessage());
@@ -111,7 +111,7 @@ final class CheckoutTest extends CheckoutTestCase
         $this->stripe->http->failNext('POST', self::CREATE_SESSION, 500);
 
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertStringContainsString('Your card has not been charged', $e->getMessage());
@@ -131,7 +131,7 @@ final class CheckoutTest extends CheckoutTestCase
 
         $this->expectException(CheckoutException::class);
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
         } finally {
             self::assertSame('failed', db_value('SELECT status FROM orders'));
         }
@@ -146,7 +146,7 @@ final class CheckoutTest extends CheckoutTestCase
         });
 
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException) {
             // expected
@@ -166,7 +166,7 @@ final class CheckoutTest extends CheckoutTestCase
 
         $this->expectException(CheckoutException::class);
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
         } finally {
             self::assertSame('failed', db_value('SELECT status FROM orders'));
         }
@@ -178,7 +178,7 @@ final class CheckoutTest extends CheckoutTestCase
         $user = $this->customerWithCart([$free => 2]);
 
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertSame('The minimum order total is SAR 2.00. Please add another book.', $e->getMessage());
@@ -192,7 +192,7 @@ final class CheckoutTest extends CheckoutTestCase
         $user = $this->customerWithCart([$cheap => 1]);
 
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertStringContainsString('minimum order total', $e->getMessage());
@@ -200,7 +200,7 @@ final class CheckoutTest extends CheckoutTestCase
         self::assertSame(0, $this->countRows('orders'));
 
         cart_set_quantity((int) $user['id'], cart_lines((int) $user['id'])[0]['cart_id'], 2); // 3.98
-        self::assertStringStartsWith('http', start_checkout($user));
+        self::assertStringStartsWith('http', start_checkout($user, $this->deliveryAddressId($user)));
     }
 
     public function testOutOfRangeQuantitiesAreRejectedBeforeCharging(): void
@@ -209,7 +209,7 @@ final class CheckoutTest extends CheckoutTestCase
         db_run('UPDATE cart SET quantity = 11');
 
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertStringContainsString('between 1 and 10', $e->getMessage());
@@ -225,7 +225,7 @@ final class CheckoutTest extends CheckoutTestCase
         $this->setStock(self::BIOLOGY, 0);
 
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertSame(
@@ -239,7 +239,7 @@ final class CheckoutTest extends CheckoutTestCase
         // One book short names just that book; with enough copies checkout goes ahead.
         $this->setStock(self::BIOLOGY, 5);
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertSame(
@@ -258,7 +258,7 @@ final class CheckoutTest extends CheckoutTestCase
 
         use_locale('ar');
         try {
-            start_checkout($user);
+            start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertSame(
@@ -274,7 +274,7 @@ final class CheckoutTest extends CheckoutTestCase
     {
         $user = $this->customerWithCart([self::ESABELLA => 1]);
 
-        $run = IsolatedPhp::run('start_checkout', ['user' => $user], ['APP_ENV' => 'local', 'STRIPE_SECRET_KEY' => 'sk_live_not_a_real_key']);
+        $run = IsolatedPhp::run('start_checkout', ['user' => $user, 'address' => $this->deliveryAddressId($user)], ['APP_ENV' => 'local', 'STRIPE_SECRET_KEY' => 'sk_live_not_a_real_key']);
 
         self::assertSame(['ok' => false, 'exception' => 'CheckoutException', 'message' => 'Online payments are not available in this environment.'], $run['result']);
         self::assertSame(0, $this->countRows('orders'));
@@ -311,9 +311,10 @@ final class CheckoutTest extends CheckoutTestCase
 
     public function testMarkOrderStatusOnlyMovesFromAllowedStates(): void
     {
-        $order = create_pending_order((int) $this->createUser()['id'], [
+        $user = $this->createUser();
+        $order = create_pending_order((int) $user['id'], [
             ['book_id' => self::ESABELLA, 'title' => 'Esabella', 'price' => '19.99', 'quantity' => 1, 'line_minor' => 1999],
-        ]);
+        ], $this->deliveryAddress($user));
         $id = (int) $order['id'];
 
         self::assertFalse(mark_order_status($id, 'refunded'), 'Unknown status');

@@ -182,7 +182,7 @@ final class AccountManagementTest extends DatabaseTestCase
         $user = $this->createUser('paying@example.com');
         $userId = (int) $user['id'];
         self::assertTrue(cart_add($userId, 7, 1));
-        $url = start_checkout($user);
+        $url = start_checkout($user, $this->deliveryAddressId($user));
         $sessionId = substr($url, (int) strrpos($url, '/') + 1);
 
         // An asynchronous payment that is still processing: its outcome is unknown, so nothing is deleted.

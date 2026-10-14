@@ -7,19 +7,21 @@ declare(strict_types=1);
  *
  * Flow:
  *  1. start_checkout() checks the stock of every cart line, snapshots the cart
- *     into a `pending` order (trusted DB prices) and creates a Stripe Checkout
- *     Session for exactly that amount.
+ *     and the delivery address the customer chose into a `pending` order
+ *     (trusted DB prices) and creates a Stripe Checkout Session for exactly
+ *     that amount.
  *  2. The customer pays on Stripe's hosted page.
  *  3. The order is marked `paid` only by fulfill_order(), using the session
  *     as retrieved from Stripe's API: when the customer returns to
  *     success_pay.php, or when a signature-verified webhook notifies us.
  *     Visiting success_pay.php without a genuinely paid session changes nothing.
  *  4. fulfill_order() locks the order row, so the success page and webhook can
- *     race safely: sales rows, the stock decrement and cart removal happen
- *     exactly once.
+ *     race safely: sales rows, the stock decrement, cart removal and the order
+ *     confirmation email happen exactly once. The order's delivery then
+ *     starts at `processing` (see src/fulfilment.php).
  *  5. refund_order() (admin) or a confirmed charge.refunded webhook marks a
  *     paid order `refunded`, removes its sales rows and puts the copies back
- *     in stock, again exactly once.
+ *     in stock, again exactly once, at any stage of the delivery.
  */
 
 /** A checkout problem whose message is safe to show to the customer. */
@@ -33,6 +35,8 @@ final class RefundException extends RuntimeException
 }
 
 const CHECKOUT_SESSION_TTL_SECONDS = 3600; // Stripe allows 30 minutes to 24 hours.
+/** CheckoutException code: no delivery address was chosen (the customer goes back to the checkout page). */
+const CHECKOUT_ERROR_ADDRESS = 1;
 /** Demo mode: simulated purchases never take a book below this many copies. */
 const DEMO_MIN_STOCK = 3;
 /** Statuses mark_order_status() may set (refunds go through apply_order_refund()). */
@@ -117,12 +121,15 @@ function stripe_client(): \Stripe\StripeClient
  * ------------------------------------------------------------------- */
 
 /**
- * Snapshots cart lines into a new pending order.
+ * Snapshots cart lines and the delivery address into a new pending order.
+ * The address is copied (order_addresses), so later edits or deletions of
+ * the customer's saved address never change the order.
  *
  * @param list<array{book_id: int, title: string, price: string, quantity: int, line_minor: int}> $lines
+ * @param array<string, mixed> $address A saved address (see src/addresses.php)
  * @return array<string, mixed> The order row
  */
-function create_pending_order(int $userId, array $lines): array
+function create_pending_order(int $userId, array $lines, array $address): array
 {
     if ($lines === []) {
         throw new CheckoutException(t('shop.checkout.empty_cart'));
@@ -138,7 +145,7 @@ function create_pending_order(int $userId, array $lines): array
     }
     $currency = (string) config('stripe.currency');
 
-    return db_transaction(static function () use ($userId, $lines, $amountMinor, $currency): array {
+    return db_transaction(static function () use ($userId, $lines, $address, $amountMinor, $currency): array {
         db_run(
             "INSERT INTO orders (user_id, status, currency, total_amount, amount_minor) VALUES (?, 'pending', ?, ?, ?)",
             [$userId, $currency, minor_to_decimal($amountMinor), $amountMinor]
@@ -150,6 +157,11 @@ function create_pending_order(int $userId, array $lines): array
                 [$orderId, $line['book_id'], $line['title'], $line['price'], $line['quantity']]
             );
         }
+        db_run(
+            'INSERT INTO order_addresses (order_id, ' . implode(', ', ADDRESS_FIELDS) . ')
+             VALUES (?' . str_repeat(', ?', count(ADDRESS_FIELDS)) . ')',
+            [$orderId, ...address_column_values($address)]
+        );
         return (array) db_one('SELECT * FROM orders WHERE id = ?', [$orderId]);
     });
 }
@@ -183,14 +195,15 @@ function order_items(int $orderId): array
 
 /**
  * A customer's orders, newest first, each with its items. Refunded orders
- * keep status 'refunded' (label: common.status.refunded) and refunded_at.
+ * keep status 'refunded' (label: common.status.refunded) and refunded_at;
+ * paid orders carry their delivery stage (see order_display_status()).
  *
  * @return list<array<string, mixed>>
  */
 function user_orders(int $userId, int $limit = 20): array
 {
     $orders = db_all(
-        'SELECT id, status, currency, total_amount, created_at, paid_at, refunded_at FROM orders
+        'SELECT id, status, currency, total_amount, created_at, paid_at, refunded_at, fulfilment_status, shipped_at, delivered_at FROM orders
          WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ' . max(1, min($limit, 100)),
         [$userId]
     );
@@ -205,7 +218,7 @@ function user_orders(int $userId, int $limit = 20): array
  * when the customer has deleted their account.
  */
 const ADMIN_ORDER_COLUMNS = 'o.id, o.status, o.currency, o.total_amount, o.created_at, o.paid_at, o.refunded_at, o.user_id,
-                u.name AS customer_name, u.Eaddress AS customer_email,
+                o.fulfilment_status, u.name AS customer_name, u.Eaddress AS customer_email,
                 (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi WHERE oi.order_id = o.id) AS item_count';
 
 /**
@@ -226,18 +239,24 @@ function recent_orders(int $limit = 20): array
 
 /**
  * One page of the admin order list, newest first. $status is one of
- * ORDER_STATUS_FILTERS (anything else means all); $query matches an order
- * number ("42" or "#42") or part of the customer's email address.
+ * ORDER_STATUS_FILTERS (anything else means all); $fulfilment one of
+ * FULFILMENT_STATUSES lists the paid orders at that delivery stage (refunded
+ * orders are found with the status filter); $query matches an order number
+ * ("42" or "#42") or part of the customer's email address.
  *
  * @return array{orders: list<array<string, mixed>>, pagination: array{page: int, pages: int, per_page: int, total: int, offset: int}}
  */
-function admin_order_list(string $status, string $query, mixed $page, int $perPage = ADMIN_PAGE_SIZE): array
+function admin_order_list(string $status, string $query, mixed $page, string $fulfilment = '', int $perPage = ADMIN_PAGE_SIZE): array
 {
     $where = [];
     $params = [];
     if (in_array($status, ORDER_STATUS_FILTERS, true)) {
         $where[] = 'o.status = ?';
         $params[] = $status;
+    }
+    if (in_array($fulfilment, FULFILMENT_STATUSES, true)) {
+        $where[] = "o.status = 'paid' AND o.fulfilment_status = ?";
+        $params[] = $fulfilment;
     }
     if ($query !== '') {
         $like = '%' . addcslashes($query, '%_\\') . '%';
@@ -265,8 +284,9 @@ function admin_order_list(string $status, string $query, mixed $page, int $perPa
 }
 
 /**
- * An order with its customer (NULL name/email for deleted accounts) and
- * items, for the admin detail page.
+ * An order with its customer (NULL name/email for deleted accounts), items
+ * and delivery address ('address', null when none is stored), for the admin
+ * detail page.
  *
  * @return array<string, mixed>|null
  */
@@ -282,6 +302,7 @@ function admin_order_detail(int $orderId): ?array
         return null;
     }
     $order['items'] = order_items($orderId);
+    $order['address'] = order_address($orderId);
     return $order;
 }
 
@@ -323,9 +344,14 @@ function mark_order_status(int $orderId, string $status, array $from = ['pending
  * the browser to: Stripe's hosted page, or the success page when an earlier
  * pending order turns out to have been paid already.
  *
+ * $addressId is the customer's saved address the books are delivered to
+ * (null when none was chosen). An address that is not the customer's, or no
+ * address, is refused with a CheckoutException whose code is
+ * CHECKOUT_ERROR_ADDRESS.
+ *
  * @param array<string, mixed> $user
  */
-function start_checkout(array $user): string
+function start_checkout(array $user, ?int $addressId): string
 {
     // One checkout at a time per customer (two tabs, double clicks, two devices),
     // so concurrent requests can never leave two payable sessions behind.
@@ -334,7 +360,7 @@ function start_checkout(array $user): string
         throw new CheckoutException(t('shop.checkout.in_progress'));
     }
     try {
-        return start_checkout_locked($user);
+        return start_checkout_locked($user, $addressId);
     } finally {
         db_value('SELECT RELEASE_LOCK(?)', [$lock]);
     }
@@ -343,7 +369,7 @@ function start_checkout(array $user): string
 /**
  * @param array<string, mixed> $user
  */
-function start_checkout_locked(array $user): string
+function start_checkout_locked(array $user, ?int $addressId): string
 {
     $userId = (int) $user['id'];
 
@@ -370,7 +396,12 @@ function start_checkout_locked(array $user): string
     }
 
     $stripe = stripe_client();
-    $order = create_pending_order($userId, $lines);
+    // Read under the checkout lock: the order gets the address as it is now.
+    $address = $addressId !== null ? find_user_address($userId, $addressId) : null;
+    if ($address === null) {
+        throw new CheckoutException(t('shop.checkout.address_required'), CHECKOUT_ERROR_ADDRESS);
+    }
+    $order = create_pending_order($userId, $lines, $address);
     $orderId = (int) $order['id'];
 
     $lineItems = [];
@@ -527,12 +558,29 @@ function flag_order_for_review(int $orderId): void
  * belongs to it and reports a completed payment of exactly the order amount.
  * Records the sales, takes the copies out of stock (never below zero: the
  * customer has paid, so an oversold book is logged for staff and the order is
- * still fulfilled) and removes the purchased copies from the cart.
- * Idempotent and safe under concurrency (the order row is locked).
+ * still fulfilled), removes the purchased copies from the cart and starts the
+ * delivery ('processing', for orders with a delivery address).
+ * Idempotent and safe under concurrency (the order row is locked): only the
+ * call that returns 'paid' made the change, and only it emails the order
+ * confirmation, after the change is committed.
  *
  * @return 'paid'|'already_paid'|'unpaid'|'mismatch'|'unknown_order'
  */
 function fulfill_order(int $orderId, \Stripe\StripeObject $session): string
+{
+    $outcome = fulfill_order_locked($orderId, $session);
+    if ($outcome === 'paid') {
+        send_order_email($orderId, 'confirmation');
+    }
+    return $outcome;
+}
+
+/**
+ * The bookkeeping of fulfill_order() in one transaction.
+ *
+ * @return 'paid'|'already_paid'|'unpaid'|'mismatch'|'unknown_order'
+ */
+function fulfill_order_locked(int $orderId, \Stripe\StripeObject $session): string
 {
     return db_transaction(static function () use ($orderId, $session): string {
         $order = db_one('SELECT * FROM orders WHERE id = ? FOR UPDATE', [$orderId]);
@@ -576,9 +624,11 @@ function fulfill_order(int $orderId, \Stripe\StripeObject $session): string
             $paymentIntent = $paymentIntent->id ?? null;
         }
 
+        // Orders placed before delivery addresses existed have nothing to deliver to.
+        $deliverable = db_value('SELECT 1 FROM order_addresses WHERE order_id = ?', [$orderId]) !== null;
         db_run(
-            "UPDATE orders SET status = 'paid', paid_at = NOW(), stripe_payment_intent = ? WHERE id = ?",
-            [is_string($paymentIntent) ? $paymentIntent : null, $orderId]
+            "UPDATE orders SET status = 'paid', paid_at = NOW(), stripe_payment_intent = ?, fulfilment_status = ? WHERE id = ?",
+            [is_string($paymentIntent) ? $paymentIntent : null, $deliverable ? 'processing' : null, $orderId]
         );
         db_run(
             'INSERT INTO sales (book_id, user_id, order_id, quantity)
@@ -771,15 +821,16 @@ function refund_order(int $orderId): string
 }
 
 /**
- * Records a full refund of a paid order exactly once: status refunded,
- * refunded_at and the Stripe refund id, the order's sales rows removed (the
- * books no longer count as sold or reviewable through this order) and the
- * copies put back in stock. Returns false when the order is not (or no longer)
- * a paid order with this payment intent.
+ * Records a full refund of a paid order exactly once, at any stage of its
+ * delivery: status refunded, refunded_at and the Stripe refund id, the
+ * order's sales rows removed (the books no longer count as sold or
+ * reviewable through this order) and the copies put back in stock. The
+ * customer is emailed after the change is committed. Returns false when the
+ * order is not (or no longer) a paid order with this payment intent.
  */
 function apply_order_refund(int $orderId, string $refundId, string $paymentIntent): bool
 {
-    return db_transaction(static function () use ($orderId, $refundId, $paymentIntent): bool {
+    $applied = db_transaction(static function () use ($orderId, $refundId, $paymentIntent): bool {
         $order = db_one('SELECT id, status, stripe_payment_intent FROM orders WHERE id = ? FOR UPDATE', [$orderId]);
         if ($order === null || $order['status'] !== 'paid' || $order['stripe_payment_intent'] !== $paymentIntent) {
             return false;
@@ -795,9 +846,15 @@ function apply_order_refund(int $orderId, string $refundId, string $paymentInten
              SET b.stock = b.stock + oi.stock_taken',
             [$orderId]
         );
+        // A refunded order of a deleted account no longer needs its delivery address.
+        forget_anonymous_order_address($orderId);
         app_log('info', 'Order refunded', ['order_id' => $orderId, 'refund' => $refundId]);
         return true;
     });
+    if ($applied) {
+        send_order_email($orderId, 'refunded');
+    }
+    return $applied;
 }
 
 /**

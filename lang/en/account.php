@@ -11,6 +11,7 @@ return [
 
     'sections' => [
         'account' => 'Account Info',
+        'addresses' => 'Delivery Addresses',
         'payment' => 'Payment Preference',
         'orders' => 'My Orders',
         'security' => 'Security',
@@ -52,6 +53,57 @@ return [
         'invalid' => 'Please choose one of the listed languages.',
     ],
 
+    // Saved delivery addresses (the field labels are in shop.address.*).
+    'addresses' => [
+        'intro' => [
+            'one' => 'We deliver within Saudi Arabia, free of charge. You can save :count address; the default one is chosen first at checkout.',
+            'other' => 'We deliver within Saudi Arabia, free of charge. You can save up to :count addresses; the default one is chosen first at checkout.',
+        ],
+        'empty' => 'You have not saved a delivery address yet.',
+        'list_label' => 'Saved addresses',
+        'default_badge' => 'Default',
+        'edit' => 'Edit',
+        'make_default' => 'Make default',
+        'delete' => 'Delete',
+        'address_of' => 'address of :name',
+        'delete_confirm' => 'Delete this address? Orders you have already placed keep their delivery address.',
+        'add_heading' => 'Add an address',
+        'edit_heading' => 'Edit address',
+        'make_default_label' => 'Make this my default address',
+        'submit' => 'Save Address',
+        'cancel' => 'Cancel',
+        'created' => 'Your address has been saved.',
+        'updated' => 'Your address has been updated.',
+        'default_set' => 'Your default address has been changed.',
+        'deleted' => 'The address has been deleted.',
+        'not_found' => 'That address could not be found. It may already have been deleted.',
+        'invalid' => 'Please correct the highlighted fields. The address was not saved.',
+        'limit' => [
+            'one' => 'You can save :count address. Delete it to add another.',
+            'other' => 'You can save up to :count addresses. Delete one to add another.',
+        ],
+        'validation' => [
+            'recipient_name_required' => "Please enter the recipient's full name.",
+            'recipient_name_invalid' => "The recipient's name contains characters that are not allowed.",
+            'city_required' => 'Please enter the city.',
+            'city_invalid' => 'The city contains characters that are not allowed.',
+            'district_required' => 'Please enter the district.',
+            'district_invalid' => 'The district contains characters that are not allowed.',
+            'street_required' => 'Please enter the street.',
+            'street_invalid' => 'The street contains characters that are not allowed.',
+            'too_long' => [
+                'one' => 'Please use at most :count character.',
+                'other' => 'Please use at most :count characters.',
+            ],
+            'phone_required' => 'Please enter a mobile number.',
+            'phone_invalid' => 'Please enter a Saudi mobile number, such as 05XXXXXXXX.',
+            'building_number' => 'The building number has 4 digits.',
+            'postal_code' => 'The postal code has 5 digits.',
+            'additional_number' => 'The additional number has 4 digits.',
+            'short_address' => 'The short address has 4 letters and 4 digits, such as RRRD2929.',
+        ],
+    ],
+
     'payment' => [
         'intro' => "Card details are entered securely on Stripe's checkout page at payment time. :app never stores card numbers.",
         'legacy_notice' => 'Your previous entry was cleared for your security — please choose a preference.',
@@ -77,6 +129,8 @@ return [
         'date_format' => 'j M Y, H:i',
         'quantity' => '× :count',
         'total' => 'Total',
+        'view' => 'View order',
+        'view_sr' => '#:id',
         // Shown capitalized by the .status-badge style.
         'status' => [
             'pending' => 'pending',
@@ -109,13 +163,13 @@ return [
         'removed_heading' => 'What is deleted',
         'removed' => [
             'profile' => 'Your profile: name, email address, password, profile picture, favorite genre, date of birth and preferences.',
-            'shopping' => 'Your cart and your favorites.',
+            'shopping' => 'Your cart, your favorites and your saved delivery addresses.',
             'reviews' => 'Your book reviews and the likes and dislikes you gave.',
             'purchases' => 'Your purchase list, which unlocks reviews (best-seller counts are lowered accordingly).',
             'security' => 'Unused email links and records of failed sign-in attempts.',
         ],
         'kept_heading' => 'What is kept',
-        'kept' => 'Your order records (books, amounts, dates and payment references) are kept for accounting, anonymised: they are no longer linked to your account, name or email address.',
+        'kept' => 'Your order records (books, amounts, dates and payment references) are kept for accounting, anonymised: they are no longer linked to your account, name or email address. Their delivery addresses are deleted too, except for orders still on their way, which keep theirs until they are delivered.',
         'password' => 'Current password',
         'confirm' => 'I understand that my account and the data listed above will be permanently deleted.',
         'submit' => 'Delete My Account',

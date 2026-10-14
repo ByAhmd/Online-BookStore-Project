@@ -64,7 +64,7 @@ try {
             ];
             break;
         case 'start_checkout':
-            $result = ['redirect' => start_checkout($args['user'])];
+            $result = ['redirect' => start_checkout($args['user'], $args['address'] ?? null)];
             break;
         case 'request_password_reset':
             request_password_reset($args['email']);

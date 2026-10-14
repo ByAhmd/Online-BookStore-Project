@@ -24,6 +24,18 @@ abstract class DatabaseTestCase extends TestCase
 
     public const DEFAULT_PASSWORD = 'correct-horse-battery';
     public const SEED_BOOK_COUNT = 55;
+    /** A valid delivery address (Saudi National Address), as a customer would type it. */
+    public const SAMPLE_ADDRESS = [
+        'recipient_name' => 'Sara Ahmed',
+        'phone' => '0512345678',
+        'city' => 'Riyadh',
+        'district' => 'Al Olaya',
+        'street' => 'King Fahd Road',
+        'building_number' => '1234',
+        'postal_code' => '12345',
+        'additional_number' => '6789',
+        'short_address' => 'RRRD2929',
+    ];
 
     /** Emptied before every test (children before parents is not required: FK checks are off). */
     private const MUTABLE_TABLES = [
@@ -32,8 +44,10 @@ abstract class DatabaseTestCase extends TestCase
         'favorites',
         'cart',
         'sales',
+        'order_addresses',
         'order_items',
         'orders',
+        'addresses',
         'reset_tokens',
         'email_verifications',
         'login_attempts',
@@ -212,6 +226,44 @@ abstract class DatabaseTestCase extends TestCase
         $email ??= self::uniqueEmail('admin');
         db_run('INSERT INTO admins (Eaddress, name, password) VALUES (?, ?, ?)', [$email, $name, hash_password($password)]);
         return ['Eaddress' => $email, 'name' => $name];
+    }
+
+    /**
+     * Saves a delivery address for the customer through save_customer_address()
+     * (their first address becomes the default) and returns its id.
+     *
+     * @param array<string, string> $overrides
+     */
+    protected function createAddress(int $userId, array $overrides = [], bool $makeDefault = false): int
+    {
+        [$address, $errors] = validate_address_input($overrides + self::SAMPLE_ADDRESS);
+        self::assertSame([], $errors, 'The test address must be valid');
+        $saved = save_customer_address($userId, $address, null, $makeDefault);
+        self::assertSame('created', $saved['status'], 'Could not save the test address');
+        return (int) $saved['id'];
+    }
+
+    /**
+     * The id of the customer's default delivery address, which is created when they have none.
+     *
+     * @param array<string, mixed> $user
+     */
+    protected function deliveryAddressId(array $user): int
+    {
+        return default_address_id((int) $user['id']) ?? $this->createAddress((int) $user['id']);
+    }
+
+    /**
+     * The customer's default delivery address (created when they have none), as stored.
+     *
+     * @param array<string, mixed> $user
+     * @return array<string, mixed>
+     */
+    protected function deliveryAddress(array $user): array
+    {
+        $address = find_user_address((int) $user['id'], $this->deliveryAddressId($user));
+        self::assertNotNull($address);
+        return $address;
     }
 
     /**

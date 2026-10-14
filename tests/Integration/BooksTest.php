@@ -373,7 +373,7 @@ final class BooksTest extends DatabaseTestCase
         $commentId = (int) db_value('SELECT id FROM comments WHERE book_id = ?', [self::ESABELLA]);
         toggle_comment_reaction($other, self::ESABELLA, $commentId, 'like');
 
-        $order = create_pending_order($userId, cart_lines($userId));
+        $order = create_pending_order($userId, cart_lines($userId), $this->deliveryAddress($user));
         db_run('INSERT INTO sales (book_id, user_id, order_id, quantity) VALUES (?, ?, ?, 2)', [self::ESABELLA, $userId, $order['id']]);
 
         self::assertTrue(delete_book(self::ESABELLA));

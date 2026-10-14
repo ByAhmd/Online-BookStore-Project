@@ -143,11 +143,34 @@ CREATE TABLE reset_tokens (
     KEY idx_reset_tokens_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Customers' saved delivery addresses (Saudi National Address). At most five
+-- per customer, exactly one of them the default; deleted with the account.
+CREATE TABLE addresses (
+    id                INT          NOT NULL AUTO_INCREMENT,
+    user_id           INT          NOT NULL,
+    recipient_name    VARCHAR(100) NOT NULL,
+    phone             VARCHAR(13)  NOT NULL COMMENT 'Saudi mobile number: +9665XXXXXXXX',
+    city              VARCHAR(60)  NOT NULL,
+    district          VARCHAR(60)  NOT NULL,
+    street            VARCHAR(100) NOT NULL,
+    building_number   CHAR(4)      NOT NULL,
+    postal_code       CHAR(5)      NOT NULL,
+    additional_number CHAR(4)      NULL DEFAULT NULL,
+    short_address     CHAR(8)      NULL DEFAULT NULL COMMENT 'National Address short code: 4 letters and 4 digits',
+    is_default        TINYINT(1)   NOT NULL DEFAULT 0,
+    created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_addresses_user (user_id, is_default),
+    CONSTRAINT fk_addresses_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Checkout orders. An order becomes `paid` only after the Stripe Checkout
 -- Session has been retrieved from Stripe (or delivered by a signed webhook)
 -- and its amount, currency and payment status match this row. Orders are
 -- kept as financial records when a customer deletes their account (user_id
--- becomes NULL).
+-- becomes NULL). fulfilment_status follows the delivery of paid orders
+-- (processing -> shipped -> delivered); it is NULL for unpaid orders and for
+-- orders placed before deliveries were tracked.
 CREATE TABLE orders (
     id                    INT           NOT NULL AUTO_INCREMENT,
     user_id               INT           NULL DEFAULT NULL,
@@ -162,12 +185,38 @@ CREATE TABLE orders (
     updated_at            TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     paid_at               DATETIME      NULL DEFAULT NULL,
     refunded_at           DATETIME      NULL DEFAULT NULL,
+    fulfilment_status     ENUM('processing', 'shipped', 'delivered') NULL DEFAULT NULL COMMENT 'Delivery progress of a paid order',
+    shipped_at            DATETIME      NULL DEFAULT NULL,
+    delivered_at          DATETIME      NULL DEFAULT NULL,
+    carrier               VARCHAR(60)   NULL DEFAULT NULL,
+    tracking_number       VARCHAR(40)   NULL DEFAULT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_orders_stripe_session (stripe_session_id),
     KEY idx_orders_user_status (user_id, status),
     KEY idx_orders_status_created (status, created_at),
+    KEY idx_orders_fulfilment (fulfilment_status, created_at),
     CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT chk_orders_amount CHECK (amount_minor > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- The address an order is delivered to, copied from the customer's saved
+-- address when checkout starts, so later edits or deletions of the saved
+-- address never change past orders. When a customer deletes their account,
+-- the copies are deleted too, except for orders still on their way, whose
+-- copy goes once they are delivered or refunded.
+CREATE TABLE order_addresses (
+    order_id          INT          NOT NULL,
+    recipient_name    VARCHAR(100) NOT NULL,
+    phone             VARCHAR(13)  NOT NULL COMMENT 'Saudi mobile number: +9665XXXXXXXX',
+    city              VARCHAR(60)  NOT NULL,
+    district          VARCHAR(60)  NOT NULL,
+    street            VARCHAR(100) NOT NULL,
+    building_number   CHAR(4)      NOT NULL,
+    postal_code       CHAR(5)      NOT NULL,
+    additional_number CHAR(4)      NULL DEFAULT NULL,
+    short_address     CHAR(8)      NULL DEFAULT NULL,
+    PRIMARY KEY (order_id),
+    CONSTRAINT fk_order_addresses_order FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Price/title snapshot taken when checkout starts, so later catalog edits or
@@ -245,4 +294,5 @@ INSERT INTO schema_migrations (version) VALUES
     ('001_initial'),
     ('002_accounts_commerce_i18n'),
     ('003_order_stock_taken'),
-    ('004_demo_mail');
+    ('004_demo_mail'),
+    ('006_order_fulfilment');
