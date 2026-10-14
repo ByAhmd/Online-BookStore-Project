@@ -78,6 +78,19 @@ function parse_env_value(string $value): string
 }
 
 /**
+ * Writes a value for a .env file so that load_env() reads it back unchanged
+ * (used by bin/setup.php): simple values stay bare, anything else is
+ * double-quoted with \n, \" and \\ escapes.
+ */
+function env_file_value(string $value): string
+{
+    if (preg_match('#^[A-Za-z0-9_.,/:@+=-]*$#D', $value)) {
+        return $value;
+    }
+    return '"' . str_replace(['\\', '"', "\n"], ['\\\\', '\\"', '\\n'], $value) . '"';
+}
+
+/**
  * Reads an environment variable, returning $default when unset or empty.
  */
 function env(string $key, ?string $default = null): ?string

@@ -15,9 +15,11 @@ trait RunsProjectScripts
     /**
      * @param string $script Path relative to the project root
      * @param array<string, string|null> $env Environment overrides; null removes a variable
+     * @param list<string> $arguments Command-line arguments
+     * @param string $stdin Text typed into the script (e.g. answers to its questions)
      * @return array{status: int, stdout: string, stderr: string}
      */
-    protected static function runProjectScript(string $script, array $env = []): array
+    protected static function runProjectScript(string $script, array $env = [], array $arguments = [], string $stdin = ''): array
     {
         $environment = [];
         foreach (getenv() as $name => $value) {
@@ -32,7 +34,7 @@ trait RunsProjectScripts
         }
 
         $process = proc_open(
-            [PHP_BINARY, BASE_PATH . '/' . $script],
+            [PHP_BINARY, BASE_PATH . '/' . $script, ...$arguments],
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
             BASE_PATH,
@@ -41,6 +43,7 @@ trait RunsProjectScripts
         if (!is_resource($process)) {
             throw new RuntimeException("Could not run $script");
         }
+        fwrite($pipes[0], $stdin);
         fclose($pipes[0]);
         $stdout = (string) stream_get_contents($pipes[1]);
         $stderr = (string) stream_get_contents($pipes[2]);
