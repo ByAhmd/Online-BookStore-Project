@@ -23,6 +23,7 @@ return [
         'cover_url' => 'Cover image URLs must start with https:// and be valid.',
         'cover_path' => 'Cover image must be a path like "imges/All_section/book.png" or an https:// URL.',
         'cover_missing' => 'No image exists at ":path" (paths are case-sensitive).',
+        'cover_copy' => '":path" is a WebP copy that the site makes of ":image". Please use ":image" instead.',
     ],
 
     // Book cover uploads.

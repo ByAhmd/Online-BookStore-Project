@@ -345,6 +345,16 @@ final class CoverUploadTest extends HttpTestCase
         // A second book points at the same uploaded file through the path field.
         $this->assertRedirect($this->addBook($admin, self::book(['title' => 'Shared Cover Book', 'cover_image' => $cover]), []), 'admin_dashboard.php');
         $second = (int) db_value('SELECT id FROM books WHERE title = ?', ['Shared Cover Book']);
+        // Its WebP copy is not a cover: the copy goes when the upload goes.
+        foreach ($copies as $copy) {
+            $response = $this->addBook($admin, self::book(['title' => 'Copied Cover Book', 'cover_image' => $copy]), []);
+            $this->assertRedirect($response, 'admin_dashboard.php#add-book');
+            self::assertSame(
+                "\"$copy\" is a WebP copy that the site makes of \"$cover\". Please use \"$cover\" instead.",
+                $admin->follow($response)->document()->fieldError('book-cover_image-error')
+            );
+        }
+        self::assertNull(db_value('SELECT id FROM books WHERE title = ?', ['Copied Cover Book']));
 
         $delete = static fn (int $id): HttpResponse => $admin->submitForm($admin->get('admin_dashboard.php'), 'admin_dashboard.php', [], ['action' => 'delete_book', 'id' => (string) $id]);
         $this->assertRedirect($delete($first), 'admin_dashboard.php#manage-books');

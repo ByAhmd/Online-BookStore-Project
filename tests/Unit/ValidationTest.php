@@ -310,6 +310,41 @@ final class ValidationTest extends TestCase
         }
     }
 
+    /**
+     * The WebP copies are deleted with their image, so a book whose cover is
+     * a copy of another book's upload would lose it with that book.
+     */
+    public function testWebpCopiesAreNotCovers(): void
+    {
+        self::assertSame(
+            '"imges/All_section/biology.webp" is a WebP copy that the site makes of "imges/All_section/biology.png". Please use "imges/All_section/biology.png" instead.',
+            validate_cover_image('imges/All_section/biology.webp')
+        );
+        self::assertIsString(validate_cover_image('imges/All_section/biology-w190.webp'));
+
+        $png = bin2hex(random_bytes(16));
+        $webp = bin2hex(random_bytes(16));
+        $names = ["$png.png", "$png.webp", "$png-w190.webp", "$webp.webp", "$webp-w190.webp", "$webp-w780.webp"];
+        foreach ($names as $name) {
+            file_put_contents(BASE_PATH . '/public/uploads/covers/' . $name, 'placeholder');
+        }
+        try {
+            self::assertNull(validate_cover_image("uploads/covers/$png.png"));
+            self::assertNull(validate_cover_image("uploads/covers/$webp.webp"), 'An uploaded WebP cover is not a copy');
+            foreach (["$png.webp" => "$png.png", "$png-w190.webp" => "$png.png", "$webp-w190.webp" => "$webp.webp", "$webp-w780.webp" => "$webp.webp"] as $copy => $image) {
+                self::assertSame(
+                    t('admin.validation.cover_copy', ['path' => "uploads/covers/$copy", 'image' => "uploads/covers/$image"]),
+                    validate_cover_image("uploads/covers/$copy"),
+                    $copy
+                );
+            }
+        } finally {
+            foreach ($names as $name) {
+                unlink(BASE_PATH . '/public/uploads/covers/' . $name);
+            }
+        }
+    }
+
     /* -----------------------------------------------------------------
      * Admin book form
      * --------------------------------------------------------------- */

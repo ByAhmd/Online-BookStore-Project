@@ -127,7 +127,8 @@ function validate_rating(mixed $rating): ?int
 
 /**
  * Validates a cover image reference: an existing image under public/imges or
- * public/uploads/covers (uploaded covers), or an absolute https URL (the
+ * public/uploads/covers (uploaded covers) that is not one of the WebP copies
+ * of another image there, or an absolute https URL (the
  * Content-Security-Policy blocks plain-http images).
  */
 function validate_cover_image(string $value): ?string
@@ -157,6 +158,12 @@ function validate_cover_image(string $value): ?string
     }
     if (!is_file(base_path('public/' . $value))) {
         return t('admin.validation.cover_missing', ['path' => $value]);
+    }
+    // The WebP copies of an image are made and deleted with it, so they are
+    // never a book's cover (deleting another book's cover would delete them).
+    $original = webp_copy_source(base_path('public/' . $value));
+    if ($original !== null) {
+        return t('admin.validation.cover_copy', ['path' => $value, 'image' => dirname($value) . '/' . basename($original)]);
     }
     return null;
 }

@@ -473,6 +473,7 @@ a full-size `.webp` (about a tenth of the size) and, for images wider than 190 p
 Pages show covers with `cover_picture()`: a `<picture>` whose `<source>` offers the WebP copies (`srcset` with their widths, and the `sizes` the page displays them at), with the original as the `<img>` for browsers without WebP.
 `fetch_books.php` returns the same sources (`cover_image`, `cover_webp_srcset`), so the Explore page's script builds the same markup.
 Uploaded covers get their copies when they are uploaded (the larger copy at most 780 pixels wide, which also bounds the memory GD needs; a WebP upload is its own full-size copy, and one wider than that is offered as a `-w780.webp` copy), and the copies are deleted with the cover when it is replaced or its book is deleted.
+The copies are never a book's cover: the admin form refuses their paths and asks for the original image.
 
 ```bash
 php bin/optimize-images.php                  # after adding or changing images in public/imges; commit the .webp files
