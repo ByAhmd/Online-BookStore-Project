@@ -118,7 +118,22 @@ jobs:
           echo "latest order: $status"
           test "$status" = paid
 
-      - name: Without APP_DEMO the simulator is not served (and PORT is honoured)
+      - name: The payment was simulated inside the application
+        run: |
+          # The in-process simulator keeps its state in storage/, writable by www-data.
+          docker compose exec -T app sh -c 'test "$(stat -c %U storage/payment-simulator.json)" = www-data'
+          docker compose exec -T app grep -q '"payment_status": "paid"' storage/payment-simulator.json
+
+      - name: The local-only administrator password is refused on a public address
+        run: |
+          if output="$(docker compose run --rm --no-deps -T -e APP_URL=https://bookwise.example.com app 2>&1)"; then
+            echo "the container started with the published administrator password on a public address" >&2
+            exit 1
+          fi
+          echo "$output"
+          grep -q 'not a local address' <<<"$output"
+
+      - name: Without APP_DEMO there is no payment simulator (and PORT is honoured)
         run: |
           docker compose run -d --no-deps --name bookwise-real -p 8081:9090 \
             -e PORT=9090 -e APP_DEMO=false -e APP_URL=http://localhost:8081 \
@@ -131,8 +146,8 @@ jobs:
           echo
           curl -fsS --max-time 5 http://localhost:8081/health.php
           echo
-          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8081/stripe-sim/v1/checkout/sessions)"
-          echo "/stripe-sim without APP_DEMO: HTTP $code"
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 'http://localhost:8081/pay.php?session=cs_test_x')"
+          echo "pay.php without APP_DEMO: HTTP $code"
           test "$code" = 404
           if curl -s --max-time 5 http://localhost:8081/Home_Page.php | grep -q 'demo-banner'; then
             echo "the demo banner must not be shown without APP_DEMO" >&2

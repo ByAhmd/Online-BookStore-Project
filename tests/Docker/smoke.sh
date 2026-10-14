@@ -6,14 +6,14 @@
 #     tests/Docker/smoke.sh                       # BASE_URL=http://localhost:8080
 #
 # It uses only curl, grep, sed and od, so it can also check a deployed demo:
-#     BASE_URL=https://<your-service>.onrender.com tests/Docker/smoke.sh
+#     BASE_URL=https://<account>.alwaysdata.net tests/Docker/smoke.sh
 # (that registers one throwaway customer and buys one book with the simulator).
-# BASE_URL must be the site's APP_URL: the payment simulator redirects there.
+# BASE_URL must be the site's APP_URL: the payment page returns there.
 #
 # Checks: /health.php, the home page with the sample catalog, sign-up, add to
-# cart, checkout through the payment simulator to the paid confirmation, that
-# the simulator's test controls and API are closed to visitors, that private
-# files are not served, and the security headers.
+# cart, checkout on the payment simulator's page (public/pay.php) to the paid
+# confirmation, that the payment page needs its CSRF token and refuses unknown
+# sessions, that private files are not served, and the security headers.
 
 set -euo pipefail
 
@@ -192,19 +192,28 @@ pass "book ${book_id} was added to the cart"
 token="$(csrf_token)"
 request POST checkout.php --data-urlencode "_token=${token}"
 expect_status 303
-if [[ ! "$LOCATION" =~ /stripe-sim/pay/(cs_test_[A-Za-z0-9]+)$ ]]; then
-    fail "checkout did not redirect to the payment simulator (Location: ${LOCATION})"
+if [[ ! "$LOCATION" =~ /pay\.php\?session=(cs_test_[A-Za-z0-9]+)$ ]]; then
+    fail "checkout did not redirect to the simulated payment page (Location: ${LOCATION})"
 fi
 session_id="${BASH_REMATCH[1]}"
 pay_url="$LOCATION"
-[[ "$pay_url" == "${BASE_URL}/stripe-sim/pay/${session_id}" ]] \
-    || fail "the simulator URL ${pay_url} is not on ${BASE_URL}: set BASE_URL to the site's APP_URL"
-pass "checkout redirects to the payment simulator"
+[[ "$pay_url" == "${BASE_URL}/pay.php?session=${session_id}" ]] \
+    || fail "the payment page ${pay_url} is not on ${BASE_URL}: set BASE_URL to the site's APP_URL"
+pass "checkout redirects to the simulated payment page"
 
 request GET "$pay_url"
 expect_status 200
-grep -q 'value="pay"' "$BODY" || fail "the simulated payment page has no Pay button"
+for action in pay decline slow cancel; do
+    grep -q "value=\"${action}\"" "$BODY" || fail "the simulated payment page has no ${action} button"
+done
+token="$(csrf_token)"
+pass "the simulated payment page offers Pay, Decline, Slow payment and Cancel"
+
 request POST "$pay_url" --data-urlencode 'action=pay'
+expect_status 419
+pass "the payment page refuses a form without its CSRF token (419)"
+
+request POST "$pay_url" --data-urlencode "_token=${token}" --data-urlencode 'action=pay'
 expect_status 303
 [[ "$LOCATION" == "${BASE_URL}/success_pay.php?session_id=${session_id}" ]] \
     || fail "paying did not return to success_pay.php (Location: ${LOCATION})"
@@ -215,23 +224,14 @@ expect_status 200
 grep -Eq 'result-paid|payment was received' "$BODY" || fail "success_pay.php does not confirm the payment"
 pass "the order is confirmed as paid"
 
-# --- The simulator is not open to visitors -----------------------------------
-request GET stripe-sim/__test/sessions
+request GET 'pay.php?session=cs_test_unknown'
 expect_status 404
-request POST stripe-sim/__test/reset --data ''
-expect_status 404
-pass "the simulator's test controls are not exposed (404)"
-
-request GET "stripe-sim/v1/checkout/sessions/${session_id}"
-expect_status 401
-request GET "stripe-sim/v1/checkout/sessions/${session_id}" -H 'Authorization: Bearer sk_test_guess'
-expect_status 401
-pass "the simulator API refuses callers without the store's key (401)"
+pass "the payment page answers 404 for unknown sessions"
 
 # --- Private files -------------------------------------------------------------
 for path in .env .htaccess composer.json composer.lock vendor/autoload.php storage/logs/app.log \
-    src/bootstrap.php database/schema.sql bin/install.php docker/entrypoint.sh \
-    tests/Support/stripe_mock_router.php uploads/.htaccess; do
+    storage/payment-simulator.json src/bootstrap.php src/payment_simulator.php database/schema.sql \
+    bin/install.php bin/setup.php docker/entrypoint.sh tests/Support/stripe_mock_router.php uploads/.htaccess; do
     request GET "$path"
     expect_status 403 404
 done

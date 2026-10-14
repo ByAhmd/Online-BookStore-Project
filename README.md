@@ -5,12 +5,13 @@
 
 BookWise is an online bookstore written in plain PHP with MySQL/MariaDB.
 Customers browse a catalog, search and filter by genre, keep favorites, buy books
-through **Stripe Checkout** and review the books they bought. Administrators manage the
-catalog, stock and covers, follow orders and refund them. The whole interface is
-available in **English and Arabic** (right-to-left).
+through **Stripe Checkout** (or the built-in **payment simulator**) and review the books
+they bought. Administrators manage the catalog, stock and covers, follow orders and
+refund them. The whole interface is available in **English and Arabic** (right-to-left).
 
 It runs locally with PHP's built-in server or Docker, and can be published as a free
-**live demo** with simulated payments (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+**live demo** with simulated payments on ordinary PHP hosting such as alwaysdata
+(see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
 
 It started as a team project for the *Fundamentals of Web Programming* course at
 King Faisal University (see the in-app **About** page). It has since been audited
@@ -28,7 +29,7 @@ page architecture is unchanged; there is no framework.
 - [Running with Docker and the live demo](#running-with-docker-and-the-live-demo)
 - [Configuration reference](#configuration-reference)
 - [Languages](#languages)
-- [Payments with Stripe (test mode)](#payments-with-stripe-test-mode)
+- [Payments: the simulator and Stripe](#payments-the-simulator-and-stripe)
 - [Email](#email)
 - [Database migrations](#database-migrations)
 - [Upgrading a database from the original project](#upgrading-a-database-from-the-original-project)
@@ -60,7 +61,7 @@ page architecture is unchanged; there is no framework.
   - Add to cart with a quantity, and add to or remove from favorites.
   - Reviews with a 1–5 star rating, only for customers who bought the book and only once per book. Other readers can like or dislike a review.
 - Cart: change quantities (1–10 per title, never more than in stock), remove items, and see totals computed from catalog prices on the server.
-- Checkout on Stripe's hosted payment page. An order is confirmed only after BookWise has verified the payment with Stripe.
+- Checkout on Stripe's hosted payment page, or on the built-in payment simulator's page. An order is confirmed only after BookWise has verified the payment.
 - Profile:
   - Name, favorite genre, date of birth and profile picture (JPEG/PNG/GIF/WebP, max 2 MB, re-encoded on upload).
   - A payment-method *preference* (no card data is ever stored).
@@ -79,6 +80,7 @@ page architecture is unchanged; there is no framework.
 **Everywhere**
 - English and Arabic interface with a language switch in the header, Arabic plural forms, Arabic dates, amounts and genre names, and a mirrored right-to-left layout.
 - Optional demo mode (`APP_DEMO=true`) for a public showcase: a banner, a built-in payment simulator instead of Stripe, and optionally a demo inbox that shows the store's emails instead of sending them.
+  The simulator runs inside the application, so no Stripe account, second server or special web-server setup is needed.
 
 ## Technology stack
 
@@ -86,7 +88,7 @@ page architecture is unchanged; there is no framework.
 | --- | --- |
 | Language | PHP ≥ 8.1 (tested on 8.2 and 8.4; CI covers 8.1–8.4) |
 | Database | MySQL ≥ 8.0.16 or MariaDB ≥ 10.4 (InnoDB, utf8mb4), accessed with PDO prepared statements |
-| Payments | [Stripe Checkout](https://stripe.com/docs/payments/checkout) via `stripe/stripe-php` 16.x |
+| Payments | [Stripe Checkout](https://stripe.com/docs/payments/checkout) via `stripe/stripe-php` 16.x, or the built-in payment simulator |
 | Email | Any SMTP server through PHPMailer (`phpmailer/phpmailer` 7.x), a demo inbox stored in the database, or a local log file for development |
 | Frontend | Server-rendered HTML, plain CSS and vanilla JavaScript (no build step), Google Fonts (Quicksand) |
 | Tooling | Composer, PHPUnit 10, PHPStan 2 (level 6), GitHub Actions |
@@ -100,7 +102,8 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 ```
 .
 ├── public/                 Web root: point your server's document root here
-│   ├── *.php               Pages and form handlers (index.php = login/sign-up, Home_Page.php, Explore_Page.php, …)
+│   ├── *.php               Pages and form handlers (index.php = login/sign-up, Home_Page.php, Explore_Page.php,
+│   │                       pay.php = the payment simulator's page, …)
 │   ├── css/  js/           Stylesheets and scripts (common.css/common.js are shared)
 │   ├── imges/              Catalog covers and UI images (folder name kept: database rows reference it)
 │   └── uploads/            Uploaded avatars/ and covers/ (git-ignored, must be writable)
@@ -108,6 +111,7 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 │   ├── bootstrap.php       Loaded by every page: config, error handling, session, security headers, language
 │   ├── auth.php users.php password_reset.php csrf.php validation.php
 │   ├── books.php cart.php orders.php   Catalog, stock, cart, Stripe orders and refunds
+│   ├── payment_simulator.php           Built-in stand-in for the Stripe API (demo payments)
 │   ├── i18n.php            Translations (t(), tn()), Arabic plurals, language switching
 │   ├── migrations.php      Schema migration runner
 │   ├── db.php env.php helpers.php mailer.php uploads.php
@@ -118,15 +122,16 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 │   ├── seed.sql            Sample catalog: 55 books with stock, no user data
 │   └── migrations/         Changes applied to existing databases, in order
 ├── bin/
+│   ├── setup.php           Set up a demo on PHP hosting without Docker (.env, database, administrator)
 │   ├── install.php         Create the schema on an empty database, or migrate an existing one
 │   ├── migrate.php         Apply pending migrations
 │   ├── create-admin.php    Create an administrator or reset an administrator's password
 │   ├── upgrade-legacy-db.php  Upgrade a database created by the original project
 │   └── lint.php            `php -l` over the whole project
-├── docker/  Dockerfile  docker-compose.yml  render.yaml   Container image, local Compose setup, Render Blueprint
-├── docs/                   DEPLOYMENT.md (Docker and live demo), AUDIT.md (audit record), screenshots/
-├── storage/logs/           app.log, php-error.log and mail.log (git-ignored)
-├── tests/                  PHPUnit suites (unit, integration, http, deploy) and a local Stripe API stand-in
+├── docker/  Dockerfile  docker-compose.yml   Container image and local Compose setup
+├── docs/                   DEPLOYMENT.md (Docker, alwaysdata demo, Tailscale Funnel), AUDIT.md (audit record), screenshots/
+├── storage/                logs/ (app.log, php-error.log, mail.log) and the payment simulator's state (git-ignored)
+├── tests/                  PHPUnit suites (unit, integration, http, deploy) and an HTTP wrapper around the payment simulator
 ├── .env.example            Configuration template
 └── .github/workflows/ci.yml
 ```
@@ -141,7 +146,7 @@ As a safety net for Apache setups that serve the whole folder, the root `.htacce
 
 - PHP 8.1+ with the extensions listed above, and [Composer](https://getcomposer.org/)
 - MySQL 8.0.16+ or MariaDB 10.4+ (XAMPP, Laragon, DBngin, Docker, a system service and so on)
-- A free [Stripe](https://dashboard.stripe.com/register) account in **test mode** (only needed for checkout)
+- Optional: a free [Stripe](https://dashboard.stripe.com/register) account in **test mode**. Without one, checkout uses the built-in [payment simulator](#payments-the-simulator-and-stripe).
 
 ### 2. Install dependencies
 
@@ -165,7 +170,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON bookwise.* TO 'bookwise'@'localhost';
 cp .env.example .env
 ```
 
-Edit `.env`: set the `DB_*` values, `APP_URL`, and your Stripe **test** keys. See the [configuration reference](#configuration-reference).
+Edit `.env`: set the `DB_*` values and `APP_URL`. See the [configuration reference](#configuration-reference).
+For payments, either set `PAYMENT_SIMULATOR=true` (or `APP_DEMO=true`, which also turns it on) to use the built-in payment simulator,
+or set your Stripe **test** keys.
 For local development you can set `REQUIRE_EMAIL_VERIFICATION=false`, or open the verification links from `storage/logs/mail.log`.
 
 Then create the tables and, with `--seed`, the sample catalog:
@@ -202,6 +209,7 @@ php -S localhost:8000 -t public
 ```
 
 Open <http://localhost:8000>. With this option, set `APP_URL=http://localhost:8000`.
+With the payment simulator on, this one server is all you need to buy a book: checkout opens the simulated payment page `pay.php` on the same server.
 
 **XAMPP / Apache:** keep the project *outside* `htdocs` and expose only `public/` with an alias.
 Add this to `C:\xampp\apache\conf\extra\httpd-xampp.conf`, or to the end of `httpd.conf`, then restart Apache:
@@ -235,8 +243,11 @@ docker compose up --build
 Open <http://localhost:8080>. The container creates or migrates the database on start-up, loads the sample catalog and runs in demo mode, with payments simulated instead of sent to Stripe.
 In demo mode the stock is topped up at every start and simulated purchases never take a book below 3 copies, so visitors cannot sell the shared catalog out.
 
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) explains the image and how to publish a free public demo on **Render** (Docker web service) with a free **Aiven** MySQL database.
-It also covers switching from demo mode to real Stripe test payments and email.
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) explains the image and:
+
+- how to publish a free public demo on **alwaysdata** (ordinary PHP hosting with MariaDB, no Docker), step by step, with the setup script `php bin/setup.php`;
+- how to present the Docker store from your own PC through **Tailscale Funnel**;
+- how to switch from demo mode to real Stripe payments and email.
 
 ## Configuration reference
 
@@ -251,17 +262,19 @@ convenience, and variables already set in the real environment take precedence.
 | `APP_URL` | `http://localhost:8000` | Public URL of `public/` without a trailing slash. Used for Stripe return URLs and password-reset links. |
 | `APP_TIMEZONE` | `Asia/Riyadh` | PHP and database-session timezone |
 | `APP_DEFAULT_LOCALE` | `en` | Interface language for visitors who have not chosen one: `en` or `ar` |
-| `APP_DEMO` | `false` | Public demo mode: shows a banner; meant to be used with the payment simulator ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
+| `APP_DEMO` | `false` | Public demo mode: shows a banner, turns the payment simulator on (unless `PAYMENT_SIMULATOR=false`) and keeps the sample catalog in stock ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
 | `REQUIRE_EMAIL_VERIFICATION` | `true` | New customers must confirm their email address before signing in. Needs working email in production. |
 | `LOG_DIR` | `storage/logs` | Directory for `app.log`, `php-error.log` and `mail.log` (relative paths start at the project root) |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `3306` | Database server |
 | `DB_NAME` | `bookwise` | Database name |
 | `DB_USER` / `DB_PASS` | `root` / *(empty)* | Database credentials |
 | `DB_SSL_CA` / `DB_SSL_CA_PEM` | — | TLS for hosted databases: path to the CA certificate, or the certificate text itself. The server certificate is then verified. |
-| `STRIPE_SECRET_KEY` | — | Stripe secret key (`sk_test_…` for development) |
+| `PAYMENT_SIMULATOR` | follows `APP_DEMO` | `true`: payments go to the built-in [payment simulator](#payments-the-simulator-and-stripe) instead of Stripe; `false`: always Stripe |
+| `PAYMENT_SIMULATOR_STORE` | `storage/payment-simulator.json` | The simulator's state file (relative paths start at the project root); must be writable |
+| `STRIPE_SECRET_KEY` | — | Stripe secret key (`sk_test_…` for development). Not used while the simulator is on. |
 | `STRIPE_WEBHOOK_SECRET` | — | Signing secret of the webhook endpoint (`whsec_…`) |
 | `STRIPE_CURRENCY` | `sar` | ISO code of a **two-decimal** currency that book prices are charged in (zero- and three-decimal currencies such as JPY or KWD are refused) |
-| `STRIPE_API_BASE` | — | **Tests only:** points the Stripe SDK at the local mock in `tests/Support` |
+| `STRIPE_API_BASE` | — | **Tests only:** points the Stripe SDK at the local mock in `tests/Support` (ignored while the simulator is on) |
 | `MAIL_DRIVER` | `log` | `log` (write to `mail.log`), `smtp` (send through `SMTP_*`), `database` (demo inbox; only with `APP_DEMO=true`) or `null` (discard). See [Email](#email). |
 | `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | `no-reply@example.com` / `BookWise` | Sender of outgoing email; your provider must allow this address |
 | `SMTP_HOST` / `SMTP_PORT` | — / `587` | SMTP server for `MAIL_DRIVER=smtp`. Use port `2525` where a host blocks 587 and the provider offers it. |
@@ -285,9 +298,27 @@ Every page, form message, email and error page is available in English and Arabi
 - To add a language, copy `lang/en/` to the new code, translate the files, and add the code to `SUPPORTED_LOCALES` in `src/i18n.php` (and to `RTL_LOCALES` if it is written right to left).
   The unit tests check that every language defines the same keys and placeholders.
 
-## Payments with Stripe (test mode)
+## Payments: the simulator and Stripe
 
-1. In the [Stripe Dashboard](https://dashboard.stripe.com/test/apikeys) (test mode), copy the **Secret key** (`sk_test_…`) into `STRIPE_SECRET_KEY`.
+BookWise takes payments with Stripe Checkout. For demos and local development it has a **built-in payment simulator** instead, so no Stripe account is needed and no money can ever move.
+
+### The payment simulator
+
+- Turn it on with `PAYMENT_SIMULATOR=true`. It is on by default in demo mode (`APP_DEMO=true`); `PAYMENT_SIMULATOR=false` turns it off there.
+- It runs **inside the application** (`src/payment_simulator.php`): the Stripe library still makes every request, but they are answered in the same PHP process.
+  `php -S localhost:8000 -t public` is therefore enough to buy a book, and the same holds on any PHP host.
+- Checkout sends the customer to `pay.php`, the simulator's payment page in the store's own layout (English and Arabic). It shows the books and the total, never asks for card details, and offers four endings:
+  **Pay** (paid), **Decline** (a declined card: nothing is charged and the page stays open for another try), **Slow payment** (the payment is confirmed about 15 seconds later, like a delayed payment method) and **Cancel**.
+- Everything else works exactly as with Stripe: the store verifies the payment when the customer returns, expires abandoned sessions at the next checkout and refunds paid orders from the admin order page.
+  Open sessions expire after one hour. The simulator sends no webhooks.
+- Its state is a JSON file, `PAYMENT_SIMULATOR_STORE` (default `storage/payment-simulator.json`), which the web server must be able to write. It holds no card data and no email addresses.
+- While it is on, the `STRIPE_*` keys are not used. A live Stripe key is never used in demo mode.
+
+More details are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#the-payment-simulator).
+
+### Stripe (test mode)
+
+1. In the [Stripe Dashboard](https://dashboard.stripe.com/test/apikeys) (test mode), copy the **Secret key** (`sk_test_…`) into `STRIPE_SECRET_KEY`, and keep the simulator off.
 2. Make sure `APP_URL` is the address you browse to; Stripe redirects back to `APP_URL/success_pay.php`.
 3. Pay with a [Stripe test card](https://docs.stripe.com/testing#cards) such as `4242 4242 4242 4242`, with any future expiry date and any CVC.
 
@@ -417,19 +448,14 @@ The suites are:
 
 - **unit:** pure functions.
 - **integration:** domain code against a real database.
-- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, checkout, refunds, webhooks, password reset and change, account deletion, uploads, admin pages, the demo inbox and the Arabic interface.
-- **deploy:** checks of the Docker and Render files (line endings, configuration, the entrypoint's database check). The image itself is built and smoke-tested by the CI's Docker job.
+- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, checkout (with Stripe and with every ending of the payment simulator), refunds, webhooks, password reset and change, account deletion, uploads, admin pages, the demo inbox and the Arabic interface.
+- **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes). The image itself is built and smoke-tested by the CI's Docker job.
 
-Stripe is never contacted by the tests. `tests/Support/stripe_mock_router.php` is a small local stand-in
-for the Checkout Session and Refund APIs, started automatically by the suites. You can also run it by hand to click
-through checkout without Stripe keys:
-
-```bash
-php -S 127.0.0.1:12111 tests/Support/stripe_mock_router.php
-# then, in .env: STRIPE_SECRET_KEY=sk_test_anything  STRIPE_API_BASE=http://127.0.0.1:12111
-```
-
-The mock shows a "Pay (simulate success)" / "Cancel" page in place of Stripe's hosted checkout. Use it for local testing only.
+Stripe is never contacted by the tests. Most of them talk to `tests/Support/stripe_mock_router.php`, a thin HTTP wrapper
+around the payment simulator that the suites start automatically, so they can record, fail and rewrite Stripe requests.
+The payment simulator's own tests run it in-process, as a demo does. You can also run the wrapper by hand
+(`php -S 127.0.0.1:12111 tests/Support/stripe_mock_router.php`, then `PAYMENT_SIMULATOR=false`, `STRIPE_SECRET_KEY=sk_test_anything`
+and `STRIPE_API_BASE=http://127.0.0.1:12111` in `.env`), but `PAYMENT_SIMULATOR=true` is simpler for clicking through checkout.
 
 No email leaves the machine either: the SMTP tests talk to a small local server, `tests/Support/fake_smtp_server.php`, which only records the conversation.
 
@@ -478,6 +504,8 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job
   Run `bin/install.php` / `bin/migrate.php` with an account that may also `CREATE, ALTER, INDEX, REFERENCES, DROP`.
   (The Docker image runs `bin/install.php` at every start, so there the configured user needs those rights too.)
 - Make `storage/logs/`, `public/uploads/avatars/` and `public/uploads/covers/` writable by the web server, and keep them out of version control.
+  With the payment simulator on, `storage/` (or the folder of `PAYMENT_SIMULATOR_STORE`) must be writable too.
+- For a public demo on PHP hosting, `php bin/setup.php` does most of this list: it checks the folders, writes `.env` with safe demo values (readable by its owner only) and installs the database.
 - Set `REQUIRE_EMAIL_VERIFICATION=true` only together with a working mail driver, or new customers cannot sign in.
 - On **nginx** or any server that ignores `.htaccess`, deny PHP execution under `/uploads/` in the server config, for example:
   `location ^~ /uploads/ { location ~ \.php$ { deny all; } }`
@@ -492,7 +520,8 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job
 - **Limited account self-service:** customers cannot change their email address or export their data. Administrators cannot manage customers from the UI.
 - **Refunds are full refunds only.** Partial refunds and disputes are handled in the Stripe Dashboard and are not reflected in orders.
   A payment that does not match its order is marked `failed` and logged as `MANUAL REVIEW REQUIRED` in `app.log`.
-- **Login throttling** counts attempts per IP address. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server (the Docker image does this for Render).
+- **Login throttling** counts attempts per IP address. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server.
+  The Docker image takes the address from `X-Forwarded-For` on connections from private addresses; on alwaysdata this was not confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#step-9-check-the-visitors-addresses) for a check).
 - **No sign-up rate limit:** only verification and sign-up notice emails are limited, to one per account every few minutes.
 - **The demo inbox reveals registered addresses:** after signing up, a confirmation email appears in the browser's inbox only when the address was new.
   The sign-up page itself still gives the same answer either way. This only applies to a demo with `MAIL_DRIVER=database`, which holds no real accounts.
@@ -500,7 +529,7 @@ It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job
   Once that session ends (logging out, closing the browser or 2 hours of inactivity), a forgotten password cannot be reset from the demo.
   An account that was never confirmed cannot be confirmed any more, and its address stays taken until the demo data is reset.
   This follows from the rule that nobody may read another person's emails.
-- **The free live demo** sleeps after 15 minutes without visitors (the first request then takes about a minute) and loses uploaded images on every restart. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#limits-of-the-free-demo).
+- **The free live demo** on alwaysdata has 1 GB of disk space, shows its emails in the demo inbox instead of sending them, and its first request after 30 idle minutes is slower. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#limits-of-the-free-demo).
 - **The original database could not be fully recovered:** the original repository shipped raw MariaDB data files instead of an SQL export.
   The table definitions and the 55-book catalog were recovered from them and form `schema.sql`/`seed.sql`.
   The original foreign-key definitions could not be recovered (they lived in the missing InnoDB system tablespace).

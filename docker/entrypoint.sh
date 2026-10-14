@@ -3,10 +3,13 @@
 # BookWise container entrypoint (see docs/DEPLOYMENT.md).
 #
 # For the default command (apache2-foreground) it:
-#   1. derives APP_URL from RENDER_EXTERNAL_URL when APP_URL is not set;
-#   2. in demo mode (APP_DEMO=true), configures the built-in payment simulator
-#      that Apache serves under /stripe-sim, generating STRIPE_SECRET_KEY
-#      (sk_test_...) and STRIPE_WEBHOOK_SECRET when they are missing;
+#   1. checks PORT and APP_URL (default http://localhost:$PORT), and refuses
+#      the local-only administrator password of docker-compose.yml on any
+#      address other than this computer;
+#   2. reports how payments are taken. In demo mode (APP_DEMO=true) the
+#      application's built-in payment simulator answers them in-process
+#      (PAYMENT_SIMULATOR), so nothing needs to be set up here. A live Stripe
+#      key is refused in demo mode;
 #   3. waits for the database (up to DB_WAIT_SECONDS, default 60);
 #   4. runs "php bin/install.php": the schema for an empty database (plus the
 #      sample catalog in demo mode or with BOOKWISE_SEED=true), pending
@@ -21,10 +24,8 @@
 set -euo pipefail
 
 BOOKWISE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SIMULATOR_PATH=/stripe-sim
-SIMULATOR_STORE=/tmp/bookwise-stripe-sim.json
-# 1 when Apache must serve the payment simulator (set by configure_payments).
-SIMULATOR=0
+# The administrator password that docker-compose.yml publishes for local use.
+LOCAL_ADMIN_PASSWORD=local-admin-password
 
 log() {
     printf '[bookwise] %s\n' "$*" >&2
@@ -44,11 +45,6 @@ is_true() {
     esac
 }
 
-# Prints BYTES random bytes as lowercase hex.
-random_hex() {
-    od -An -N "$1" -tx1 /dev/urandom | tr -d ' \n'
-}
-
 configure_port() {
     PORT="${PORT:-8080}"
     if [[ ! "$PORT" =~ ^[0-9]{1,5}$ ]] || ((10#$PORT < 1 || 10#$PORT > 65535)); then
@@ -59,14 +55,7 @@ configure_port() {
 }
 
 configure_app_url() {
-    local url="${APP_URL:-}"
-    if [[ -z "$url" ]]; then
-        if [[ -n "${RENDER_EXTERNAL_URL:-}" ]]; then
-            url="$RENDER_EXTERNAL_URL"
-        else
-            url="http://localhost:${PORT}"
-        fi
-    fi
+    local url="${APP_URL:-http://localhost:${PORT}}"
     while [[ "$url" == */ ]]; do
         url="${url%/}"
     done
@@ -77,57 +66,41 @@ configure_app_url() {
     export APP_URL
 }
 
-# Demo mode: payments go to the simulator inside this container. Otherwise the
-# Stripe settings are left exactly as configured and /stripe-sim is not served.
-configure_payments() {
-    SIMULATOR=0
-    if ! is_true "${APP_DEMO:-false}"; then
-        if [[ -n "${STRIPE_API_BASE:-}" ]]; then
-            log "WARNING: STRIPE_API_BASE is set, so payments go to ${STRIPE_API_BASE} instead of Stripe."
-        fi
-        log "Payments: Stripe Checkout (APP_DEMO is off; the payment simulator is not served)."
+# docker-compose.yml publishes its administrator password so that the local
+# store works out of the box. Once the store can be reached from elsewhere
+# (for example through Tailscale Funnel) anyone could sign in with it, so it
+# is refused unless APP_URL is an address of this computer.
+check_admin_password() {
+    if [[ "${BOOKWISE_ADMIN_PASSWORD:-}" != "$LOCAL_ADMIN_PASSWORD" ]]; then
         return 0
     fi
-
-    local key="${STRIPE_SECRET_KEY:-}"
-    case "$key" in
-        sk_live_* | rk_live_*)
-            die "APP_DEMO=true must never be combined with a live Stripe key. Remove STRIPE_SECRET_KEY (a test key is generated) or set APP_DEMO=false."
-            ;;
-        sk_test_* | rk_test_*) ;;
-        '')
-            key="sk_test_$(random_hex 24)"
-            ;;
-        *)
-            # e.g. a random value from the hosting platform (Render's
-            # generateValue is base64): keep it, in the shape of a test key.
-            key="${key//[^A-Za-z0-9]/}"
-            key="sk_test_${key:-$(random_hex 24)}"
-            ;;
-    esac
-
-    local webhook_secret="${STRIPE_WEBHOOK_SECRET:-}"
-    if [[ -z "$webhook_secret" ]]; then
-        webhook_secret="whsec_$(random_hex 24)"
+    if [[ "$APP_URL" =~ ^https?://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/|$) ]]; then
+        return 0
     fi
+    die "BOOKWISE_ADMIN_PASSWORD is the local-only password from docker-compose.yml, but APP_URL (${APP_URL}) is not a local address. Choose a password of your own, or leave BOOKWISE_ADMIN_PASSWORD empty."
+}
 
-    if [[ -n "${STRIPE_SIM_TEST_API:-}" && "${STRIPE_SIM_TEST_API}" != 0 ]]; then
-        log "WARNING: ignoring STRIPE_SIM_TEST_API: the simulator's test controls stay disabled in demo mode."
+# Payments are the application's business: with the payment simulator on
+# (PAYMENT_SIMULATOR, which defaults to APP_DEMO) it answers them in-process
+# and the Stripe settings are not used. This only reports which one is used,
+# and refuses a live Stripe key in demo mode, which must never take real money.
+report_payments() {
+    local simulator="${PAYMENT_SIMULATOR:-${APP_DEMO:-false}}"
+    if is_true "${APP_DEMO:-false}"; then
+        case "${STRIPE_SECRET_KEY:-}" in
+            sk_live_* | rk_live_*)
+                die "APP_DEMO=true must never be combined with a live Stripe key. Remove STRIPE_SECRET_KEY, or set APP_DEMO=false for a real store."
+                ;;
+        esac
     fi
-    unset STRIPE_SIM_TEST_API
-
-    STRIPE_SECRET_KEY="$key"
-    STRIPE_WEBHOOK_SECRET="$webhook_secret"
-    # The application calls the simulator over loopback; browsers use the public URL.
-    STRIPE_API_BASE="http://127.0.0.1:${PORT}${SIMULATOR_PATH}"
-    STRIPE_SIM_KEY="$key"
-    STRIPE_SIM_BASE_PATH="$SIMULATOR_PATH"
-    STRIPE_SIM_PUBLIC_URL="${APP_URL}${SIMULATOR_PATH}"
-    STRIPE_MOCK_STORE="$SIMULATOR_STORE"
-    export STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_API_BASE \
-        STRIPE_SIM_KEY STRIPE_SIM_BASE_PATH STRIPE_SIM_PUBLIC_URL STRIPE_MOCK_STORE
-    SIMULATOR=1
-    log "Payments: demo mode, simulated at ${STRIPE_SIM_PUBLIC_URL} (no real payments are taken)."
+    if is_true "$simulator"; then
+        log "Payments: built-in payment simulator at ${APP_URL}/pay.php (no real payments are taken)."
+        return 0
+    fi
+    if [[ -n "${STRIPE_API_BASE:-}" ]]; then
+        log "WARNING: STRIPE_API_BASE is set, so payments go to ${STRIPE_API_BASE} instead of Stripe."
+    fi
+    log "Payments: Stripe Checkout (the payment simulator is off)."
 }
 
 log_directory() {
@@ -142,7 +115,8 @@ prepare_directories() {
     local logs dir
     logs="$(log_directory)"
     mkdir -p "$logs" "${BOOKWISE_ROOT}/public/uploads/avatars" "${BOOKWISE_ROOT}/public/uploads/covers" 2>/dev/null || true
-    for dir in "$logs" "${BOOKWISE_ROOT}/public/uploads/avatars" "${BOOKWISE_ROOT}/public/uploads/covers"; do
+    # storage/ also holds the payment simulator's state (PAYMENT_SIMULATOR_STORE).
+    for dir in "$logs" "${BOOKWISE_ROOT}/storage" "${BOOKWISE_ROOT}/public/uploads/avatars" "${BOOKWISE_ROOT}/public/uploads/covers"; do
         if [[ ! -w "$dir" ]]; then
             log "WARNING: ${dir} is not writable by $(id -un 2>/dev/null || echo 'this user')."
         fi
@@ -191,7 +165,8 @@ main() {
     cd "$BOOKWISE_ROOT"
     configure_port
     configure_app_url
-    configure_payments
+    check_admin_password
+    report_payments
 
     local tls=off
     if [[ -n "${DB_SSL_CA:-}${DB_SSL_CA_PEM:-}" ]]; then
@@ -211,9 +186,6 @@ main() {
     php "${BOOKWISE_ROOT}/bin/install.php" "${install_args[@]}" || die "Database installation failed (see the messages above)."
 
     mirror_logs
-    if ((SIMULATOR)); then
-        set -- "$@" -D BOOKWISE_STRIPE_SIM
-    fi
     log "Starting Apache on port ${PORT}."
     exec "$@"
 }

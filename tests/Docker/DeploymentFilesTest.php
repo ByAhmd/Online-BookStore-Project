@@ -9,8 +9,8 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Guards for the container and hosting files (Dockerfile, .dockerignore,
- * docker/, docker-compose.yml, render.yaml). The image itself is built and
- * exercised by the "Docker image" job in .github/workflows/ci.yml.
+ * docker/, docker-compose.yml) and the deployment guide. The image itself is
+ * built and exercised by the "Docker image" job in .github/workflows/ci.yml.
  */
 final class DeploymentFilesTest extends TestCase
 {
@@ -19,7 +19,7 @@ final class DeploymentFilesTest extends TestCase
      */
     public static function linuxTextFiles(): array
     {
-        $files = ['Dockerfile', '.dockerignore', 'docker-compose.yml', 'render.yaml'];
+        $files = ['Dockerfile', '.dockerignore', 'docker-compose.yml'];
         foreach (['docker/*.sh', 'docker/*.php', 'docker/apache/*', 'docker/php/*', 'tests/Docker/*.sh'] as $pattern) {
             foreach (glob(dirname(__DIR__, 2) . '/' . $pattern) ?: [] as $path) {
                 $files[] = substr($path, strlen(dirname(__DIR__, 2)) + 1);
@@ -68,7 +68,9 @@ final class DeploymentFilesTest extends TestCase
                 $allowed[] = rtrim(substr($line, 1), '/');
             }
         }
-        self::assertNotContains('tests', $allowed, 'The test suite must stay out of the build context');
+        foreach ($allowed as $entry) {
+            self::assertFalse(str_starts_with($entry, 'tests'), "The test suite must stay out of the build context ($entry)");
+        }
 
         preg_match_all('/^COPY\s+(?!--from)(.+)$/m', self::read('Dockerfile'), $matches);
         self::assertNotEmpty($matches[1]);
@@ -98,55 +100,44 @@ final class DeploymentFilesTest extends TestCase
         self::assertMatchesRegularExpression('/^ENTRYPOINT \["\/var\/www\/bookwise\/docker\/entrypoint\.sh"\]$/m', $dockerfile);
         self::assertStringContainsString('php.ini-production', $dockerfile);
         self::assertStringNotContainsString('--classmap-authoritative', preg_replace('/^#.*$/m', '', $dockerfile) ?? '');
+        // storage/ holds the logs and the payment simulator's state.
+        self::assertMatchesRegularExpression('/chown -R www-data:www-data storage public\/uploads/', $dockerfile);
 
         $ini = self::read('docker/php/bookwise.ini');
         self::assertMatchesRegularExpression('/^display_errors = Off$/m', $ini);
         self::assertMatchesRegularExpression('/^expose_php = Off$/m', $ini);
     }
 
-    public function testThePaymentSimulatorIsOnlyServedInDemoMode(): void
+    public function testThePaymentSimulatorNeedsNoServerWiring(): void
     {
-        $site = self::read('docker/apache/site.conf');
-        $depth = 0;
-        foreach (preg_split('/\R/', $site) ?: [] as $number => $line) {
-            if (preg_match('/^\s*<IfDefine BOOKWISE_STRIPE_SIM>/', $line)) {
-                $depth++;
-            } elseif (preg_match('/^\s*<\/IfDefine>/', $line)) {
-                $depth--;
-            } elseif (!preg_match('/^\s*#/', $line) && preg_match('/stripe-sim|tests\/Support/', $line)) {
-                self::assertSame(1, $depth, 'Line ' . ($number + 1) . ' must be inside <IfDefine BOOKWISE_STRIPE_SIM>: ' . trim($line));
-            }
+        // The simulator runs inside the application (src/payment_simulator.php) and its
+        // page is public/pay.php: no Apache alias, no test files, no loopback API calls.
+        $site = self::withoutComments(self::read('docker/apache/site.conf'));
+        foreach (['stripe-sim', 'tests/Support', 'AliasMatch', 'IfDefine', 'HTTP_AUTHORIZATION'] as $wiring) {
+            self::assertStringNotContainsString($wiring, $site, "site.conf must not contain $wiring");
         }
-        self::assertSame(0, $depth);
-        self::assertStringContainsString('SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1', $site);
         self::assertStringContainsString('DocumentRoot /var/www/bookwise/public', $site);
         self::assertStringContainsString('<VirtualHost *:${PORT}>', $site);
         self::assertStringContainsString('Listen ${PORT}', self::read('docker/apache/ports.conf'));
 
-        $entrypoint = self::read('docker/entrypoint.sh');
-        self::assertStringContainsString('set -- "$@" -D BOOKWISE_STRIPE_SIM', $entrypoint);
-        self::assertStringContainsString('unset STRIPE_SIM_TEST_API', $entrypoint);
+        $dockerfile = self::withoutComments(self::read('Dockerfile'));
+        self::assertStringNotContainsString('tests/', $dockerfile, 'Nothing from tests/ goes into the image');
+        self::assertStringNotContainsString('BOOKWISE_STRIPE_SIM', $dockerfile);
+
+        $entrypoint = self::withoutComments(self::read('docker/entrypoint.sh'));
+        foreach (['BOOKWISE_STRIPE_SIM', 'stripe-sim', 'STRIPE_SIM_', 'STRIPE_MOCK_STORE', 'RENDER_EXTERNAL_URL'] as $removed) {
+            self::assertStringNotContainsString($removed, $entrypoint);
+        }
+        self::assertDoesNotMatchRegularExpression('/^\s*(export\s+)?STRIPE_[A-Z_]+=/m', $entrypoint, 'The entrypoint sets no Stripe settings');
+        self::assertStringContainsString('${PAYMENT_SIMULATOR:-${APP_DEMO:-false}}', $entrypoint, 'Same default as src/env.php');
     }
 
-    public function testRenderBlueprintRunsTheDemoAndKeepsSecretsOutOfTheRepository(): void
+    public function testRenderIsGone(): void
     {
-        $blueprint = self::read('render.yaml');
-        foreach (['type: web', 'runtime: docker', 'plan: free', 'healthCheckPath: /health.php', 'branch: main', 'autoDeployTrigger: commit'] as $setting) {
-            self::assertStringContainsString($setting, $blueprint);
+        self::assertFileDoesNotExist(dirname(__DIR__, 2) . '/render.yaml');
+        foreach (['README.md', 'docs/DEPLOYMENT.md', 'SECURITY.md', '.env.example', 'docker-compose.yml', 'Dockerfile', 'docker/entrypoint.sh', 'docker/apache/server.conf', 'docker/apache/ports.conf'] as $file) {
+            self::assertDoesNotMatchRegularExpression('/\bRender\b|onrender|Aiven|RENDER_/', self::read($file), "$file still refers to Render or Aiven");
         }
-
-        $variables = self::renderVariables($blueprint);
-        self::assertSame('production', $variables['APP_ENV'] ?? null);
-        self::assertSame('false', $variables['APP_DEBUG'] ?? null);
-        self::assertSame('true', $variables['APP_DEMO'] ?? null);
-        self::assertSame('false', $variables['REQUIRE_EMAIL_VERIFICATION'] ?? null);
-        self::assertSame('null', $variables['MAIL_DRIVER'] ?? null);
-        self::assertSame('sar', $variables['STRIPE_CURRENCY'] ?? null);
-        foreach (['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'DB_SSL_CA_PEM', 'BOOKWISE_ADMIN_EMAIL', 'BOOKWISE_ADMIN_PASSWORD'] as $secret) {
-            self::assertSame('sync: false', $variables[$secret] ?? null, "$secret must be entered in the Render Dashboard");
-        }
-        self::assertArrayNotHasKey('STRIPE_SECRET_KEY', $variables, 'The demo generates its own sk_test_ key');
-        self::assertArrayNotHasKey('STRIPE_SIM_TEST_API', $variables);
     }
 
     public function testComposeRunsADemoStoreWithLocalOnlyCredentials(): void
@@ -161,9 +152,11 @@ final class DeploymentFilesTest extends TestCase
         $environment = [];
         preg_match_all('/^      ([A-Z][A-Z0-9_]*): (.*)$/m', $app, $matches, PREG_SET_ORDER);
         foreach ($matches as $match) {
-            $environment[$match[1]] = trim($match[2], '"');
+            // ${NAME:-default} is the default unless NAME is set where compose runs.
+            $environment[$match[1]] = (string) preg_replace('/^\$\{[A-Z_]+:-(.*)\}$/', '$1', trim($match[2], '"'));
         }
         self::assertSame('true', $environment['APP_DEMO'] ?? null);
+        self::assertArrayNotHasKey('PAYMENT_SIMULATOR', $environment, 'Demo mode turns the simulator on by itself');
         self::assertSame('false', $environment['REQUIRE_EMAIL_VERIFICATION'] ?? null);
         self::assertSame('log', $environment['MAIL_DRIVER'] ?? null);
         self::assertSame('http://localhost:8080', $environment['APP_URL'] ?? null);
@@ -171,32 +164,30 @@ final class DeploymentFilesTest extends TestCase
         self::assertStringContainsString('local', $environment['DB_PASS'] ?? '', 'Use an obviously local-only database password');
         self::assertStringContainsString('local', $environment['BOOKWISE_ADMIN_PASSWORD'] ?? '', 'Use an obviously local-only admin password');
         self::assertArrayNotHasKey('STRIPE_SECRET_KEY', $environment);
+
+        // The entrypoint refuses exactly this password on a public address.
+        self::assertStringContainsString('LOCAL_ADMIN_PASSWORD=' . ($environment['BOOKWISE_ADMIN_PASSWORD'] ?? '') . "\n", self::read('docker/entrypoint.sh'));
+        self::assertStringContainsString('APP_URL: ${BOOKWISE_APP_URL:-', $app, 'The public address can be set without editing the file');
     }
 
     public function testTheDeploymentGuideMentionsEveryConfiguredVariable(): void
     {
         $guide = self::read('docs/DEPLOYMENT.md');
-        $names = array_keys(self::renderVariables(self::read('render.yaml')));
-        preg_match_all('/\$\{?([A-Z][A-Z0-9_]+)/', self::read('docker/entrypoint.sh'), $matches);
-        $names = array_merge($names, array_diff($matches[1], ['SECONDS', 'PORT', 'BASH_SOURCE', 'SIMULATOR', 'SIMULATOR_PATH', 'SIMULATOR_STORE', 'BOOKWISE_ROOT']), ['PORT']);
+        preg_match_all('/\$\{?([A-Z][A-Z0-9_]+)/', self::withoutComments(self::read('docker/entrypoint.sh')), $entrypoint);
+        preg_match_all('/\$\{([A-Z][A-Z0-9_]+):-/', self::read('docker-compose.yml'), $compose);
+        $names = array_merge(
+            array_diff($entrypoint[1], ['SECONDS', 'BASH_SOURCE', 'BOOKWISE_ROOT', 'LOCAL_ADMIN_PASSWORD']),
+            $compose[1],
+            ['PORT', 'PAYMENT_SIMULATOR', 'PAYMENT_SIMULATOR_STORE']
+        );
         foreach (array_unique($names) as $name) {
             self::assertStringContainsString($name, $guide, "docs/DEPLOYMENT.md must explain $name");
         }
     }
 
-    /**
-     * envVars of render.yaml: key => value, or "sync: false" / "generateValue: true".
-     *
-     * @return array<string, string>
-     */
-    private static function renderVariables(string $blueprint): array
+    private static function withoutComments(string $contents): string
     {
-        preg_match_all('/^\s*- key: ([A-Z0-9_]+)\n\s+(value: "?([^"\n]*)"?|sync: false|generateValue: true)$/m', $blueprint, $matches, PREG_SET_ORDER);
-        $variables = [];
-        foreach ($matches as $match) {
-            $variables[$match[1]] = str_starts_with($match[2], 'value:') ? $match[3] : $match[2];
-        }
-        return $variables;
+        return (string) preg_replace('/^\s*#.*$/m', '', $contents);
     }
 
     private static function read(string $file): string

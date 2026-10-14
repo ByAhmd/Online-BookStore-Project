@@ -11,8 +11,6 @@
 !src
 !composer.json
 !composer.lock
-# The payment simulator used by the demo; the rest of tests/ stays out.
-!tests/Support/stripe_mock_router.php
 
 # User content and local leftovers inside allowed folders.
 public/uploads/avatars/*

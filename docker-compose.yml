@@ -5,6 +5,13 @@
 #
 # Everything here is for LOCAL USE ONLY: the passwords below are public
 # placeholders. Do not reuse them anywhere else.
+#
+# To present the store from this computer through a tunnel such as Tailscale
+# Funnel, start it with its public address and an administrator password of
+# your own (the container refuses the placeholder on a public address):
+#
+#     BOOKWISE_APP_URL=https://<machine>.<tailnet>.ts.net \
+#     BOOKWISE_ADMIN_PASSWORD='<a password of your own>' docker compose up -d
 
 name: bookwise
 
@@ -40,11 +47,12 @@ services:
       - "8080:8080"
     environment:
       PORT: "8080"
-      APP_URL: http://localhost:8080
+      # The address browsers use; payments return there.
+      APP_URL: ${BOOKWISE_APP_URL:-http://localhost:8080}
       APP_ENV: local
       APP_DEBUG: "false"
-      # Demo mode: banner, built-in payment simulator at /stripe-sim
-      # (no Stripe account needed, no real payments).
+      # Demo mode: banner, and the built-in payment simulator takes every
+      # payment (pay.php; no Stripe account needed, no real payments).
       APP_DEMO: "true"
       REQUIRE_EMAIL_VERIFICATION: "false"
       # Emails (including password-reset links) are written to
@@ -58,9 +66,9 @@ services:
       DB_USER: bookwise
       DB_PASS: bookwise-local-only
       # Local-only administrator, created on start-up. Do NOT reuse these
-      # values on a public site; change them here before the first start.
+      # values on a public site: set BOOKWISE_ADMIN_PASSWORD (see above).
       BOOKWISE_ADMIN_EMAIL: admin@bookwise.test
-      BOOKWISE_ADMIN_PASSWORD: local-admin-password
+      BOOKWISE_ADMIN_PASSWORD: ${BOOKWISE_ADMIN_PASSWORD:-local-admin-password}
     volumes:
       # Uploaded images (public/uploads) survive container rebuilds.
       - uploads:/var/www/bookwise/public/uploads

@@ -6,8 +6,9 @@
 #   docker build -t bookwise .         image only
 #
 # The container runs as www-data and listens on $PORT (default 8080).
-# docker/entrypoint.sh waits for the database, installs or migrates the schema
-# and, with APP_DEMO=true, serves the built-in payment simulator at /stripe-sim.
+# docker/entrypoint.sh waits for the database and installs or migrates the
+# schema. With APP_DEMO=true the application takes payments with its built-in
+# payment simulator (public/pay.php); nothing else needs to be set up for it.
 
 ############################################################################
 # Stage 1: Composer dependencies, without development packages
@@ -66,7 +67,7 @@ RUN set -eux; \
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY docker/php/bookwise.ini /usr/local/etc/php/conf.d/zz-bookwise.ini
 
-# Apache: listen on $PORT, serve public/ only, demo-only simulator alias.
+# Apache: listen on $PORT and serve public/ only.
 ENV PORT=8080
 COPY docker/apache/ports.conf /etc/apache2/ports.conf
 COPY docker/apache/site.conf /etc/apache2/sites-available/bookwise.conf
@@ -79,8 +80,7 @@ RUN set -eux; \
     a2ensite bookwise; \
     a2enconf zz-bookwise
 
-# The application: only what it needs at run time. From tests/ only the
-# payment simulator is copied (the demo serves it at /stripe-sim).
+# The application: only what it needs at run time (no tests).
 WORKDIR /var/www/bookwise
 COPY --from=vendor /app/vendor/ vendor/
 COPY bin/ bin/
@@ -89,21 +89,20 @@ COPY docker/ docker/
 COPY lang/ lang/
 COPY public/ public/
 COPY src/ src/
-COPY tests/Support/stripe_mock_router.php tests/Support/stripe_mock_router.php
 
-# Code stays owned by root (read-only for the web server); only the log and
-# upload directories are writable by www-data.
+# Code stays owned by root (read-only for the web server); only storage/
+# (logs and the payment simulator's state) and the upload directories are
+# writable by www-data.
 RUN set -eux; \
     sed -i 's/\r$//' docker/*.sh; \
     chmod 0755 docker/entrypoint.sh; \
     mkdir -p storage/logs public/uploads/avatars public/uploads/covers; \
     chown -R www-data:www-data storage public/uploads
 
-# Fail the build on an Apache configuration error, with and without the simulator.
+# Fail the build on an Apache configuration error.
 RUN set -e; \
     . /etc/apache2/envvars; \
-    apache2 -t; \
-    apache2 -t -D BOOKWISE_STRIPE_SIM
+    apache2 -t
 
 USER www-data
 EXPOSE 8080

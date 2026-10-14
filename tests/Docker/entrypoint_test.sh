@@ -3,7 +3,8 @@
 # Tests for docker/entrypoint.sh that need neither Docker nor Apache.
 #
 #   tests/Docker/entrypoint_test.sh
-#       The configuration logic: PORT, APP_URL, demo payment settings.
+#       The configuration logic: PORT, APP_URL, the local-only administrator
+#       password, and the payment checks.
 #
 #   ENTRYPOINT_TEST_DB_NAME=bookwise_deploy_test DB_HOST=127.0.0.1 DB_PORT=3306 \
 #   DB_USER=root DB_PASS=secret tests/Docker/entrypoint_test.sh
@@ -56,16 +57,16 @@ assert_not_contains() { # needle haystack description
 # configure VAR=VALUE...
 # Runs the entrypoint's configuration steps in a clean environment that holds
 # only the given variables. Sets CONFIG_STATUS, CONFIG_LOG (stderr) and CONFIG
-# (the exported variables the steps produce, KEY=VALUE per line, plus SIMULATOR).
+# (the exported variables the steps produce, KEY=VALUE per line).
 configure() {
     CONFIG_STATUS=0
     env -i PATH="$PATH" "$@" bash -c '
         source "$1"
         configure_port
         configure_app_url
-        configure_payments
-        env | grep -E "^(PORT|APP_URL|STRIPE_[A-Z_]+)=" | sort
-        echo "SIMULATOR=$SIMULATOR"
+        check_admin_password
+        report_payments
+        env | grep -E "^(PORT|APP_URL|STRIPE_[A-Z_]+|PAYMENT_[A-Z_]+)=" | sort
     ' configure "$ENTRYPOINT" >"$WORK/config.out" 2>"$WORK/config.err" || CONFIG_STATUS=$?
     CONFIG="$(cat "$WORK/config.out")"
     CONFIG_LOG="$(cat "$WORK/config.err")"
@@ -88,15 +89,14 @@ configure
 assert_eq 0 "$CONFIG_STATUS" "defaults: succeeds"
 assert_eq 8080 "$(value PORT)" "defaults: PORT is 8080"
 assert_eq http://localhost:8080 "$(value APP_URL)" "defaults: APP_URL is http://localhost:PORT"
-assert_eq 0 "$(value SIMULATOR)" "defaults: the simulator is not served"
 assert_eq '<unset>' "$(value STRIPE_API_BASE)" "defaults: payments are not redirected"
 
-configure PORT=10000 RENDER_EXTERNAL_URL=https://bookwise-demo.onrender.com/
-assert_eq https://bookwise-demo.onrender.com "$(value APP_URL)" "APP_URL comes from RENDER_EXTERNAL_URL without the trailing slash"
+configure PORT=10000
 assert_eq 10000 "$(value PORT)" "PORT from the platform is kept"
+assert_eq http://localhost:10000 "$(value APP_URL)" "APP_URL follows PORT"
 
-configure APP_URL=https://shop.example.com// RENDER_EXTERNAL_URL=https://other.onrender.com
-assert_eq https://shop.example.com "$(value APP_URL)" "an explicit APP_URL wins over RENDER_EXTERNAL_URL"
+configure APP_URL=https://shop.example.com//
+assert_eq https://shop.example.com "$(value APP_URL)" "an explicit APP_URL is used without the trailing slash"
 
 configure APP_URL=ftp://shop.example.com
 assert_eq 1 "$CONFIG_STATUS" "a non-http APP_URL is refused"
@@ -108,49 +108,60 @@ assert_eq 1 "$CONFIG_STATUS" "an out-of-range PORT is refused"
 configure PORT=08080
 assert_eq 8080 "$(value PORT)" "PORT with a leading zero is read as decimal"
 
-echo "# Demo payments"
+echo "# Local-only administrator password"
 
-configure APP_DEMO=true PORT=10000 RENDER_EXTERNAL_URL=https://bookwise-demo.onrender.com
-key="$(value STRIPE_SECRET_KEY)"
-assert_eq 0 "$CONFIG_STATUS" "demo: succeeds without Stripe settings"
-assert_match '^sk_test_[0-9a-f]{48}$' "$key" "demo: a random sk_test_ key is generated"
-assert_eq "$key" "$(value STRIPE_SIM_KEY)" "demo: the simulator requires exactly the store's key"
-assert_match '^whsec_[0-9a-f]{48}$' "$(value STRIPE_WEBHOOK_SECRET)" "demo: a webhook secret is generated"
-assert_eq http://127.0.0.1:10000/stripe-sim "$(value STRIPE_API_BASE)" "demo: the app calls the simulator over loopback on PORT"
-assert_eq https://bookwise-demo.onrender.com/stripe-sim "$(value STRIPE_SIM_PUBLIC_URL)" "demo: browsers are sent to APP_URL/stripe-sim"
-assert_eq /stripe-sim "$(value STRIPE_SIM_BASE_PATH)" "demo: the simulator is mounted under /stripe-sim"
-assert_eq /tmp/bookwise-stripe-sim.json "$(value STRIPE_MOCK_STORE)" "demo: the simulator state lives in /tmp"
-assert_eq 1 "$(value SIMULATOR)" "demo: Apache serves the simulator"
-assert_not_contains "$key" "$CONFIG_LOG" "demo: the generated key is not printed"
+for url in http://localhost:8080 http://127.0.0.1:8090/ 'http://[::1]:8080'; do
+    configure APP_URL="$url" BOOKWISE_ADMIN_PASSWORD=local-admin-password
+    assert_eq 0 "$CONFIG_STATUS" "the local-only password is accepted on ${url}"
+done
+for url in https://my-pc.example-tailnet.ts.net http://192.168.1.20:8080 http://localhost.example.com; do
+    configure APP_URL="$url" BOOKWISE_ADMIN_PASSWORD=local-admin-password
+    assert_eq 1 "$CONFIG_STATUS" "the local-only password is refused on ${url}"
+done
+assert_contains "not a local address" "$CONFIG_LOG" "the refusal is explained"
+assert_not_contains "local-admin-password" "$CONFIG_LOG" "the password is not printed"
+configure APP_URL=https://my-pc.example-tailnet.ts.net BOOKWISE_ADMIN_PASSWORD=a-password-of-my-own
+assert_eq 0 "$CONFIG_STATUS" "a password of one's own is accepted on a public address"
+configure APP_URL=https://my-pc.example-tailnet.ts.net
+assert_eq 0 "$CONFIG_STATUS" "no administrator password at all is fine"
 
-configure APP_DEMO=true
-assert_eq '<unset>' "$(value STRIPE_SIM_TEST_API)" "demo: the simulator's test controls stay off"
-other_key="$(value STRIPE_SECRET_KEY)"
-if [[ "$other_key" != "$key" ]]; then ok "demo: every start generates a different key"; else not_ok "demo: every start generates a different key"; fi
+echo "# Payments"
 
-configure APP_DEMO=true STRIPE_SIM_TEST_API=1
-assert_eq '<unset>' "$(value STRIPE_SIM_TEST_API)" "demo: STRIPE_SIM_TEST_API=1 is removed"
-assert_contains "ignoring STRIPE_SIM_TEST_API" "$CONFIG_LOG" "demo: removing STRIPE_SIM_TEST_API is reported"
+configure APP_DEMO=true PORT=10000 APP_URL=https://demo.example.com
+assert_eq 0 "$CONFIG_STATUS" "demo: succeeds without any Stripe settings"
+assert_contains "Payments: built-in payment simulator at https://demo.example.com/pay.php" "$CONFIG_LOG" "demo: the in-process simulator takes the payments"
+for name in STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_API_BASE PAYMENT_SIMULATOR; do
+    assert_eq '<unset>' "$(value "$name")" "demo: ${name} is neither generated nor changed"
+done
 
-configure APP_DEMO=yes 'STRIPE_SECRET_KEY=q1W+e/R5t9yU=' STRIPE_WEBHOOK_SECRET=render-generated
-assert_eq sk_test_q1WeR5t9yU "$(value STRIPE_SECRET_KEY)" "demo: a platform-generated base64 value becomes a stable sk_test_ key"
-assert_eq render-generated "$(value STRIPE_WEBHOOK_SECRET)" "demo: a provided webhook secret is kept"
-assert_eq 1 "$(value SIMULATOR)" "demo: APP_DEMO=yes counts as true"
+configure APP_DEMO=yes
+assert_contains "built-in payment simulator" "$CONFIG_LOG" "demo: APP_DEMO=yes counts as true"
 
-configure APP_DEMO=TRUE STRIPE_SECRET_KEY=sk_test_provided123
+configure APP_DEMO=true PAYMENT_SIMULATOR=false STRIPE_SECRET_KEY=sk_test_provided123
+assert_eq 0 "$CONFIG_STATUS" "demo with Stripe test mode: succeeds"
+assert_contains "Payments: Stripe Checkout" "$CONFIG_LOG" "demo with PAYMENT_SIMULATOR=false: payments go to Stripe"
 assert_eq sk_test_provided123 "$(value STRIPE_SECRET_KEY)" "demo: a provided test key is kept"
 
-configure APP_DEMO=true STRIPE_SECRET_KEY=sk_live_doNotUse987
-assert_eq 1 "$CONFIG_STATUS" "demo: a live key is refused"
-assert_not_contains sk_live_doNotUse987 "$CONFIG_LOG" "demo: the refused live key is not printed"
+configure APP_DEMO=false PAYMENT_SIMULATOR=on
+assert_contains "built-in payment simulator" "$CONFIG_LOG" "PAYMENT_SIMULATOR=on also works without demo mode"
+
+for live in sk_live_doNotUse987 rk_live_doNotUse987; do
+    configure APP_DEMO=true STRIPE_SECRET_KEY="$live"
+    assert_eq 1 "$CONFIG_STATUS" "demo: a live key (${live%%_*}_live_) is refused"
+    assert_not_contains "$live" "$CONFIG_LOG" "demo: the refused live key is not printed"
+done
+configure APP_DEMO=true PAYMENT_SIMULATOR=false STRIPE_SECRET_KEY=sk_live_doNotUse987
+assert_eq 1 "$CONFIG_STATUS" "demo: a live key is refused also with the simulator off"
 
 configure APP_DEMO=false STRIPE_SECRET_KEY=sk_live_realStore456 STRIPE_WEBHOOK_SECRET=whsec_real
 assert_eq 0 "$CONFIG_STATUS" "real mode: succeeds"
 assert_eq sk_live_realStore456 "$(value STRIPE_SECRET_KEY)" "real mode: the Stripe key is left alone"
 assert_eq '<unset>' "$(value STRIPE_API_BASE)" "real mode: payments go to Stripe"
-assert_eq '<unset>' "$(value STRIPE_SIM_KEY)" "real mode: no simulator settings"
-assert_eq 0 "$(value SIMULATOR)" "real mode: the simulator is not served"
+assert_contains "Payments: Stripe Checkout" "$CONFIG_LOG" "real mode: Stripe Checkout is reported"
 assert_not_contains sk_live_realStore456 "$CONFIG_LOG" "real mode: the key is not printed"
+
+configure STRIPE_API_BASE=http://127.0.0.1:12111
+assert_contains "WARNING: STRIPE_API_BASE is set" "$CONFIG_LOG" "real mode: a redirected Stripe API is reported"
 
 echo "# Other commands"
 
@@ -226,12 +237,10 @@ STUB
     assert_contains "Created administrator admin@example.test." "$RUN_LOG" "first start: creates the administrator"
     assert_eq 55 "$(db_query 'SELECT COUNT(*) FROM books')" "first start: 55 books in the database"
     assert_eq 1 "$(db_query "SELECT COUNT(*) FROM admins WHERE Eaddress = 'admin@example.test'")" "first start: the administrator exists"
-    assert_contains "ARGS=-D BOOKWISE_STRIPE_SIM" "$APACHE" "first start: Apache is started with the simulator in demo mode"
-    assert_contains "STRIPE_API_BASE=http://127.0.0.1:18080/stripe-sim" "$APACHE" "first start: Apache gets the demo payment settings"
+    assert_eq "ARGS=" "$(grep -E '^ARGS=' <<<"$APACHE")" "first start: Apache is started without extra arguments"
+    assert_not_contains "STRIPE_" "$APACHE" "first start: no Stripe settings are generated for the simulator"
+    assert_contains "Payments: built-in payment simulator" "$RUN_LOG" "first start: payments are simulated in demo mode"
     assert_not_contains "$admin_password" "$RUN_LOG" "first start: the admin password is not printed"
-    generated_key="$(grep -E '^STRIPE_SECRET_KEY=' <<<"$APACHE" | cut -d= -f2- || true)"
-    assert_match '^sk_test_' "$generated_key" "first start: Apache gets the generated key"
-    assert_not_contains "$generated_key" "$RUN_LOG" "first start: the generated key is not printed"
 
     run_entrypoint APP_DEMO=true BOOKWISE_ADMIN_EMAIL=admin@example.test "BOOKWISE_ADMIN_PASSWORD=${admin_password}"
     assert_eq 0 "$RUN_STATUS" "restart: succeeds"
@@ -248,7 +257,7 @@ STUB
 
     run_entrypoint APP_DEMO=false STRIPE_SECRET_KEY=sk_test_realmode
     assert_eq 0 "$RUN_STATUS" "real mode: succeeds"
-    assert_eq "ARGS=" "$(grep -E '^ARGS=' <<<"$APACHE")" "real mode: Apache is started without the simulator"
+    assert_contains "Payments: Stripe Checkout" "$RUN_LOG" "real mode: payments go to Stripe"
     assert_not_contains "Demo: restocked" "$RUN_LOG" "real mode: stock is left alone"
 
     # A real store starts with an empty catalog, unless BOOKWISE_SEED asks for the sample.
@@ -260,6 +269,11 @@ STUB
     drop_tables
     run_entrypoint APP_DEMO=false STRIPE_SECRET_KEY=sk_test_realmode BOOKWISE_SEED=true
     assert_eq 55 "$(db_query 'SELECT COUNT(*) FROM books')" "real mode with BOOKWISE_SEED=true: the sample catalog"
+
+    run_entrypoint APP_DEMO=true APP_URL=https://demo.example.com BOOKWISE_ADMIN_EMAIL=admin@example.test BOOKWISE_ADMIN_PASSWORD=local-admin-password
+    assert_eq 1 "$RUN_STATUS" "the local-only administrator password on a public address stops the container"
+    assert_not_contains "Database is reachable." "$RUN_LOG" "the local-only password is refused before anything else happens"
+    assert_eq "" "$APACHE" "the local-only password on a public address: Apache is not started"
 
     run_entrypoint APP_DEMO=true BOOKWISE_ADMIN_EMAIL=not-an-email "BOOKWISE_ADMIN_PASSWORD=${admin_password}"
     assert_eq 1 "$RUN_STATUS" "an invalid administrator email stops the container"
