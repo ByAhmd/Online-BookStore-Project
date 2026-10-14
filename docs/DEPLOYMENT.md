@@ -87,6 +87,7 @@ The store never needs to take real payments for a demo. With the payment simulat
 - The document root is **`public/`**. The rest of the project (`src/`, `vendor/`, `storage/`, `bin/`, `database/`, `docker/`) is denied in the Apache configuration. The test suite is not in the image.
 - The rules of `public/.htaccess` and `public/uploads/.htaccess` apply (`AllowOverride All`). The virtual host repeats their essential rules: dotfiles are denied, PHP never runs under `/uploads/`, and directory listings are off.
 - Apache sends `Server: Apache` without a version (`ServerTokens Prod`). Static files also get `X-Content-Type-Options: nosniff`.
+- Static files get browser-cache headers: a year for the versioned URLs pages link (`?v=…`), an hour for uploads and a day for the rest. PHP pages are never cached. See [Images and browser caching](../README.md#images-and-browser-caching).
 - The `HEALTHCHECK` runs `docker/healthcheck.php` every 30 seconds, after a 120-second start period. That script calls `/health.php` inside the container.
 
 ### Start-up
@@ -515,7 +516,7 @@ These variables are specific to the container and `docker-compose.yml`. The appl
 
 ## Checks and CI
 
-The **Docker image** job in `.github/workflows/ci.yml` runs next to the PHP 8.1–8.4 test matrix:
+The **Docker image** job in `.github/workflows/ci.yml` runs next to the test matrix (PHP 8.1–8.5 on MySQL 8.4, and PHP 8.4 on MariaDB 11.4):
 
 1. It checks the shell scripts with `bash -n` and ShellCheck, and runs `tests/Docker/entrypoint_test.sh` (the entrypoint's configuration logic).
 2. It builds the image with `docker compose build`. The build fails if a PHP extension or a gd image format is missing, or if the Apache configuration is invalid.

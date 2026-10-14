@@ -86,12 +86,12 @@ page architecture is unchanged; there is no framework.
 
 | Layer | Technology |
 | --- | --- |
-| Language | PHP ≥ 8.1 (tested on 8.2 and 8.4; CI covers 8.1–8.4) |
+| Language | PHP ≥ 8.1 (tested on 8.2 and 8.4; CI covers 8.1–8.5) |
 | Database | MySQL ≥ 8.0.16 or MariaDB ≥ 10.4 (InnoDB, utf8mb4), accessed with PDO prepared statements |
 | Payments | [Stripe Checkout](https://stripe.com/docs/payments/checkout) via `stripe/stripe-php` 16.x, or the built-in payment simulator |
 | Email | Any SMTP server through PHPMailer (`phpmailer/phpmailer` 7.x), a demo inbox stored in the database, or a local log file for development |
 | Frontend | Server-rendered HTML, plain CSS and vanilla JavaScript (no build step), Google Fonts (Quicksand) |
-| Tooling | Composer, PHPUnit 10, PHPStan 2 (level 6), GitHub Actions |
+| Tooling | Composer, PHPUnit 10, PHPStan 2 (level 8), GitHub Actions |
 
 Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 `gd` is recommended (it re-encodes uploaded avatars, which strips metadata and embedded payloads).
@@ -428,7 +428,7 @@ Existing MD5 passwords keep working and are re-hashed with bcrypt the next time 
 
 ```bash
 composer lint          # php -l on every PHP file
-composer analyse       # PHPStan level 6 (src/, bin/, public/)
+composer analyse       # PHPStan level 8 (src/, bin/, public/)
 composer test:unit     # unit tests, no database needed
 composer test          # all suites
 ```
@@ -447,10 +447,11 @@ Set `BOOKWISE_REQUIRE_DB=1` to make that a failure instead; CI does this.
 
 The suites are:
 
-- **unit:** pure functions.
+- **unit:** pure functions, plus the image tools (WebP copies, `bin/optimize-images.php`) on scratch files.
 - **integration:** domain code against a real database.
-- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, checkout (with Stripe and with every ending of the payment simulator), refunds, webhooks, password reset and change, account deletion, uploads, admin pages, the demo inbox and the Arabic interface.
-- **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes). The image itself is built and smoke-tested by the CI's Docker job.
+- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, checkout (with Stripe and with every ending of the payment simulator), refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, the demo inbox and the Arabic interface.
+  Every page check also loads the page's CSS, scripts and images, including each WebP copy in a `srcset`.
+- **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes) and of the Apache cache rules. The image itself is built and smoke-tested by the CI's Docker job.
 
 Stripe is never contacted by the tests. Most of them talk to `tests/Support/stripe_mock_router.php`, a thin HTTP wrapper
 around the payment simulator that the suites start automatically, so they can record, fail and rewrite Stripe requests.
@@ -461,7 +462,30 @@ and `STRIPE_API_BASE=http://127.0.0.1:12111` in `.env`), but `PAYMENT_SIMULATOR=
 No email leaves the machine either: the SMTP tests talk to a small local server, `tests/Support/fake_smtp_server.php`, which only records the conversation.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs `composer validate`, `composer audit`, lint, PHPStan and all test suites.
-It runs on PHP 8.1, 8.2, 8.3 and 8.4 against a MySQL 8.0 service. A separate job builds the Docker image and smoke-tests the running container.
+It runs on PHP 8.1, 8.2, 8.3, 8.4 and 8.5 against a MySQL 8.4 service, and once more on PHP 8.4 against MariaDB 11.4 (MySQL 8.0 reached its end of life in April 2026).
+A separate job builds the Docker image and smoke-tests the running container.
+The workflow's actions are pinned to commit SHAs. Dependabot (`.github/dependabot.yml`) proposes updates every week for the Composer packages, the actions, the Dockerfile's base images and `docker-compose.yml`: minor and patch updates of each come as one grouped pull request, major updates one by one.
+
+### Images and browser caching
+
+The catalog covers in `public/imges` are 380×605 PNG files of about 330 KB each. `bin/optimize-images.php` writes WebP copies next to every PNG, JPEG and GIF there:
+a full-size `.webp` (about a tenth of the size) and, for images wider than 190 pixels, a `-w190.webp` thumbnail for book cards, the cart and admin tables.
+Pages show covers with `cover_picture()`: a `<picture>` whose `<source>` offers the WebP copies (`srcset` with their widths, and the `sizes` the page displays them at), with the original as the `<img>` for browsers without WebP.
+`fetch_books.php` returns the same sources (`cover_image`, `cover_webp_srcset`), so the Explore page's script builds the same markup.
+Uploaded covers get their copies when they are uploaded (the larger copy at most 780 pixels wide, which also bounds the memory GD needs), and the copies are deleted with the cover when it is replaced or its book is deleted.
+
+```bash
+php bin/optimize-images.php                  # after adding or changing images in public/imges; commit the .webp files
+php bin/optimize-images.php uploads/covers   # once, for covers uploaded before WebP copies existed
+php bin/optimize-images.php --force          # rewrite every copy, e.g. after changing WEBP_QUALITY
+```
+
+The script needs `gd` with WebP support and skips copies that are at least as new as their image. A unit test fails when an image in `public/imges` has no current copy.
+
+Pages link their CSS, scripts and images with `asset()`, which adds `?v=<file modification time>`, so a changed file gets a new URL.
+`public/.htaccess` (and `docker/apache/site.conf` in the Docker image) therefore let browsers keep versioned URLs for a year (`Cache-Control: public, max-age=31536000, immutable`).
+Uploads are kept for an hour, and other static files, such as images referenced from CSS, for a day. HTML pages are never cached: PHP sends `Cache-Control: no-store`.
+These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every static file for an hour. Servers that ignore `.htaccess` (nginx, `php -S`) need the same headers in their own configuration.
 
 ## Security notes
 
