@@ -197,10 +197,11 @@ final class CommerceTranslationsTest extends TestCase
         );
     }
 
-    public function testSafeTranslationsFallBackToEnglishText(): void
+    public function testCheckoutMessagesResolveToEnglishText(): void
     {
-        self::assertSame('Your cart is empty.', t_safe('shop.checkout.empty_cart'));
-        self::assertSame('The minimum order total is SAR 2.00. Please add another book.', t_safe('shop.checkout.minimum_total', ['amount' => 'SAR 2.00']));
-        self::assertSame('shop.no.such.key', t_safe('shop.no.such.key'));
+        // Translations are loaded from the source tree, independent of BASE_PATH.
+        self::assertSame('Your cart is empty.', t('shop.checkout.empty_cart'));
+        self::assertSame('The minimum order total is SAR 2.00. Please add another book.', t('shop.checkout.minimum_total', ['amount' => 'SAR 2.00']));
+        self::assertSame('shop.no.such.key', t('shop.no.such.key'));
     }
 }

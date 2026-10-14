@@ -41,7 +41,8 @@ final class DeploymentFilesTest extends TestCase
 
     public function testGitattributesKeepScriptsAndContainerFilesOnLf(): void
     {
-        $attributes = self::read('.gitattributes');
+        // A Windows checkout may give .gitattributes itself CRLF endings; git reads either.
+        $attributes = str_replace("\r\n", "\n", self::read('.gitattributes'));
         foreach (['*.sh', 'docker/**', 'Dockerfile'] as $pattern) {
             self::assertMatchesRegularExpression('/^' . preg_quote($pattern, '/') . '\s+text eol=lf$/m', $attributes, "$pattern must be checked out with LF");
         }

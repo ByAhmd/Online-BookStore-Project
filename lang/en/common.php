@@ -7,6 +7,7 @@ return [
     'skip_link' => 'Skip to main content',
     'main_navigation' => 'Main',
     'admin_tag' => 'Admin',
+    'session_expired' => 'Your session expired. Please log in again.',
     'demo_banner' => 'Demo store: payments are simulated, no emails are sent, and data may be reset at any time.',
 
     'nav' => [

@@ -158,7 +158,7 @@ final class ArabicPagesTest extends HttpTestCase
         self::arabic($admin);
 
         $dashboard = $this->assertArabicPage($admin->get('admin_dashboard.php'), 'لوحة تحكم المشرف');
-        self::assertSame(['الكتب', '55', 'التصنيفات', '8', 'الطلبات المدفوعة', '1', 'الإيرادات', 'SAR 19.99'], $dashboard->texts('//section[' . HtmlDocument::hasClass('admin-stats') . ']//p'));
+        self::assertSame(['الكتب', '55', 'التصنيفات', '8', 'الطلبات المدفوعة', '1', 'الإيرادات', '19.99 ر.س'], $dashboard->texts('//section[' . HtmlDocument::hasClass('admin-stats') . ']//p'));
         self::assertSame('مسجّل الدخول باسم مشرف المتجر', $dashboard->text('//p[' . HtmlDocument::hasClass('admin-welcome') . ']'));
         self::assertSame('مدفوع', $dashboard->text('//table[' . HtmlDocument::hasClass('orders-table') . ']//span[' . HtmlDocument::hasClass('status-badge') . ']'));
         self::assertSame('عرض 1–20 من أصل 55 كتابًا.', $dashboard->text('//p[' . HtmlDocument::hasClass('table-summary') . ']'));

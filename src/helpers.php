@@ -183,7 +183,7 @@ function start_secure_session(): void
         $_SESSION = [];
         session_regenerate_id(true);
         if ($wasSignedIn) {
-            flash('info', 'Your session expired. Please log in again.');
+            flash('info', t('common.session_expired'));
         }
     }
     $_SESSION['_last_activity'] = $now;
@@ -421,8 +421,14 @@ function minor_to_decimal(int $minor): string
  */
 function format_money(string|int|float $amount, ?string $currency = null): string
 {
-    $currency = $currency !== null && $currency !== '' ? $currency : (string) config('stripe.currency');
-    return strtoupper($currency) . ' ' . number_format((float) $amount, 2);
+    $currency = strtoupper($currency !== null && $currency !== '' ? $currency : (string) config('stripe.currency'));
+    $number = number_format((float) $amount, 2);
+    if (current_locale() === 'ar') {
+        // Arabic puts the currency after the amount; the riyal has a customary abbreviation.
+        $symbols = ['SAR' => 'ر.س'];
+        return $number . ' ' . ($symbols[$currency] ?? $currency);
+    }
+    return $currency . ' ' . $number;
 }
 
 function format_minor(int $minor): string

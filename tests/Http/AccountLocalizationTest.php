@@ -165,6 +165,6 @@ final class AccountLocalizationTest extends HttpTestCase
         self::assertSame(['الطلب رقم ' . $orderId], $document->texts('//h3[contains(@class, "order-number")]'));
         self::assertSame(['مدفوع'], $document->texts('//span[contains(@class, "status-badge")]'));
         self::assertStringStartsWith('تاريخ الطلب ', $document->text('//p[@class="order-date"]'));
-        self::assertSame('الإجمالي ' . format_money((string) $purchase['order']['total_amount']), $document->text('//p[@class="order-total"]'));
+        self::assertSame('الإجمالي ' . number_format((float) $purchase['order']['total_amount'], 2) . ' ر.س', $document->text('//p[@class="order-total"]'));
     }
 }

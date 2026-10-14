@@ -397,7 +397,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                             <li class="order-card">
                                 <div class="order-head">
                                     <h3 class="order-number"><?= e(t('account.orders.number', ['id' => (int) $order['id']])) ?></h3>
-                                    <span class="status-badge status-<?= e($status) ?>"><?= e(t('account.orders.status.' . $status)) ?></span>
+                                    <span class="status-badge status-<?= e($status) ?>"><?= e(t('common.status.' . $status)) ?></span>
                                 </div>
                                 <p class="order-date"><?= t_html('account.orders.placed', ['date' => $placedHtml]) ?></p>
 <?php if ($order['items'] !== []): ?>

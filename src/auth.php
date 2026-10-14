@@ -328,7 +328,7 @@ function post_login_redirect(string $type): string
     if ($type === 'admin') {
         // Administrators only return to admin pages; customer pages would bounce them.
         $target = safe_redirect_path($intended, 'admin_dashboard.php');
-        return preg_match('/^(admin_dashboard|edit_book)\.php/', $target) ? $target : 'admin_dashboard.php';
+        return preg_match('/^(admin_dashboard|edit_book|admin_orders|admin_order)\.php/', $target) ? $target : 'admin_dashboard.php';
     }
     return safe_redirect_path($intended, 'Home_Page.php');
 }

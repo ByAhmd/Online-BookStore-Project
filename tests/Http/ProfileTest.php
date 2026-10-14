@@ -242,7 +242,7 @@ final class ProfileTest extends HttpTestCase
         $document = $this->assertHtmlPage($page);
         self::assertFalse($document->first('//section[@id="section-orders"]')?->hasAttribute('hidden'));
         self::assertSame(['Order #' . $orderId], $document->texts('//h3[contains(@class, "order-number")]'));
-        self::assertSame(['paid'], $document->texts('//span[contains(@class, "status-badge")]'));
+        self::assertSame(['Paid'], $document->texts('//span[contains(@class, "status-badge")]'));
         self::assertNotNull($document->first('//span[contains(@class, "status-badge") and contains(@class, "status-paid")]'));
         self::assertSame(['Esabella × 2', 'The Danger Bridge × 1'], $document->texts('//ul[@class="order-items"]/li'));
         $this->assertPageText('Total ' . format_money((string) $purchase['order']['total_amount']), $page);

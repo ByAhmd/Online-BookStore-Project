@@ -157,7 +157,8 @@ function translation_namespace(string $locale, string $namespace): array
     static $cache = [];
     $key = $locale . '/' . $namespace;
     if (!array_key_exists($key, $cache)) {
-        $file = base_path('lang/' . $locale . '/' . $namespace . '.php');
+        // Translations ship with the code, so they are located next to src/ (not via BASE_PATH).
+        $file = dirname(__DIR__) . '/lang/' . $locale . '/' . $namespace . '.php';
         $data = preg_match('/^[a-z_]+$/D', $namespace) && is_file($file) ? require $file : [];
         $cache[$key] = is_array($data) ? $data : [];
     }

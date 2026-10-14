@@ -342,42 +342,6 @@ function render_pager(array $pagination, callable $url, string $label): string
 }
 
 /**
- * t() for messages raised deep in domain code (exception messages), which
- * must never surface as bare translation keys. When BASE_PATH has no lang/
- * directory (a CLI tool or test process may run with a temporary BASE_PATH),
- * the English text that ships next to this file is used instead.
- *
- * @param array<string, string|int|float> $replace
- */
-function t_safe(string $key, array $replace = []): string
-{
-    $text = t($key, $replace);
-    $dot = strpos($key, '.');
-    if ($text !== $key || $dot === false || !preg_match('/^[a-z_]+$/D', substr($key, 0, $dot))) {
-        return $text;
-    }
-
-    static $english = [];
-    $namespace = substr($key, 0, $dot);
-    if (!array_key_exists($namespace, $english)) {
-        $file = dirname(__DIR__) . '/lang/en/' . $namespace . '.php';
-        $data = is_file($file) ? require $file : [];
-        $english[$namespace] = is_array($data) ? $data : [];
-    }
-    $value = $english[$namespace];
-    foreach (explode('.', substr($key, $dot + 1)) as $segment) {
-        if (!is_array($value) || !array_key_exists($segment, $value)) {
-            return $key;
-        }
-        $value = $value[$segment];
-    }
-    if (is_array($value)) {
-        $value = $value['other'] ?? reset($value);
-    }
-    return is_string($value) ? translation_replace($value, $replace) : $key;
-}
-
-/**
  * Escaped translation with some placeholders filled with ready-made HTML,
  * e.g. t_markup('shop.book.by', ['author' => '<span dir="auto">' . e($author) . '</span>']).
  * $replace values are plain text and escaped like the rest of the string.

@@ -60,18 +60,18 @@ function stripe_client(): \Stripe\StripeClient
 
     $key = config('stripe.secret_key');
     if (!is_string($key) || $key === '') {
-        throw new CheckoutException(t_safe('shop.checkout.not_configured'));
+        throw new CheckoutException(t('shop.checkout.not_configured'));
     }
     // Guard against accidentally charging real cards from a development setup:
     // outside production only test-mode secret or restricted keys are accepted.
     if (config('app.env') !== 'production' && !preg_match('/^(sk|rk)_test_/', $key)) {
         app_log('error', 'Refusing to use a non-test Stripe key outside APP_ENV=production');
-        throw new CheckoutException(t_safe('shop.checkout.not_available'));
+        throw new CheckoutException(t('shop.checkout.not_available'));
     }
     $currency = (string) config('stripe.currency');
     if (!preg_match('/^[a-z]{3}$/D', $currency) || in_array($currency, NON_TWO_DECIMAL_CURRENCIES, true)) {
         app_log('error', 'STRIPE_CURRENCY must be a three-letter code of a two-decimal currency', ['currency' => $currency]);
-        throw new CheckoutException(t_safe('shop.checkout.misconfigured'));
+        throw new CheckoutException(t('shop.checkout.misconfigured'));
     }
 
     $options = ['api_key' => $key];
@@ -97,16 +97,16 @@ function stripe_client(): \Stripe\StripeClient
 function create_pending_order(int $userId, array $lines): array
 {
     if ($lines === []) {
-        throw new CheckoutException(t_safe('shop.checkout.empty_cart'));
+        throw new CheckoutException(t('shop.checkout.empty_cart'));
     }
     foreach ($lines as $line) {
         if ($line['quantity'] < 1 || $line['quantity'] > CART_MAX_QUANTITY) {
-            throw new CheckoutException(t_safe('shop.checkout.quantity_range', ['max' => CART_MAX_QUANTITY]));
+            throw new CheckoutException(t('shop.checkout.quantity_range', ['max' => CART_MAX_QUANTITY]));
         }
     }
     $amountMinor = cart_total_minor($lines);
     if ($amountMinor < CHECKOUT_MIN_TOTAL_MINOR) {
-        throw new CheckoutException(t_safe('shop.checkout.minimum_total', ['amount' => format_minor(CHECKOUT_MIN_TOTAL_MINOR)]));
+        throw new CheckoutException(t('shop.checkout.minimum_total', ['amount' => format_minor(CHECKOUT_MIN_TOTAL_MINOR)]));
     }
     $currency = (string) config('stripe.currency');
 
@@ -303,7 +303,7 @@ function start_checkout(array $user): string
     // so concurrent requests can never leave two payable sessions behind.
     $lock = 'bookwise-checkout-' . (int) $user['id'];
     if ((int) db_value('SELECT GET_LOCK(?, 15)', [$lock]) !== 1) {
-        throw new CheckoutException(t_safe('shop.checkout.in_progress'));
+        throw new CheckoutException(t('shop.checkout.in_progress'));
     }
     try {
         return start_checkout_locked($user);
@@ -322,14 +322,14 @@ function start_checkout_locked(array $user): string
     $settled = settle_pending_orders($userId);
     if ($settled['unresolved']) {
         // An earlier session might still be payable; never open a second one alongside it.
-        throw new CheckoutException(t_safe('shop.checkout.unresolved'));
+        throw new CheckoutException(t('shop.checkout.unresolved'));
     }
     $lines = cart_lines($userId);
     if ($lines === []) {
         if ($settled['paid_session'] !== null) {
             return 'success_pay.php?session_id=' . rawurlencode($settled['paid_session']);
         }
-        throw new CheckoutException(t_safe('shop.checkout.empty_cart'));
+        throw new CheckoutException(t('shop.checkout.empty_cart'));
     }
     // Stock is checked here, not reserved: a book that sells out while the
     // customer pays is still delivered (see fulfill_order()).
@@ -382,7 +382,7 @@ function start_checkout_locked(array $user): string
             'http_status' => $e->getHttpStatus(),
             'message' => $e->getMessage(),
         ]);
-        throw new CheckoutException(t_safe('shop.checkout.start_failed'));
+        throw new CheckoutException(t('shop.checkout.start_failed'));
     }
 
     $amountTotal = isset($session->amount_total) ? (int) $session->amount_total : null;
@@ -393,7 +393,7 @@ function start_checkout_locked(array $user): string
             'amount_total' => $amountTotal,
             'expected' => (int) $order['amount_minor'],
         ]);
-        throw new CheckoutException(t_safe('shop.checkout.start_failed'));
+        throw new CheckoutException(t('shop.checkout.start_failed'));
     }
 
     $stored = db_run(
@@ -407,7 +407,7 @@ function start_checkout_locked(array $user): string
         } catch (\Stripe\Exception\ApiErrorException $e) {
             app_log('error', 'Could not expire an orphaned Checkout Session', ['order_id' => $orderId, 'message' => $e->getMessage()]);
         }
-        throw new CheckoutException(t_safe('shop.checkout.start_failed'));
+        throw new CheckoutException(t('shop.checkout.start_failed'));
     }
     return $session->url;
 }
@@ -665,16 +665,16 @@ function refund_order(int $orderId): string
 {
     $order = find_order($orderId);
     if ($order === null) {
-        throw new RefundException(t_safe('admin.refund.not_found'));
+        throw new RefundException(t('admin.refund.not_found'));
     }
     if ($order['status'] === 'refunded') {
         return 'already_refunded';
     }
     if ($order['status'] !== 'paid') {
-        throw new RefundException(t_safe('admin.refund.not_paid'));
+        throw new RefundException(t('admin.refund.not_paid'));
     }
     if (!order_is_refundable($order)) {
-        throw new RefundException(t_safe('admin.refund.no_payment'));
+        throw new RefundException(t('admin.refund.no_payment'));
     }
     $paymentIntent = (string) $order['stripe_payment_intent'];
 
@@ -690,7 +690,7 @@ function refund_order(int $orderId): string
             $status = (string) ($refund->status ?? '');
             if (!in_array($status, ['succeeded', 'pending'], true)) {
                 app_log('error', 'Stripe did not accept the refund', ['order_id' => $orderId, 'refund' => $refund->id ?? null, 'status' => $status]);
-                throw new RefundException(t_safe('admin.refund.failed'));
+                throw new RefundException(t('admin.refund.failed'));
             }
             $refundId = (string) $refund->id;
         } catch (\Stripe\Exception\InvalidRequestException $e) {
@@ -708,7 +708,7 @@ function refund_order(int $orderId): string
             'stripe_code' => $e instanceof \Stripe\Exception\ApiErrorException ? $e->getStripeCode() : null,
             'message' => $e->getMessage(),
         ]);
-        throw new RefundException(t_safe('admin.refund.failed'));
+        throw new RefundException(t('admin.refund.failed'));
     }
 
     return apply_order_refund($orderId, $refundId, $paymentIntent) ? 'refunded' : 'already_refunded';
