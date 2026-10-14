@@ -1,5 +1,8 @@
 # BookWise — Online Book Store
 
+[![CI](https://github.com/ByAhmd/Online-BookStore-Project/actions/workflows/ci.yml/badge.svg)](https://github.com/ByAhmd/Online-BookStore-Project/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 BookWise is an online bookstore written in plain PHP with MySQL/MariaDB.
 Customers browse a catalog, search and filter by genre, keep favorites, buy books
 through **Stripe Checkout** and review the books they bought. Administrators manage the
@@ -115,7 +118,7 @@ As a safety net for Apache setups that serve the whole folder, the root `.htacce
 ### 2. Install dependencies
 
 ```bash
-git clone <your-fork-url> bookwise
+git clone https://github.com/ByAhmd/Online-BookStore-Project.git bookwise
 cd bookwise
 composer install
 ```
@@ -135,6 +138,8 @@ mysql -u root -p bookwise < database/schema.sql
 mysql -u root -p bookwise < database/seed.sql
 ```
 
+Windows PowerShell has no `<` redirection, so run each import through `cmd`:
+`cmd /c "mysql -u root -p bookwise < database\schema.sql"`, then do the same for `seed.sql`.
 On XAMPP you can instead use phpMyAdmin → *Import* with the same two files, in that order.
 
 ### 4. Configure the environment
@@ -399,8 +404,6 @@ These were captured from the application running locally with the sample catalog
 
 ## License
 
-No license has been chosen yet, so all rights are reserved by the authors (see `"license": "proprietary"` in `composer.json`).
-To let others reuse the code, add a `LICENSE` file. Common choices are [MIT](https://choosealicense.com/licenses/mit/) (permissive)
-or [GPL-3.0](https://choosealicense.com/licenses/gpl-3.0/) (copyleft), and https://choosealicense.com helps compare them.
-Update `composer.json` to match. The book cover images in `public/imges/` may have their own copyright owners;
-confirm you have the right to redistribute them before choosing a license.
+The source code is released under the [MIT License](LICENSE).
+
+The book cover artwork in `public/imges/` comes from third parties. It is included only to illustrate this student demo project and is **not** covered by the MIT License; its copyright remains with the respective owners.

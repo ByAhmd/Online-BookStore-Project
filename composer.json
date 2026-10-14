@@ -2,7 +2,7 @@
     "name": "bookwise/online-bookstore",
     "description": "BookWise: an online bookstore built with plain PHP, MySQL/MariaDB and Stripe Checkout.",
     "type": "project",
-    "license": "proprietary",
+    "license": "MIT",
     "require": {
         "php": ">=8.1",
         "ext-curl": "*",
