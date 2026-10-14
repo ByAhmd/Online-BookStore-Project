@@ -28,6 +28,9 @@ declare(strict_types=1);
  * The state is one JSON file (PAYMENT_SIMULATOR_STORE, default
  * storage/payment-simulator.json) that is read and written under an exclusive
  * lock, so concurrent requests never lose each other's changes.
+ *
+ * A real store (APP_ENV=production without APP_DEMO) never uses the simulator,
+ * whatever PAYMENT_SIMULATOR says: anyone could "pay" for its orders with it.
  */
 
 /** Placeholder API key: the simulator needs none, but stripe-php requires one. */
@@ -48,7 +51,20 @@ const PAYMENT_SIMULATOR_IDEMPOTENCY_SECONDS = 24 * 60 * 60;
  */
 function payment_simulator_enabled(): bool
 {
-    return (bool) config('stripe.simulator');
+    return (bool) config('stripe.simulator') && !payment_simulator_refused();
+}
+
+/**
+ * True when PAYMENT_SIMULATOR asks for the simulator on a real store
+ * (APP_ENV=production without APP_DEMO), for example on a demo that left demo
+ * mode but kept the PAYMENT_SIMULATOR=true written by bin/setup.php. The
+ * simulator is then off (pay.php answers 404) and stripe_client() refuses
+ * every payment until PAYMENT_SIMULATOR is set to false, so the mistake is
+ * noticed instead of giving the books away or charging cards unexpectedly.
+ */
+function payment_simulator_refused(): bool
+{
+    return (bool) config('stripe.simulator') && config('app.env') === 'production' && !config('app.demo');
 }
 
 /**

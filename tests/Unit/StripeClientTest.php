@@ -135,4 +135,30 @@ final class StripeClientTest extends TestCase
         $local = IsolatedPhp::run('stripe_client', [], ['APP_DEMO' => 'false', 'PAYMENT_SIMULATOR' => 'true', 'STRIPE_SECRET_KEY' => null]);
         self::assertSame(['ok' => true, 'api_base' => PAYMENT_SIMULATOR_API_BASE], $local['result'], 'Also without demo mode, e.g. for local development');
     }
+
+    public function testARealStoreRefusesTheSimulatorInsteadOfTakingFreeOrders(): void
+    {
+        // e.g. a demo set up with bin/setup.php (PAYMENT_SIMULATOR=true) that left demo mode.
+        foreach (['production', null] as $appEnv) {
+            $run = IsolatedPhp::run('stripe_client', [], [
+                'APP_ENV' => $appEnv, 'APP_DEMO' => 'false', 'PAYMENT_SIMULATOR' => 'true', 'STRIPE_SECRET_KEY' => 'sk_live_not_a_real_key', 'STRIPE_API_BASE' => null,
+            ]);
+            self::assertSame([
+                'ok' => false,
+                'exception' => 'CheckoutException',
+                'message' => 'Online payments are not available in this environment.',
+            ], $run['result'], 'Neither the simulator nor, unexpectedly, Stripe (APP_ENV=' . ($appEnv ?? 'unset') . ')');
+            $log = $run['files']['storage/logs/app.log'] ?? '';
+            self::assertStringContainsString('ERROR: Refusing the payment simulator on a real store (APP_ENV=production, APP_DEMO=false): set PAYMENT_SIMULATOR=false', $log);
+            self::assertStringNotContainsString('sk_live_not_a_real_key', $log);
+        }
+
+        $off = IsolatedPhp::run('stripe_client', [], [
+            'APP_ENV' => 'production', 'APP_DEMO' => 'false', 'PAYMENT_SIMULATOR' => 'false', 'STRIPE_SECRET_KEY' => 'sk_live_not_a_real_key', 'STRIPE_API_BASE' => null,
+        ]);
+        self::assertSame(['ok' => true, 'api_base' => 'https://api.stripe.com'], $off['result'], 'Switching the simulator off is the fix');
+
+        $demo = IsolatedPhp::run('stripe_client', [], ['APP_ENV' => 'production', 'APP_DEMO' => 'true', 'PAYMENT_SIMULATOR' => 'true', 'STRIPE_SECRET_KEY' => null]);
+        self::assertSame(['ok' => true, 'api_base' => PAYMENT_SIMULATOR_API_BASE], $demo['result'], 'A public demo in production keeps the simulator');
+    }
 }

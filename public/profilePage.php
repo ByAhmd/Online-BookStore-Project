@@ -354,7 +354,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
 
                     <section class="profile-section" id="section-payment" data-section-panel="payment" aria-labelledby="payment-title"<?= $section === 'payment' ? '' : ' hidden' ?>>
                         <h2 id="payment-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.payment')) ?></h2>
-                        <p class="profile-intro" id="payment-intro"><?= e(t('account.payment.intro', ['app' => $appName])) ?></p>
+                        <p class="profile-intro" id="payment-intro"><?= e(t(payment_simulator_enabled() ? 'shop.pay.profile_intro' : 'account.payment.intro', ['app' => $appName])) ?></p>
 <?php if ($legacyPreference): ?>
                         <p class="profile-notice"><?= e(t('account.payment.legacy_notice')) ?></p>
 <?php endif; ?>

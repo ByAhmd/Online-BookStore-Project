@@ -280,6 +280,8 @@ final class PaymentSimulatorTest extends HttpTestCase
 
         [$admin] = $this->signedInAdmin();
         $page = $admin->get('admin_order.php?id=' . $orderId);
+        $this->assertPageText('(a simulated refund: no money moves)', $page);
+        $this->assertNotPageText('Stripe', $page);
         $response = $admin->submitForm($page, 'admin_order.php?id=' . $orderId, [], ['action' => 'refund']);
         $this->assertFlash($admin->follow($response), 'success', 'Order #' . $orderId . ' was refunded.');
 
@@ -301,6 +303,86 @@ final class PaymentSimulatorTest extends HttpTestCase
         $response = $admin->submitForm($page, 'admin_order.php?id=' . $secondOrderId, [], ['action' => 'refund']);
         $this->assertFlash($admin->follow($response), 'success', 'Order #' . $secondOrderId . ' was refunded.');
         self::assertStringStartsWith('re_demo_', (string) $this->orderBySession($second)['stripe_refund_id']);
+    }
+
+    public function testTheProfileAndAFailedRefundDoNotSendAnyoneToStripe(): void
+    {
+        [$customer] = $this->signedInCustomer();
+        $profile = $customer->get('profilePage.php?section=payment');
+        $this->assertHtmlPage($profile);
+        $this->assertPageText("Payments in BookWise are simulated on the store's own payment page, so no card details are ever asked for or stored.", $profile);
+        $this->assertNotPageText('Stripe', $profile);
+
+        $sessionId = $this->checkoutToPaymentPage($customer, [self::BRIDGE => 1]);
+        $this->assertRedirect($this->press($customer, $this->paymentPage($customer, $sessionId), $sessionId, 'pay'), $this->successUrl($sessionId));
+        $customer->get('success_pay.php?session_id=' . $sessionId);
+        $orderId = (int) $this->orderBySession($sessionId)['id'];
+
+        // The simulator cannot answer (its state folder is a file), so the refund fails.
+        $blocker = self::server()->runDirectory . DIRECTORY_SEPARATOR . 'simulator-blocker-' . bin2hex(random_bytes(4));
+        file_put_contents($blocker, 'a file, not a folder');
+        $this->configureServer(['PAYMENT_SIMULATOR_STORE' => $blocker . DIRECTORY_SEPARATOR . 'state.json']);
+        $this->expectAppLogError('/ERROR: Stripe refund failed .*The payment simulator is not available/');
+
+        [$admin] = $this->signedInAdmin();
+        $page = $admin->get('admin_order.php?id=' . $orderId);
+        $response = $admin->submitForm($page, 'admin_order.php?id=' . $orderId, [], ['action' => 'refund']);
+        $this->assertFlash($admin->follow($response), 'error', 'The payment simulator could not refund this order right now, so nothing was changed. Please try again later.');
+        self::assertSame('paid', $this->orderBySession($sessionId)['status']);
+        unlink($blocker);
+    }
+
+    public function testARealStoreNeverUsesTheSimulator(): void
+    {
+        // bin/setup.php writes PAYMENT_SIMULATOR=true. An owner who leaves demo mode
+        // (APP_DEMO=false in production) but keeps that line must not hand out free orders.
+        [$customer] = $this->signedInCustomer();
+        $sessionId = $this->checkoutToPaymentPage($customer, [self::BIOLOGY => 1]);
+        $page = $this->paymentPage($customer, $sessionId);
+
+        $this->configureServer(['APP_ENV' => 'production', 'APP_DEMO' => 'false', 'PAYMENT_SIMULATOR' => 'true']);
+        $this->expectAppLogError('/ERROR: Refusing the payment simulator on a real store \(APP_ENV=production, APP_DEMO=false\): set PAYMENT_SIMULATOR=false/');
+
+        $this->assertHtmlPage($customer->get('pay.php?session=' . $sessionId), 404);
+        $this->assertHtmlPage($this->press($customer, $page, $sessionId, 'pay'), 404);
+        $session = $this->simulatorSession($sessionId);
+        self::assertSame(['open', 'unpaid'], [$session['status'], $session['payment_status']], 'Nobody can pay with the simulator');
+
+        // Checkout is refused instead of falling back to Stripe or to the simulator.
+        $cart = $customer->get('cart.php');
+        $this->assertNotPageText('simulated', $cart);
+        $refused = $customer->submitForm($cart, 'checkout.php');
+        $this->assertRedirect($refused, 'cart.php');
+        $this->assertFlash($customer->follow($refused), 'error', 'Online payments are not available in this environment.');
+        self::assertSame(1, $this->countRows('orders'));
+        self::assertSame('pending', $this->orderBySession($sessionId)['status']);
+
+        // A public demo in production keeps it.
+        $this->configureServer(['APP_DEMO' => 'true']);
+        $this->assertHtmlPage($customer->get('pay.php?session=' . $sessionId));
+    }
+
+    public function testStripeWebhooksAreClosedWhileTheSimulatorTakesThePayments(): void
+    {
+        $payload = (string) json_encode([
+            'id' => 'evt_simulator_' . bin2hex(random_bytes(6)),
+            'object' => 'event',
+            'type' => 'checkout.session.completed',
+            'data' => ['object' => ['id' => 'cs_test_unknown', 'object' => 'checkout.session', 'client_reference_id' => '1']],
+        ]);
+        $endpoint = $this->client();
+
+        $signed = $endpoint->post('stripe_webhook.php', $payload, ['Content-Type' => 'application/json', 'Stripe-Signature' => self::stripeSignature($payload)]);
+        $this->assertStatus(404, $signed);
+        self::assertSame(['received' => false], $signed->json());
+        self::assertSame([], $signed->headerValues('Set-Cookie'));
+
+        // A demo has no webhook secret at all: visitors' requests are still answered
+        // with 404, and nothing is written to the log.
+        $this->configureServer(['STRIPE_WEBHOOK_SECRET' => '']);
+        $this->assertStatus(404, $endpoint->post('stripe_webhook.php', $payload, ['Stripe-Signature' => 't=1,v1=forged']));
+        $this->assertStatus(404, $endpoint->post('stripe_webhook.php', 'not json'));
+        self::assertSame([], $this->appLogLines(), 'Webhook requests leave no trace in app.log');
     }
 
     public function testThePaymentPageIsTranslatedIntoArabic(): void

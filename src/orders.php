@@ -58,7 +58,8 @@ const NON_TWO_DECIMAL_CURRENCIES = [
  * (PAYMENT_SIMULATOR, by default in demo mode) every request is answered
  * in-process by src/payment_simulator.php and no Stripe account is needed.
  * Otherwise it talks to Stripe with STRIPE_SECRET_KEY (or to STRIPE_API_BASE,
- * the test suites' local mock).
+ * the test suites' local mock). A real store that still asks for the
+ * simulator gets no client at all (see payment_simulator_refused()).
  */
 function stripe_client(): \Stripe\StripeClient
 {
@@ -73,6 +74,10 @@ function stripe_client(): \Stripe\StripeClient
         throw new CheckoutException(t('shop.checkout.misconfigured'));
     }
 
+    if (payment_simulator_refused()) {
+        app_log('error', 'Refusing the payment simulator on a real store (APP_ENV=production, APP_DEMO=false): set PAYMENT_SIMULATOR=false to take payments with Stripe');
+        throw new CheckoutException(t('shop.checkout.not_available'));
+    }
     if (payment_simulator_enabled()) {
         // stripe-php sends every request through one global HTTP client: the
         // simulator's answers them in-process, so nothing reaches the network.
@@ -715,8 +720,10 @@ function refund_order(int $orderId): string
     if ($order['status'] !== 'paid') {
         throw new RefundException(t('admin.refund.not_paid'));
     }
+    // While the simulator takes the payments, staff are not sent to Stripe.
+    $simulated = payment_simulator_enabled();
     if (!order_is_refundable($order)) {
-        throw new RefundException(t('admin.refund.no_payment'));
+        throw new RefundException(t($simulated ? 'shop.pay.refund_no_payment' : 'admin.refund.no_payment'));
     }
     $paymentIntent = (string) $order['stripe_payment_intent'];
 
@@ -732,7 +739,7 @@ function refund_order(int $orderId): string
             $status = (string) ($refund->status ?? '');
             if (!in_array($status, ['succeeded', 'pending'], true)) {
                 app_log('error', 'Stripe did not accept the refund', ['order_id' => $orderId, 'refund' => $refund->id ?? null, 'status' => $status]);
-                throw new RefundException(t('admin.refund.failed'));
+                throw new RefundException(t($simulated ? 'shop.pay.refund_failed' : 'admin.refund.failed'));
             }
             $refundId = (string) $refund->id;
         } catch (\Stripe\Exception\InvalidRequestException $e) {
@@ -740,7 +747,7 @@ function refund_order(int $orderId): string
             $refundId = $e->getStripeCode() === 'charge_already_refunded'
                 ? confirmed_full_refund($paymentIntent, (int) $order['amount_minor'], (string) $order['currency'])
                 : null;
-            if ($refundId === null && (config('app.demo') || payment_simulator_enabled()) && $e->getStripeCode() === 'resource_missing') {
+            if ($refundId === null && (config('app.demo') || $simulated) && $e->getStripeCode() === 'resource_missing') {
                 // Demo or simulated payments: the payment simulator forgets payments when its
                 // state file is lost (a new container, an ephemeral disk) or after 30 days.
                 // No real money was ever taken, so record the refund here.
@@ -757,7 +764,7 @@ function refund_order(int $orderId): string
             'stripe_code' => $e instanceof \Stripe\Exception\ApiErrorException ? $e->getStripeCode() : null,
             'message' => $e->getMessage(),
         ]);
-        throw new RefundException(t('admin.refund.failed'));
+        throw new RefundException(t($simulated ? 'shop.pay.refund_failed' : 'admin.refund.failed'));
     }
 
     return apply_order_refund($orderId, $refundId, $paymentIntent) ? 'refunded' : 'already_refunded';
@@ -829,9 +836,17 @@ function confirmed_full_refund(string $paymentIntent, int $amountMinor, string $
 
 /**
  * Verifies and processes a Stripe webhook. Returns the HTTP status to send.
+ * While the payment simulator takes the payments every webhook is answered
+ * with 404 and nothing else: the simulator sends no webhooks, and Stripe's
+ * events could not refer to its sessions. A demo therefore needs no
+ * STRIPE_WEBHOOK_SECRET, and requests from visitors leave no trace in the logs.
  */
 function handle_stripe_webhook(string $payload, string $signatureHeader): int
 {
+    if (payment_simulator_enabled()) {
+        return 404;
+    }
+
     $secret = config('stripe.webhook_secret');
     if (!is_string($secret) || $secret === '') {
         app_log('error', 'Stripe webhook received but STRIPE_WEBHOOK_SECRET is not set');

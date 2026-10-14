@@ -264,7 +264,9 @@ $values = [
     'PAYMENT_SIMULATOR_STORE' => 'storage/payment-simulator.json',
     // Not used while the simulator takes the payments.
     'STRIPE_SECRET_KEY' => '',
-    // Random and known to nobody, so every request to stripe_webhook.php is refused.
+    // stripe_webhook.php answers 404 while the simulator is on. Should the
+    // simulator be switched off, this random secret, known to nobody, refuses
+    // every request until the real one is set.
     'STRIPE_WEBHOOK_SECRET' => 'whsec_' . bin2hex(random_bytes(24)),
     'STRIPE_CURRENCY' => 'sar',
     'MAIL_DRIVER' => 'null',
@@ -301,6 +303,7 @@ setup_say('The database answers.');
 
 $lines = ['# Written by php bin/setup.php on ' . date('Y-m-d H:i') . ': a public demo with simulated payments and no email.'];
 $lines[] = '# See .env.example and docs/DEPLOYMENT.md for every setting. Keep this file private.';
+$lines[] = '# For a real store set APP_DEMO=false AND PAYMENT_SIMULATOR=false (docs/DEPLOYMENT.md, section (d)).';
 $lines[] = '';
 $written = [];
 $example = preg_split('/\R/', rtrim((string) file_get_contents($root . '/.env.example'))) ?: [];

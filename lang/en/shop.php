@@ -371,6 +371,10 @@ return [
         'cart_redirecting' => 'Opening the payment page…',
         'cart_note' => "Payments in this store are simulated: you will pay on the store's own payment page, no money is taken and no card details are needed.",
         'processing_lead' => 'Your simulated slow payment is being confirmed, as some banks do. This takes about 15 seconds.',
+        'profile_intro' => "Payments in :app are simulated on the store's own payment page, so no card details are ever asked for or stored.",
+        'refund_text' => 'Refunds the full :amount to the customer (a simulated refund: no money moves), removes the books from their purchase history and puts the copies back in stock.',
+        'refund_no_payment' => 'This order has no simulated payment to refund.',
+        'refund_failed' => 'The payment simulator could not refund this order right now, so nothing was changed. Please try again later.',
     ],
 
     'about' => [

@@ -133,7 +133,7 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
                 <section class="admin-content order-refund" id="refund" aria-labelledby="order-refund-title">
                     <h2 id="order-refund-title"><?= e(t('admin.order.refund_title')) ?></h2>
 <?php if (order_is_refundable($order)): ?>
-                    <p id="refund-help"><?= e(t('admin.order.refund_text', ['amount' => $total])) ?></p>
+                    <p id="refund-help"><?= e(t(payment_simulator_enabled() ? 'shop.pay.refund_text' : 'admin.order.refund_text', ['amount' => $total])) ?></p>
                     <form method="post" action="<?= e($orderUrl) ?>" data-confirm="<?= e(t('admin.order.refund_confirm', ['id' => (int) $order['id'], 'amount' => $total])) ?>" data-once>
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="refund">

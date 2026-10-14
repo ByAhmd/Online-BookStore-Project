@@ -164,6 +164,8 @@ final class SetupScriptTest extends DatabaseTestCase
         self::assertSame($expected, $actual, 'Safe values for a public demo');
         self::assertMatchesRegularExpression('/^whsec_[0-9a-f]{48}$/', $settings['STRIPE_WEBHOOK_SECRET'], 'A random webhook secret nobody knows');
         self::assertStringNotContainsString(self::ADMIN_PASSWORD, (string) file_get_contents($this->envFile()), 'The administrator password is not stored');
+        // PAYMENT_SIMULATOR=true is written explicitly, so leaving demo mode must switch it off too.
+        self::assertStringContainsString("\n# For a real store set APP_DEMO=false AND PAYMENT_SIMULATOR=false", (string) file_get_contents($this->envFile()));
         if (PHP_OS_FAMILY !== 'Windows') {
             self::assertSame(0600, fileperms($this->envFile()) & 0777, 'Only the owner may read the settings');
         }
