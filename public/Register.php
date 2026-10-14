@@ -10,65 +10,56 @@ verify_csrf();
 $action = input_string($_POST, 'action', 20);
 $email = normalize_email(input_string($_POST, 'email', 320));
 // Passwords are used exactly as typed (never trimmed).
-$password = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
+$password = input_password($_POST, 'password');
 
 if ($action === 'register') {
     $name = input_string($_POST, 'name', 255);
-    $confirmation = is_string($_POST['password_confirmation'] ?? null) ? $_POST['password_confirmation'] : '';
+    $confirmation = input_password($_POST, 'password_confirmation');
 
-    $errors = [];
-    if (($error = validate_email($email)) !== null) {
-        $errors['signup_email'] = $error;
-    }
-    if (($error = validate_person_name($name)) !== null) {
-        $errors['signup_name'] = $error;
-    }
-    if (($error = validate_new_password($password, $confirmation)) !== null) {
-        // A valid password that only differs from its confirmation is reported on the confirmation field.
-        $mismatchOnly = validate_new_password($password, $password) === null;
-        $errors[$mismatchOnly ? 'signup_password_confirmation' : 'signup_password'] = $error;
-    }
+    $errors = array_filter([
+        'signup_email' => email_error($email),
+        'signup_name' => person_name_error($name),
+    ]) + new_password_errors($password, $confirmation, 'signup_password', 'signup_password_confirmation');
+    $remembered = ['signup_email' => mb_substr($email, 0, 255), 'signup_name' => $name];
 
-    $userId = $errors === [] ? register_user($email, $name, $password) : null;
-    if ($errors === [] && $userId === null) {
-        $errors['signup_email'] = 'An account with this email already exists.';
-    }
-
-    if ($userId === null) {
-        remember_input(['signup_email' => mb_substr($email, 0, 255), 'signup_name' => $name]);
+    if ($errors !== []) {
+        remember_input($remembered);
         remember_errors($errors);
         redirect('index.php?form=signup');
     }
 
-    login_user(find_user($userId) ?? throw new RuntimeException('Newly registered user could not be loaded.'));
-
-    // The address is not verified, so the email contains no user-supplied text
-    // (a crafted "name" must not turn it into a phishing message from our sender).
-    $html = '<p>Hello,</p>'
-        . '<p>Welcome to BookWise! Your account for this email address is ready. '
-        . '<a href="' . e(absolute_url('Explore_Page.php')) . '">Start exploring our collection of books</a>.</p>'
-        . '<p>If you did not create this account, you can ignore this email.</p>'
-        . '<p>Best regards,<br>BookWise Team</p>';
-    $text = "Hello,\n\nWelcome to BookWise! Your account for this email address is ready. "
-        . "Start exploring our collection of books:\n" . absolute_url('Explore_Page.php')
-        . "\n\nIf you did not create this account, you can ignore this email.\n\nBest regards,\nBookWise Team";
-    if (!send_mail($email, '', 'Welcome to BookWise!', $html, $text)) {
-        app_log('warning', 'Welcome email could not be sent', ['user_id' => $userId]);
+    if (email_verification_required()) {
+        // New, already registered or administrator address: the visitor always
+        // gets the same answer, so sign-up cannot be used to discover accounts.
+        sign_up_with_verification($email, $name, $password);
+        remember_input(['verify_email' => mb_substr($email, 0, 255)]);
+        flash('success', t('auth.signup.check_inbox'));
+        redirect('index.php?form=verify');
     }
 
-    flash('success', 'Welcome to BookWise, ' . $name . '! Your account is ready.');
+    $userId = register_user($email, $name, $password);
+    if ($userId === null) {
+        remember_input($remembered);
+        remember_errors(['signup_email' => t('auth.signup.email_taken')]);
+        redirect('index.php?form=signup');
+    }
+
+    login_user(find_user($userId) ?? throw new RuntimeException('Newly registered user could not be loaded.'));
+    send_welcome_email($email, $userId);
+
+    flash('success', t('auth.signup.welcome', ['name' => $name]));
     redirect(post_login_redirect('user'));
 }
 
 if ($action === 'login') {
     $errors = [];
     if ($email === '') {
-        $errors['login_email'] = 'Please enter your email address.';
+        $errors['login_email'] = t('auth.validation.email_required');
     } elseif (strlen($email) > 255) {
-        $errors['login_email'] = 'Please enter a valid email address.';
+        $errors['login_email'] = t('auth.validation.email_invalid');
     }
     if ($password === '') {
-        $errors['login_password'] = 'Please enter your password.';
+        $errors['login_password'] = t('auth.validation.password_required');
     }
     if ($errors !== []) {
         remember_input(['login_email' => mb_substr($email, 0, 255)]);
@@ -79,7 +70,7 @@ if ($action === 'login') {
     $ip = client_ip();
     if (login_is_throttled($email, $ip)) {
         app_log('warning', 'Login blocked by throttling', ['ip' => $ip]);
-        flash('error', 'Too many failed sign-in attempts. Please wait ' . LOGIN_LOCKOUT_MINUTES . ' minutes and try again.');
+        flash('error', tn('auth.login.throttled', LOGIN_LOCKOUT_MINUTES));
         remember_input(['login_email' => $email]);
         redirect('index.php?form=login');
     }
@@ -87,12 +78,20 @@ if ($action === 'login') {
     $result = attempt_login($email, $password);
     if ($result === null) {
         record_failed_login($email, $ip);
-        flash('error', 'Incorrect email or password.');
+        flash('error', t('auth.login.failed'));
         remember_input(['login_email' => $email]);
         redirect('index.php?form=login');
     }
 
     clear_failed_logins($email);
+
+    // Only someone who knows the password learns that the address still needs confirming.
+    if ($result['type'] === 'user' && customer_awaits_verification((int) $result['record']['id'])) {
+        remember_input(['verify_email' => $email]);
+        flash('info', t('auth.login.unverified'));
+        redirect('index.php?form=verify');
+    }
+
     if ($result['type'] === 'admin') {
         login_admin($result['record']);
     } else {
@@ -100,8 +99,8 @@ if ($action === 'login') {
     }
 
     $displayName = trim((string) ($result['record']['name'] ?? ''));
-    flash('success', $displayName !== '' ? 'Welcome back, ' . $displayName . '!' : 'Welcome back!');
+    flash('success', $displayName !== '' ? t('auth.login.welcome_back_name', ['name' => $displayName]) : t('auth.login.welcome_back'));
     redirect(post_login_redirect($result['type']));
 }
 
-abort(400, 'Unknown form action.');
+abort(400, t('auth.errors.unknown_action'));

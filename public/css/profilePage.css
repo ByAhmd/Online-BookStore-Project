@@ -78,7 +78,7 @@
     color: #fff;
     font: inherit;
     font-size: 1.15rem;
-    text-align: left;
+    text-align: start;
     text-decoration: none;
     cursor: pointer;
     transition: background-color 0.2s;
@@ -107,10 +107,26 @@
     font-weight: 700;
 }
 
-.profile-page .profile-menu-link img {
+/* Right-to-left: the "current" marker sits on the starting (right) edge. */
+[dir="rtl"] .profile-page .profile-menu-link[aria-current="page"],
+[dir="rtl"] .profile-page .profile-side .profile-menu-link[aria-current="page"]:focus-visible {
+    box-shadow: inset -4px 0 0 var(--color-accent);
+}
+
+/* The back arrow points towards the start of the line. */
+[dir="rtl"] .profile-page .profile-back img {
+    transform: scaleX(-1);
+}
+
+.profile-page .profile-menu-link img,
+.profile-page .profile-menu-icon {
     flex: 0 0 auto;
     width: 32px;
     height: 32px;
+}
+
+.profile-page .profile-menu-danger:hover {
+    background: rgba(198, 40, 40, 0.35);
 }
 
 /* ---------------------------------------------------------------------
@@ -309,7 +325,7 @@
 
 .profile-page .order-items {
     margin: 0 0 12px;
-    padding-left: 20px;
+    padding-inline-start: 20px;
     overflow-wrap: anywhere;
 }
 
@@ -326,17 +342,96 @@
     margin: 0;
     padding-top: 12px;
     border-top: 1px solid var(--color-surface-muted);
-    text-align: right;
+    text-align: end;
 }
 
 .profile-page .order-total strong {
-    margin-left: 6px;
+    margin-inline-start: 6px;
     font-size: 1.1rem;
 }
 
 .profile-page .order-empty {
     border: 1px dashed var(--color-border);
     border-radius: var(--radius);
+}
+
+/* ---------------------------------------------------------------------
+   Language, security and account deletion
+   --------------------------------------------------------------------- */
+
+.profile-page .profile-subsection {
+    max-width: 720px;
+    margin-top: 36px;
+    padding-top: 24px;
+    border-top: 1px solid var(--color-border);
+}
+
+.profile-page .profile-subsection-title {
+    margin: 0 0 16px;
+    font-size: 1.25rem;
+    color: #333;
+}
+
+.profile-page .danger-notice {
+    border-color: #f1b0b0;
+    background: var(--color-error-bg);
+    color: var(--color-error-text);
+}
+
+.profile-page .delete-summary {
+    max-width: 720px;
+    margin-bottom: 24px;
+}
+
+.profile-page .delete-list {
+    margin: 0 0 20px;
+    padding-inline-start: 22px;
+}
+
+.profile-page .delete-list li + li {
+    margin-top: 6px;
+}
+
+.profile-page .delete-kept {
+    max-width: 60ch;
+    margin: 0;
+    color: var(--color-text-muted);
+}
+
+.profile-page .delete-form {
+    padding-top: 20px;
+    border-top: 1px solid var(--color-border);
+}
+
+.profile-page .checkbox-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.profile-page .checkbox-row input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    margin: 2px 0 0;
+    accent-color: var(--color-accent);
+}
+
+.profile-page .checkbox-row label {
+    font-weight: 600;
+}
+
+.profile-page .checkbox-row input[aria-invalid="true"] {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.profile-page .delete-submit {
+    background-color: var(--color-accent-hover);
+}
+
+.profile-page .delete-submit:hover {
+    background-color: #5f1212;
 }
 
 /* ---------------------------------------------------------------------
@@ -356,7 +451,17 @@
 
     .profile-page .avatar-picker,
     .profile-page .form-actions {
-        padding-left: 190px;
+        padding-inline-start: 190px;
+    }
+
+    /* The checkbox row spans both columns: its label sits next to the box. */
+    .profile-page .profile-form .checkbox-field {
+        grid-template-columns: minmax(0, 1fr);
+        padding-inline-start: 190px;
+    }
+
+    .profile-page .profile-form .checkbox-field > :not(label) {
+        grid-column: 1;
     }
 }
 
@@ -388,7 +493,8 @@
 
     .profile-page .profile-side-title {
         display: inline-block;
-        margin: 0 0 12px 8px;
+        margin-block: 0 12px;
+        margin-inline: 8px 0;
         font-size: 1.3rem;
         vertical-align: middle;
     }
@@ -417,8 +523,15 @@
     }
 
     .profile-page .profile-menu-link[aria-current="page"],
-    .profile-page .profile-side .profile-menu-link[aria-current="page"]:focus-visible {
+    .profile-page .profile-side .profile-menu-link[aria-current="page"]:focus-visible,
+    [dir="rtl"] .profile-page .profile-menu-link[aria-current="page"],
+    [dir="rtl"] .profile-page .profile-side .profile-menu-link[aria-current="page"]:focus-visible {
         box-shadow: inset 0 -3px 0 var(--color-accent);
+    }
+
+    .profile-page .profile-menu-icon {
+        width: 24px;
+        height: 24px;
     }
 
     .profile-page .profile-content {

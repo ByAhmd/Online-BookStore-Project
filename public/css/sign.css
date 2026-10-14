@@ -1,7 +1,9 @@
 /* =====================================================================
-   Authentication pages (index.php, reset_form.php): the grey card on the
-   book background, the Sign Up / Login switcher and the form controls.
-   Everything is scoped under body.auth-page; common.css owns the shell.
+   Authentication pages (index.php, reset_form.php, verify_email.php): the
+   grey card on the book background, the Sign Up / Login switcher and the
+   form controls. Everything is scoped under body.auth-page; common.css owns
+   the shell. Logical properties (inline-start/end) keep the layout correct
+   in right-to-left languages.
    ===================================================================== */
 
 .auth-page [hidden] {
@@ -50,6 +52,30 @@
 .auth-page .auth-intro {
     margin: -6px 0 18px;
     font-size: 1.05rem;
+}
+
+/* Small print under a form (e.g. "we will email you a confirmation link"). */
+.auth-page .auth-note {
+    margin: 0 0 4px;
+    color: #464242;
+    font-size: 0.95rem;
+}
+
+/* Demo-mode notice: emails are not delivered. */
+.auth-page .auth-notice {
+    margin: 0 0 18px;
+    padding: 10px 14px;
+    border: 1px solid #f3d27a;
+    border-inline-start-width: 4px;
+    border-radius: 4px;
+    background-color: #fff8e1;
+    color: #5c4300;
+    font-weight: 600;
+}
+
+/* Email addresses stay left-to-right inside right-to-left text. */
+.auth-page .auth-intro strong[dir="ltr"] {
+    unicode-bidi: isolate;
 }
 
 /* ---------------------------------------------------------------------
@@ -148,13 +174,13 @@
 }
 
 .auth-page .password-wrapper .auth-input {
-    padding-right: 56px;
+    padding-inline-end: 56px;
 }
 
 .auth-page .password-toggle {
     position: absolute;
     top: 50%;
-    right: 4px;
+    inset-inline-end: 4px;
     display: inline-flex;
     align-items: center;
     justify-content: center;

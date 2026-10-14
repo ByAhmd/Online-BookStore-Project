@@ -17,7 +17,7 @@ function reset_token_hash(string $rawToken): string
  */
 function request_password_reset(string $email): void
 {
-    $user = db_one('SELECT id, name, Eaddress FROM users WHERE Eaddress = ?', [$email]);
+    $user = find_user_account_by_email($email);
     if ($user === null) {
         return;
     }
@@ -42,16 +42,30 @@ function request_password_reset(string $email): void
     });
 
     $link = absolute_url('reset_form.php?token=' . $rawToken);
-    $name = (string) $user['name'];
-    $html = '<p>Hello ' . e($name) . ',</p>'
-        . '<p>We received a request to reset your BookWise password. '
-        . '<a href="' . e($link) . '">Choose a new password</a>. This link expires in '
-        . RESET_TOKEN_TTL_MINUTES . ' minutes and can be used once.</p>'
-        . '<p>If you did not request this, you can ignore this email.</p>';
-    $text = "Hello $name,\n\nReset your BookWise password using this link (valid for "
-        . RESET_TOKEN_TTL_MINUTES . " minutes, single use):\n$link\n\nIf you did not request this, ignore this email.";
+    // An unconfirmed account's name may have been typed by someone else: leave it out.
+    $name = email_verification_required() && $user['email_verified_at'] === null ? '' : $user['name'];
 
-    send_mail((string) $user['Eaddress'], $name, 'Reset your BookWise password', $html, $text);
+    send_localized_mail($user['Eaddress'], $name, $user['locale'], static function () use ($name, $link): array {
+        $greeting = $name !== '' ? t('auth.mail.greeting_name', ['name' => $name]) : t('auth.mail.greeting');
+        $expiry = tn('auth.mail.reset.expiry', RESET_TOKEN_TTL_MINUTES);
+        return [
+            t('auth.mail.reset.subject'),
+            mail_html_layout(
+                '<p>' . e($greeting) . '</p>'
+                . '<p>' . e(t('auth.mail.reset.body')) . '</p>'
+                . '<p><a href="' . e($link) . '">' . e(t('auth.mail.reset.cta')) . '</a></p>'
+                . '<p>' . e($expiry) . '</p>'
+                . '<p>' . e(t('auth.mail.reset.ignore')) . '</p>'
+                . mail_html_signature()
+            ),
+            $greeting . "\n\n"
+                . t('auth.mail.reset.body') . "\n\n"
+                . t('auth.mail.reset.cta') . ":\n" . $link . "\n\n"
+                . $expiry . "\n\n"
+                . t('auth.mail.reset.ignore') . "\n\n"
+                . mail_text_signature(),
+        ];
+    });
 }
 
 /**
@@ -71,7 +85,9 @@ function find_valid_reset_email(string $rawToken): ?string
 
 /**
  * Sets a new password using a token, then invalidates every token for the
- * account. Returns false if the token is invalid, expired or already used.
+ * account. Using a link from the account's mailbox proves ownership of the
+ * address, so the account also counts as verified from then on. Returns
+ * false if the token is invalid, expired or already used.
  */
 function complete_password_reset(string $rawToken, string $newPassword): bool
 {
@@ -89,11 +105,16 @@ function complete_password_reset(string $rawToken, string $newPassword): bool
         }
         // Bumping session_version signs out every existing session of the account.
         $updated = db_run(
-            'UPDATE users SET pass = ?, session_version = session_version + 1 WHERE Eaddress = ?',
+            'UPDATE users SET pass = ?, session_version = session_version + 1, email_verified_at = COALESCE(email_verified_at, NOW())
+             WHERE Eaddress = ?',
             [hash_password($newPassword), $row['email']]
         );
         db_run('DELETE FROM reset_tokens WHERE email = ?', [$row['email']]);
         db_run('DELETE FROM login_attempts WHERE email = ?', [$row['email']]);
+        db_run(
+            'DELETE ev FROM email_verifications ev JOIN users u ON u.id = ev.user_id WHERE u.Eaddress = ?',
+            [$row['email']]
+        );
         return $updated->rowCount() > 0;
     });
 }

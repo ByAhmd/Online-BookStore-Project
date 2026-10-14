@@ -1,9 +1,13 @@
 // Auth pages (index.php, reset_form.php): Sign Up / Login / Reset panel
 // switching, password visibility toggles and light client-side checks.
 // The server validates everything again; these checks only give faster feedback.
+// Messages come from data-i18n-* attributes rendered in the page's language.
 document.addEventListener('DOMContentLoaded', () => {
     const panels = Array.from(document.querySelectorAll('.auth-panel[data-panel]'));
     const panelNames = panels.map((panel) => panel.dataset.panel);
+    // A non-empty validity message is required to block submission; '⚠' only shows if a page forgot the attribute.
+    const messages = document.querySelector('[data-i18n-mismatch]');
+    const message = (name) => (messages && messages.dataset[name]) || '⚠';
 
     const syncSwitchers = (name) => {
         document.querySelectorAll('button[data-auth-target]').forEach((button) => {
@@ -21,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         syncSwitchers(name);
         if (target.dataset.title) {
-            document.title = `${target.dataset.title} · BookWise`;
+            document.title = target.dataset.title;
         }
         try {
             const url = new URL(window.location.href);
@@ -95,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const check = () => {
             const mismatch = confirmation.value !== '' && confirmation.value !== source.value;
-            confirmation.setCustomValidity(mismatch ? 'Passwords do not match.' : '');
+            confirmation.setCustomValidity(mismatch ? message('i18nMismatch') : '');
         };
         source.addEventListener('input', check);
         confirmation.addEventListener('input', check);
@@ -108,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const max = Number(input.dataset.maxBytes);
             input.addEventListener('input', () => {
                 const tooLong = encoder.encode(input.value).length > max;
-                input.setCustomValidity(tooLong ? `Password must be at most ${max} bytes long.` : '');
+                input.setCustomValidity(tooLong ? message('i18nTooLong').replace(':max', String(max)) : '');
             });
         });
     }

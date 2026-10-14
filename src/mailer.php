@@ -60,3 +60,39 @@ function send_mail(string $toEmail, string $toName, string $subject, string $htm
         return false;
     }
 }
+
+/**
+ * Composes an email in the recipient's language and sends it. $compose runs
+ * while $locale is active (null keeps the visitor's language) and returns
+ * [subject, html, text]; the visitor's language is restored afterwards.
+ *
+ * @param callable(): array{0: string, 1: string, 2: string} $compose
+ */
+function send_localized_mail(string $toEmail, string $toName, ?string $locale, callable $compose): bool
+{
+    use_locale($locale);
+    try {
+        [$subject, $html, $text] = $compose();
+    } finally {
+        use_locale(null);
+    }
+    return send_mail($toEmail, $toName, $subject, $html, $text);
+}
+
+/**
+ * Wraps an email's HTML body with the active language and text direction.
+ */
+function mail_html_layout(string $bodyHtml): string
+{
+    return '<div lang="' . e(current_locale()) . '" dir="' . e(text_direction()) . '">' . $bodyHtml . '</div>';
+}
+
+function mail_html_signature(): string
+{
+    return '<p>' . e(t('auth.mail.regards')) . '<br>' . e(t('auth.mail.team')) . '</p>';
+}
+
+function mail_text_signature(): string
+{
+    return t('auth.mail.regards') . "\n" . t('auth.mail.team');
+}

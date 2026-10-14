@@ -13,9 +13,11 @@ $user = require_user();
 $userId = (int) $user['id'];
 
 $sections = [
-    'account' => ['label' => 'Account Info', 'icon' => 'imges/AccountInfo.png'],
-    'payment' => ['label' => 'Payment Preference', 'icon' => 'imges/PaymentMethod.png'],
-    'orders' => ['label' => 'My Orders', 'icon' => 'imges/Reading.png'],
+    'account' => ['label' => t('account.sections.account'), 'icon' => 'imges/AccountInfo.png'],
+    'payment' => ['label' => t('account.sections.payment'), 'icon' => 'imges/PaymentMethod.png'],
+    'orders' => ['label' => t('account.sections.orders'), 'icon' => 'imges/Reading.png'],
+    'security' => ['label' => t('account.sections.security'), 'icon' => null],
+    'delete' => ['label' => t('account.sections.delete'), 'icon' => null],
 ];
 
 if (is_post()) {
@@ -28,18 +30,18 @@ if (is_post()) {
         $dateOfBirth = input_string($_POST, 'date_of_birth', 50);
 
         $errors = array_filter([
-            'name' => validate_person_name($name),
+            'name' => person_name_error($name),
             // Free text: more permissive than catalog genre names, so legacy values
             // such as "Sci-Fi/Fantasy" never block a profile or avatar update.
-            'favorite_genre' => validate_favorite_genre($favoriteGenre),
-            'date_of_birth' => validate_date_of_birth($dateOfBirth),
+            'favorite_genre' => favorite_genre_error($favoriteGenre),
+            'date_of_birth' => date_of_birth_error($dateOfBirth),
         ]);
         $input = ['name' => $name, 'favorite_genre' => $favoriteGenre, 'date_of_birth' => $dateOfBirth];
 
         if ($errors !== []) {
             remember_input($input);
             remember_errors($errors);
-            flash('error', 'Please correct the highlighted fields. Your profile was not updated.');
+            flash('error', t('account.profile.invalid'));
             redirect('profilePage.php?section=account');
         }
 
@@ -49,9 +51,10 @@ if (is_post()) {
             try {
                 $newAvatar = store_avatar_upload($file);
             } catch (UploadException $e) {
+                $message = upload_error_message($e);
                 remember_input($input);
-                remember_errors(['profile_image' => $e->getMessage()]);
-                flash('error', $e->getMessage());
+                remember_errors(['profile_image' => $message]);
+                flash('error', $message);
                 redirect('profilePage.php?section=account');
             }
         }
@@ -66,7 +69,22 @@ if (is_post()) {
             delete_uploaded_avatar($user['profile_image'] ?? null);
         }
 
-        flash('success', 'Your profile has been updated.');
+        flash('success', t('account.profile.updated'));
+        redirect('profilePage.php?section=account');
+    }
+
+    if ($action === 'update_language') {
+        $locale = input_string($_POST, 'locale', 10);
+        if (!update_user_locale($userId, $locale)) {
+            remember_errors(['locale' => t('account.language.invalid')]);
+            flash('error', t('account.language.not_saved'));
+            redirect('profilePage.php?section=account');
+        }
+        remember_locale_cookie($locale);
+        // Confirm in the language that was just chosen.
+        use_locale($locale);
+        flash('success', t('account.language.saved'));
+        use_locale(null);
         redirect('profilePage.php?section=account');
     }
 
@@ -74,16 +92,90 @@ if (is_post()) {
         $preference = $_POST['payment_method'] ?? null;
         $preference = is_string($preference) ? trim($preference) : null;
         if ($preference === null || !update_payment_preference($userId, $preference === '' ? null : $preference)) {
-            remember_errors(['payment_method' => 'Please choose one of the listed payment preferences.']);
-            flash('error', 'Your payment preference was not saved.');
+            remember_errors(['payment_method' => t('account.payment.invalid')]);
+            flash('error', t('account.payment.not_saved'));
             redirect('profilePage.php?section=payment');
         }
 
-        flash('success', 'Your payment preference has been saved.');
+        flash('success', t('account.payment.saved'));
         redirect('profilePage.php?section=payment');
     }
 
-    abort(400, 'Unknown profile action.');
+    if ($action === 'change_password') {
+        // Passwords are used exactly as typed (never trimmed).
+        $current = input_password($_POST, 'current_password');
+        $new = input_password($_POST, 'new_password');
+        $confirmation = input_password($_POST, 'new_password_confirmation');
+
+        $errors = new_password_errors($new, $confirmation, 'new_password', 'new_password_confirmation');
+        if ($current === '') {
+            $errors = ['current_password' => t('account.security.current_required')] + $errors;
+        }
+        if ($errors !== []) {
+            remember_errors($errors);
+            flash('error', t('account.security.not_changed'));
+            redirect('profilePage.php?section=security');
+        }
+
+        $result = change_user_password($userId, $current, $new, client_ip());
+        if ($result['status'] === 'throttled') {
+            app_log('warning', 'Password change blocked by throttling', ['user_id' => $userId]);
+            flash('error', tn('account.security.throttled', LOGIN_LOCKOUT_MINUTES));
+            redirect('profilePage.php?section=security');
+        }
+        if ($result['status'] !== 'changed' || $result['session_version'] === null) {
+            remember_errors(['current_password' => t('account.security.current_wrong')]);
+            flash('error', t('account.security.not_changed'));
+            redirect('profilePage.php?section=security');
+        }
+
+        // Every other session is signed out; this one stays signed in with a new ID.
+        keep_session_after_password_change($result['session_version']);
+        app_log('info', 'Password changed', ['user_id' => $userId]);
+        send_password_changed_email($userId);
+        flash('success', t('account.security.changed'));
+        redirect('profilePage.php?section=security');
+    }
+
+    if ($action === 'delete_account') {
+        $password = input_password($_POST, 'delete_password');
+        $confirmed = ($_POST['confirm_delete'] ?? null) === 'yes';
+
+        $errors = array_filter([
+            'delete_password' => $password === '' ? t('account.delete.password_required') : null,
+            'confirm_delete' => $confirmed ? null : t('account.delete.confirm_required'),
+        ]);
+        if ($errors !== []) {
+            remember_errors($errors);
+            flash('error', t('account.delete.not_deleted'));
+            redirect('profilePage.php?section=delete');
+        }
+
+        $result = delete_customer_account($userId, $password, client_ip());
+        if ($result['status'] === 'throttled') {
+            app_log('warning', 'Account deletion blocked by throttling', ['user_id' => $userId]);
+            flash('error', tn('account.delete.throttled', LOGIN_LOCKOUT_MINUTES));
+            redirect('profilePage.php?section=delete');
+        }
+        if ($result['status'] === 'unresolved') {
+            flash('error', t('account.delete.unresolved'));
+            redirect('profilePage.php?section=delete');
+        }
+        if ($result['status'] !== 'deleted' || $result['account'] === null) {
+            remember_errors(['delete_password' => t('account.delete.password_wrong')]);
+            flash('error', t('account.delete.not_deleted'));
+            redirect('profilePage.php?section=delete');
+        }
+
+        delete_uploaded_avatar(is_string($result['account']['profile_image'] ?? null) ? $result['account']['profile_image'] : null);
+        app_log('info', 'Customer account deleted', ['user_id' => $userId]);
+        send_account_deleted_email($result['account']);
+        logout_session();
+        flash('success', t('account.delete.done'));
+        redirect('Home_Page.php');
+    }
+
+    abort(400, t('account.errors.unknown_action'));
 }
 
 $section = $_GET['section'] ?? 'account';
@@ -91,8 +183,11 @@ if (!is_string($section) || !isset($sections[$section])) {
     $section = 'account';
 }
 
+$account = find_user_account($userId);
+$accountLocale = $account['locale'] ?? current_locale();
 $genres = list_genres();
 $orders = user_orders($userId);
+$appName = (string) config('app.name', 'BookWise');
 
 $nameValue = old('name', (string) $user['name']);
 $genreValue = old('favorite_genre', (string) ($user['favorite_genre'] ?? 'Unknown'));
@@ -105,7 +200,7 @@ $legacyPreference = $storedPreference !== '' && !in_array($storedPreference, PAY
 $selectedPreference = $legacyPreference ? '' : $storedPreference;
 
 $errors = [];
-foreach (['profile_image', 'name', 'favorite_genre', 'date_of_birth', 'payment_method'] as $field) {
+foreach (['profile_image', 'name', 'favorite_genre', 'date_of_birth', 'locale', 'payment_method', 'current_password', 'new_password', 'new_password_confirmation', 'delete_password', 'confirm_delete'] as $field) {
     $errors[$field] = form_error($field);
 }
 
@@ -128,6 +223,12 @@ $fieldError = static function (string $field) use ($errors): string {
     return '<p class="field-error" id="' . e($field) . '-error">' . e($errors[$field]) . '</p>';
 };
 
+// Menu icons for sections without an image in imges/ (inline, decorative).
+$menuIcons = [
+    'security' => '<svg class="profile-menu-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><path d="M12 15v2"/></svg>',
+    'delete' => '<svg class="profile-menu-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>',
+];
+
 page_header($sections[$section]['label'], ['profilePage.css']);
 ?>
         <div class="page-container profile-page">
@@ -135,15 +236,19 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                 <aside class="profile-side">
                     <a class="profile-back" href="Home_Page.php">
                         <img src="imges/arrow.png" alt="" width="30" height="30">
-                        <span class="sr-only">Back to home</span>
+                        <span class="sr-only"><?= e(t('account.back_home')) ?></span>
                     </a>
-                    <h1 class="profile-side-title">Account Settings</h1>
-                    <nav aria-label="Account settings">
+                    <h1 class="profile-side-title"><?= e(t('account.title')) ?></h1>
+                    <nav aria-label="<?= e(t('account.nav_label')) ?>">
                         <ul class="profile-menu">
 <?php foreach ($sections as $key => $info): ?>
                             <li>
-                                <a class="profile-menu-link" href="profilePage.php?section=<?= e($key) ?>" data-section="<?= e($key) ?>"<?= $key === $section ? ' aria-current="page"' : '' ?>>
+                                <a class="profile-menu-link<?= $key === 'delete' ? ' profile-menu-danger' : '' ?>" href="profilePage.php?section=<?= e($key) ?>" data-section="<?= e($key) ?>" data-title="<?= e($info['label'] . ' · ' . $appName) ?>"<?= $key === $section ? ' aria-current="page"' : '' ?>>
+<?php if ($info['icon'] !== null): ?>
                                     <img src="<?= e($info['icon']) ?>" alt="" width="32" height="32">
+<?php else: ?>
+                                    <?= $menuIcons[$key] . "\n" ?>
+<?php endif; ?>
                                     <span><?= e($info['label']) ?></span>
                                 </a>
                             </li>
@@ -153,7 +258,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                                     <?= csrf_field() ?>
                                     <button type="submit" class="profile-menu-link">
                                         <img src="imges/SignOut.png" alt="" width="32" height="32">
-                                        <span>Sign out</span>
+                                        <span><?= e(t('account.sign_out')) ?></span>
                                     </button>
                                 </form>
                             </li>
@@ -163,66 +268,94 @@ page_header($sections[$section]['label'], ['profilePage.css']);
 
                 <div class="profile-content">
                     <section class="profile-section" id="section-account" data-section-panel="account" aria-labelledby="account-title"<?= $section === 'account' ? '' : ' hidden' ?>>
-                        <h2 id="account-title" class="profile-section-title" tabindex="-1">Account Info</h2>
+                        <h2 id="account-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.account')) ?></h2>
 
                         <form class="profile-form" method="post" action="profilePage.php" enctype="multipart/form-data" data-once>
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="update_profile">
 
                             <div class="avatar-picker">
-                                <img id="avatar-preview" class="avatar-preview" src="<?= e(avatar_url($user['profile_image'] ?? null)) ?>" alt="Your current profile picture" width="160" height="160" data-avatar-preview>
+                                <img id="avatar-preview" class="avatar-preview" src="<?= e(avatar_url($user['profile_image'] ?? null)) ?>" alt="<?= e(t('account.profile.avatar_alt')) ?>" width="160" height="160" data-avatar-preview>
                                 <p class="avatar-status" data-avatar-status aria-live="polite"></p>
                             </div>
 
                             <div class="form-field">
-                                <label for="profile_image">Profile picture</label>
+                                <label for="profile_image"><?= e(t('account.profile.picture')) ?></label>
                                 <input type="hidden" name="MAX_FILE_SIZE" value="<?= (int) AVATAR_MAX_BYTES ?>">
-                                <input type="file" id="profile_image" name="profile_image" class="form-control file-control" accept="image/jpeg,image/png,image/gif,image/webp" data-avatar-input data-max-bytes="<?= (int) AVATAR_MAX_BYTES ?>"<?= $fieldAria('profile_image', 'profile_image-hint') ?>>
-                                <p class="form-hint" id="profile_image-hint">JPEG, PNG, GIF or WebP, up to 2 MB</p>
+                                <input type="file" id="profile_image" name="profile_image" class="form-control file-control" accept="image/jpeg,image/png,image/gif,image/webp" data-avatar-input data-max-bytes="<?= (int) AVATAR_MAX_BYTES ?>"
+                                    data-i18n-choose="<?= e(t('account.profile.js.choose')) ?>"
+                                    data-i18n-type-error="<?= e(t('account.profile.js.type_error')) ?>"
+                                    data-i18n-size-error="<?= e(t('account.profile.js.size_error')) ?>"
+                                    data-i18n-preview-alt="<?= e(t('account.profile.js.preview_alt')) ?>"
+                                    data-i18n-selected="<?= e(t('account.profile.js.selected')) ?>"<?= $fieldAria('profile_image', 'profile_image-hint') ?>>
+                                <p class="form-hint" id="profile_image-hint"><?= e(t('account.profile.picture_hint')) ?></p>
                                 <?= $fieldError('profile_image') ?>
                             </div>
 
                             <div class="form-field">
-                                <label for="name">Full name</label>
+                                <label for="name"><?= e(t('account.profile.name')) ?></label>
                                 <input type="text" id="name" name="name" class="form-control" dir="auto" value="<?= e($nameValue) ?>" required maxlength="<?= (int) NAME_MAX_LENGTH ?>" autocomplete="name"<?= $fieldAria('name') ?>>
                                 <?= $fieldError('name') ?>
                             </div>
 
                             <div class="form-field">
-                                <label for="email">Email</label>
+                                <label for="email"><?= e(t('account.profile.email')) ?></label>
                                 <input type="email" id="email" class="form-control" value="<?= e($user['Eaddress']) ?>" readonly aria-describedby="email-hint">
-                                <p class="form-hint" id="email-hint">Your email is your sign-in address and cannot be changed here.</p>
+                                <p class="form-hint" id="email-hint"><?= e(t('account.profile.email_hint')) ?></p>
                             </div>
 
                             <div class="form-field">
-                                <label for="favorite_genre">Favorite genre</label>
+                                <label for="favorite_genre"><?= e(t('account.profile.favorite_genre')) ?></label>
                                 <input type="text" id="favorite_genre" name="favorite_genre" class="form-control" dir="auto" value="<?= e($genreValue) ?>" required maxlength="100" list="genre-options" autocomplete="off"<?= $fieldAria('favorite_genre', 'favorite_genre-hint') ?>>
                                 <datalist id="genre-options">
 <?php foreach ($genres as $genre): ?>
                                     <option value="<?= e($genre) ?>"></option>
 <?php endforeach; ?>
                                 </datalist>
-                                <p class="form-hint" id="favorite_genre-hint">Choose a genre from the list or type your own.</p>
+                                <p class="form-hint" id="favorite_genre-hint"><?= e(t('account.profile.favorite_genre_hint')) ?></p>
                                 <?= $fieldError('favorite_genre') ?>
                             </div>
 
                             <div class="form-field">
-                                <label for="date_of_birth">Date of birth <span class="optional">(optional)</span></label>
+                                <label for="date_of_birth"><?= e(t('account.profile.date_of_birth')) ?> <span class="optional"><?= e(t('account.profile.optional')) ?></span></label>
                                 <input type="date" id="date_of_birth" name="date_of_birth" class="form-control" value="<?= e($dobValue) ?>" min="1900-01-01" max="<?= e($today) ?>" autocomplete="bday"<?= $fieldAria('date_of_birth') ?>>
                                 <?= $fieldError('date_of_birth') ?>
                             </div>
 
                             <div class="form-actions">
-                                <button type="submit" class="btn profile-submit">Update Profile</button>
+                                <button type="submit" class="btn profile-submit"><?= e(t('account.profile.submit')) ?></button>
                             </div>
                         </form>
+
+                        <section class="profile-subsection" aria-labelledby="language-title">
+                            <h3 id="language-title" class="profile-subsection-title"><?= e(t('account.language.heading')) ?></h3>
+                            <form class="profile-form" method="post" action="profilePage.php">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="update_language">
+
+                                <div class="form-field">
+                                    <label for="locale"><?= e(t('account.language.label')) ?></label>
+                                    <select id="locale" name="locale" class="form-control"<?= $fieldAria('locale', 'locale-hint') ?>>
+<?php foreach (SUPPORTED_LOCALES as $code => $nativeName): ?>
+                                        <option value="<?= e($code) ?>" lang="<?= e($code) ?>"<?= $code === $accountLocale ? ' selected' : '' ?>><?= e($nativeName) ?></option>
+<?php endforeach; ?>
+                                    </select>
+                                    <p class="form-hint" id="locale-hint"><?= e(t('account.language.hint')) ?></p>
+                                    <?= $fieldError('locale') ?>
+                                </div>
+
+                                <div class="form-actions">
+                                    <button type="submit" class="btn profile-submit"><?= e(t('account.language.submit')) ?></button>
+                                </div>
+                            </form>
+                        </section>
                     </section>
 
                     <section class="profile-section" id="section-payment" data-section-panel="payment" aria-labelledby="payment-title"<?= $section === 'payment' ? '' : ' hidden' ?>>
-                        <h2 id="payment-title" class="profile-section-title" tabindex="-1">Payment Preference</h2>
-                        <p class="profile-intro" id="payment-intro">Card details are entered securely on Stripe's checkout page at payment time. <?= e(config('app.name', 'BookWise')) ?> never stores card numbers.</p>
+                        <h2 id="payment-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.payment')) ?></h2>
+                        <p class="profile-intro" id="payment-intro"><?= e(t('account.payment.intro', ['app' => $appName])) ?></p>
 <?php if ($legacyPreference): ?>
-                        <p class="profile-notice">Your previous entry was cleared for your security — please choose a preference.</p>
+                        <p class="profile-notice"><?= e(t('account.payment.legacy_notice')) ?></p>
 <?php endif; ?>
 
                         <form class="profile-form" method="post" action="profilePage.php">
@@ -230,28 +363,28 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                             <input type="hidden" name="action" value="update_payment">
 
                             <div class="form-field">
-                                <label for="payment_method">Preferred payment method</label>
+                                <label for="payment_method"><?= e(t('account.payment.label')) ?></label>
                                 <select id="payment_method" name="payment_method" class="form-control"<?= $fieldAria('payment_method', 'payment-intro') ?>>
-                                    <option value=""<?= $selectedPreference === '' ? ' selected' : '' ?>>No preference</option>
+                                    <option value=""<?= $selectedPreference === '' ? ' selected' : '' ?>><?= e(t('account.payment.none')) ?></option>
 <?php foreach (PAYMENT_PREFERENCES as $preference): ?>
-                                    <option value="<?= e($preference) ?>"<?= $selectedPreference === $preference ? ' selected' : '' ?>><?= e($preference) ?></option>
+                                    <option value="<?= e($preference) ?>"<?= $selectedPreference === $preference ? ' selected' : '' ?>><?= e(t('account.payment.options.' . $preference)) ?></option>
 <?php endforeach; ?>
                                 </select>
                                 <?= $fieldError('payment_method') ?>
                             </div>
 
                             <div class="form-actions">
-                                <button type="submit" class="btn profile-submit">Save Preference</button>
+                                <button type="submit" class="btn profile-submit"><?= e(t('account.payment.submit')) ?></button>
                             </div>
                         </form>
                     </section>
 
                     <section class="profile-section" id="section-orders" data-section-panel="orders" aria-labelledby="orders-title"<?= $section === 'orders' ? '' : ' hidden' ?>>
-                        <h2 id="orders-title" class="profile-section-title" tabindex="-1">My Orders</h2>
+                        <h2 id="orders-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.orders')) ?></h2>
 <?php if ($orders === []): ?>
                         <div class="empty-state order-empty">
-                            <p>You haven't placed any orders yet.</p>
-                            <a class="btn" href="Explore_Page.php">Explore books</a>
+                            <p><?= e(t('account.orders.empty')) ?></p>
+                            <a class="btn" href="Explore_Page.php"><?= e(t('account.orders.explore')) ?></a>
                         </div>
 <?php else: ?>
                         <ol class="order-list">
@@ -259,13 +392,14 @@ page_header($sections[$section]['label'], ['profilePage.css']);
 <?php
     $status = (string) $order['status'];
     $placedAt = new DateTimeImmutable((string) $order['created_at']);
+    $placedHtml = '<time datetime="' . e($placedAt->format(DATE_ATOM)) . '">' . e($placedAt->format(t('account.orders.date_format'))) . '</time>';
 ?>
                             <li class="order-card">
                                 <div class="order-head">
-                                    <h3 class="order-number">Order #<?= (int) $order['id'] ?></h3>
-                                    <span class="status-badge status-<?= e($status) ?>"><?= e($status) ?></span>
+                                    <h3 class="order-number"><?= e(t('account.orders.number', ['id' => (int) $order['id']])) ?></h3>
+                                    <span class="status-badge status-<?= e($status) ?>"><?= e(t('account.orders.status.' . $status)) ?></span>
                                 </div>
-                                <p class="order-date">Placed <time datetime="<?= e($placedAt->format(DATE_ATOM)) ?>"><?= e($placedAt->format('j M Y, H:i')) ?></time></p>
+                                <p class="order-date"><?= t_html('account.orders.placed', ['date' => $placedHtml]) ?></p>
 <?php if ($order['items'] !== []): ?>
                                 <ul class="order-items">
 <?php foreach ($order['items'] as $item): ?>
@@ -275,16 +409,94 @@ page_header($sections[$section]['label'], ['profilePage.css']);
 <?php else: ?>
                                         <span dir="auto"><?= e($item['title']) ?></span>
 <?php endif; ?>
-                                        <span class="order-qty">× <?= (int) $item['quantity'] ?></span>
+                                        <span class="order-qty"><?= e(t('account.orders.quantity', ['count' => (int) $item['quantity']])) ?></span>
                                     </li>
 <?php endforeach; ?>
                                 </ul>
 <?php endif; ?>
-                                <p class="order-total">Total <strong><?= e(format_money((string) $order['total_amount'], (string) $order['currency'])) ?></strong></p>
+                                <p class="order-total"><?= e(t('account.orders.total')) ?> <strong dir="ltr"><?= e(format_money((string) $order['total_amount'], (string) $order['currency'])) ?></strong></p>
                             </li>
 <?php endforeach; ?>
                         </ol>
 <?php endif; ?>
+                    </section>
+
+                    <section class="profile-section" id="section-security" data-section-panel="security" aria-labelledby="security-title"<?= $section === 'security' ? '' : ' hidden' ?>>
+                        <h2 id="security-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.security')) ?></h2>
+                        <p class="profile-intro"><?= e(t('account.security.intro')) ?></p>
+
+                        <form class="profile-form password-form" method="post" action="profilePage.php" data-once
+                            data-i18n-mismatch="<?= e(t('auth.js.password_mismatch')) ?>" data-i18n-too-long="<?= e(t('auth.js.password_too_long')) ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="change_password">
+                            <?php /* Unnamed, so never submitted: lets password managers pair the new password with the account. */ ?>
+                            <input type="email" autocomplete="username" value="<?= e($user['Eaddress']) ?>" readonly hidden>
+
+                            <div class="form-field">
+                                <label for="current_password"><?= e(t('account.security.current_password')) ?></label>
+                                <input type="password" id="current_password" name="current_password" class="form-control" autocomplete="current-password" maxlength="255" required<?= $fieldAria('current_password') ?>>
+                                <?= $fieldError('current_password') ?>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="new_password"><?= e(t('account.security.new_password')) ?></label>
+                                <input type="password" id="new_password" name="new_password" class="form-control" autocomplete="new-password"
+                                    minlength="<?= PASSWORD_MIN_LENGTH ?>" maxlength="<?= PASSWORD_MAX_BYTES ?>" data-max-bytes="<?= PASSWORD_MAX_BYTES ?>" required<?= $fieldAria('new_password', 'new_password-hint') ?>>
+                                <p class="form-hint" id="new_password-hint"><?= e(tn('auth.password_hint', PASSWORD_MIN_LENGTH)) ?></p>
+                                <?= $fieldError('new_password') ?>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="new_password_confirmation"><?= e(t('account.security.new_password_confirmation')) ?></label>
+                                <input type="password" id="new_password_confirmation" name="new_password_confirmation" class="form-control" autocomplete="new-password"
+                                    minlength="<?= PASSWORD_MIN_LENGTH ?>" maxlength="<?= PASSWORD_MAX_BYTES ?>" data-match="new_password" required<?= $fieldAria('new_password_confirmation') ?>>
+                                <?= $fieldError('new_password_confirmation') ?>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn profile-submit"><?= e(t('account.security.submit')) ?></button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <section class="profile-section" id="section-delete" data-section-panel="delete" aria-labelledby="delete-title"<?= $section === 'delete' ? '' : ' hidden' ?>>
+                        <h2 id="delete-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.delete')) ?></h2>
+                        <p class="profile-notice danger-notice"><?= e(t('account.delete.intro')) ?></p>
+
+                        <div class="delete-summary">
+                            <h3 class="profile-subsection-title"><?= e(t('account.delete.removed_heading')) ?></h3>
+                            <ul class="delete-list">
+<?php foreach (['profile', 'shopping', 'reviews', 'purchases', 'security'] as $item): ?>
+                                <li><?= e(t('account.delete.removed.' . $item)) ?></li>
+<?php endforeach; ?>
+                            </ul>
+                            <h3 class="profile-subsection-title"><?= e(t('account.delete.kept_heading')) ?></h3>
+                            <p class="delete-kept"><?= e(t('account.delete.kept')) ?></p>
+                        </div>
+
+                        <form class="profile-form delete-form" method="post" action="profilePage.php" data-once data-confirm="<?= e(t('account.delete.confirm_prompt')) ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="delete_account">
+                            <input type="email" autocomplete="username" value="<?= e($user['Eaddress']) ?>" readonly hidden>
+
+                            <div class="form-field">
+                                <label for="delete_password"><?= e(t('account.delete.password')) ?></label>
+                                <input type="password" id="delete_password" name="delete_password" class="form-control" autocomplete="current-password" maxlength="255" required<?= $fieldAria('delete_password') ?>>
+                                <?= $fieldError('delete_password') ?>
+                            </div>
+
+                            <div class="form-field checkbox-field">
+                                <div class="checkbox-row">
+                                    <input type="checkbox" id="confirm_delete" name="confirm_delete" value="yes" required<?= $fieldAria('confirm_delete') ?>>
+                                    <label for="confirm_delete"><?= e(t('account.delete.confirm')) ?></label>
+                                </div>
+                                <?= $fieldError('confirm_delete') ?>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-danger profile-submit delete-submit"><?= e(t('account.delete.submit')) ?></button>
+                            </div>
+                        </form>
                     </section>
                 </div>
             </div>

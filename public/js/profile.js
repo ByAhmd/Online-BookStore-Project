@@ -1,5 +1,7 @@
-// Profile page: switches sections without a reload and previews a chosen avatar.
+// Profile page: switches sections without a reload, previews a chosen avatar
+// and gives quick feedback on the change-password form.
 // Without JavaScript the menu links load ?section=... and the server shows that section.
+// Every message comes from data-i18n-* attributes rendered in the page's language.
 document.addEventListener('DOMContentLoaded', () => {
     const links = Array.from(document.querySelectorAll('.profile-menu-link[data-section]'));
     const panels = Array.from(document.querySelectorAll('[data-section-panel]'));
@@ -15,8 +17,9 @@ document.addEventListener('DOMContentLoaded', () => {
         links.forEach((link) => {
             if (link.dataset.section === name) {
                 link.setAttribute('aria-current', 'page');
-                const label = link.textContent.trim();
-                document.title = document.title.replace(/^.*?(?= · BookWise$)/, label);
+                if (link.dataset.title) {
+                    document.title = link.dataset.title;
+                }
             } else {
                 link.removeAttribute('aria-current');
             }
@@ -50,6 +53,42 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // After a failed submission, start on the first field the server rejected.
+    const invalid = Array.from(document.querySelectorAll('.profile-content [aria-invalid="true"]'))
+        .find((field) => !field.closest('[hidden]'));
+    if (invalid) {
+        invalid.focus();
+    }
+
+    // Change password: the confirmation must match and bcrypt only uses 72 bytes
+    // (mirrors the server rules, which are checked again on submit).
+    document.querySelectorAll('form.password-form').forEach((form) => {
+        // A non-empty validity message is required to block submission; '⚠' only shows if the attribute is missing.
+        const message = (name) => form.dataset[name] || '⚠';
+        form.querySelectorAll('input[data-match]').forEach((confirmation) => {
+            const source = form.querySelector(`#${confirmation.dataset.match}`);
+            if (!source) {
+                return;
+            }
+            const check = () => {
+                const mismatch = confirmation.value !== '' && confirmation.value !== source.value;
+                confirmation.setCustomValidity(mismatch ? message('i18nMismatch') : '');
+            };
+            source.addEventListener('input', check);
+            confirmation.addEventListener('input', check);
+        });
+        if ('TextEncoder' in window) {
+            const encoder = new TextEncoder();
+            form.querySelectorAll('input[data-max-bytes]').forEach((input) => {
+                const max = Number(input.dataset.maxBytes);
+                input.addEventListener('input', () => {
+                    const tooLong = encoder.encode(input.value).length > max;
+                    input.setCustomValidity(tooLong ? message('i18nTooLong').replace(':max', String(max)) : '');
+                });
+            });
+        }
+    });
+
     // Avatar: clicking the picture opens the (labelled) file input; a chosen
     // image is checked and previewed before upload. The server re-validates it.
     const input = document.querySelector('[data-avatar-input]');
@@ -65,14 +104,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const originalAlt = preview.getAttribute('alt');
 
     preview.classList.add('is-clickable');
-    preview.title = 'Choose a new profile picture';
+    preview.title = input.dataset.i18nChoose || '';
     preview.addEventListener('click', () => input.click());
 
-    const resetPreview = (message) => {
+    const resetPreview = (text) => {
         preview.src = originalSrc;
         preview.alt = originalAlt;
-        status.textContent = message;
-        status.classList.toggle('is-error', message !== '');
+        status.textContent = text;
+        status.classList.toggle('is-error', text !== '');
     };
 
     input.addEventListener('change', () => {
@@ -83,12 +122,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!allowedTypes.includes(file.type)) {
             input.value = '';
-            resetPreview('Please choose a JPEG, PNG, GIF or WebP image.');
+            resetPreview(input.dataset.i18nTypeError || '');
             return;
         }
         if (file.size > maxBytes) {
             input.value = '';
-            resetPreview('That picture is larger than 2 MB. Please choose a smaller one.');
+            resetPreview(input.dataset.i18nSizeError || '');
             return;
         }
 
@@ -97,11 +136,11 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.addEventListener('load', () => {
             if (typeof reader.result === 'string') {
                 preview.src = reader.result;
-                preview.alt = 'Preview of your new profile picture';
+                preview.alt = input.dataset.i18nPreviewAlt || originalAlt;
             }
         });
         reader.readAsDataURL(file);
         status.classList.remove('is-error');
-        status.textContent = 'New picture selected. Select "Update Profile" to save it.';
+        status.textContent = input.dataset.i18nSelected || '';
     });
 });

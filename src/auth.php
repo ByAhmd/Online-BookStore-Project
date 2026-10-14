@@ -275,14 +275,14 @@ function require_user(): array
         return $user;
     }
     if (is_admin()) {
-        flash('info', 'Administrator accounts manage the catalog. Sign in with a customer account to shop.');
+        flash('info', t('auth.guard.admin_shop'));
         redirect('admin_dashboard.php');
     }
 
     if (request_method() === 'GET') {
         remember_intended_url();
     }
-    flash('info', 'Please log in to continue.');
+    flash('info', t('auth.guard.login_required'));
     redirect('index.php?form=login');
 }
 
@@ -298,12 +298,12 @@ function require_admin(): array
         return $admin;
     }
     if (current_user() !== null) {
-        abort(403, 'You do not have permission to access the admin area.');
+        abort(403, t('auth.guard.admin_forbidden'));
     }
     if (request_method() === 'GET') {
         remember_intended_url();
     }
-    flash('info', 'Please log in with an administrator account.');
+    flash('info', t('auth.guard.admin_login_required'));
     redirect('index.php?form=login');
 }
 
@@ -331,4 +331,172 @@ function post_login_redirect(string $type): string
         return preg_match('/^(admin_dashboard|edit_book)\.php/', $target) ? $target : 'admin_dashboard.php';
     }
     return safe_redirect_path($intended, 'Home_Page.php');
+}
+
+/**
+ * Translates $key into escaped HTML whose :placeholders listed in $html are
+ * replaced by ready-made HTML fragments (escape their contents yourself), so
+ * a translation can put markup such as <strong> wherever its language needs it.
+ *
+ * @param array<string, string> $html placeholder => HTML fragment
+ * @param array<string, string|int|float> $replace plain-text placeholders
+ */
+function t_html(string $key, array $html, array $replace = []): string
+{
+    $markers = [];
+    foreach (array_keys($html) as $name) {
+        $markers[$name] = "\u{E000}" . $name . "\u{E001}";
+    }
+    $text = e(t($key, $markers + $replace));
+    foreach ($html as $name => $fragment) {
+        $text = str_replace($markers[$name], $fragment, $text);
+    }
+    return $text;
+}
+
+/* ---------------------------------------------------------------------
+ * Localized validation messages for the sign-in forms
+ * (the rules themselves live in validation.php)
+ * ------------------------------------------------------------------- */
+
+function email_error(string $email): ?string
+{
+    if (validate_email($email) === null) {
+        return null;
+    }
+    return $email === '' ? t('auth.validation.email_required') : t('auth.validation.email_invalid');
+}
+
+function person_name_error(string $name): ?string
+{
+    if (validate_person_name($name) === null) {
+        return null;
+    }
+    if ($name === '') {
+        return t('auth.validation.name_required');
+    }
+    if (mb_strlen($name) > NAME_MAX_LENGTH) {
+        return tn('auth.validation.name_too_long', NAME_MAX_LENGTH);
+    }
+    return t('auth.validation.name_invalid');
+}
+
+/**
+ * Validates a new password and its confirmation. A valid password that only
+ * differs from its confirmation is reported on the confirmation field.
+ *
+ * @return array<string, string> field => message (empty when valid)
+ */
+function new_password_errors(string $password, string $confirmation, string $field, string $confirmationField): array
+{
+    if (validate_new_password($password, $confirmation) === null) {
+        return [];
+    }
+    if (mb_strlen($password) < PASSWORD_MIN_LENGTH) {
+        return [$field => tn('auth.validation.password_too_short', PASSWORD_MIN_LENGTH)];
+    }
+    if (strlen($password) > PASSWORD_MAX_BYTES) {
+        return [$field => tn('auth.validation.password_too_long', PASSWORD_MAX_BYTES)];
+    }
+    return [$confirmationField => t('auth.validation.password_mismatch')];
+}
+
+/**
+ * Reads a password field exactly as typed (never trimmed); non-strings are empty.
+ *
+ * @param array<string, mixed> $source
+ */
+function input_password(array $source, string $key): string
+{
+    $value = $source[$key] ?? '';
+    return is_string($value) ? $value : '';
+}
+
+/* ---------------------------------------------------------------------
+ * Changing the password of a signed-in customer
+ * ------------------------------------------------------------------- */
+
+/**
+ * Changes a customer's password after checking the current one. A wrong
+ * current password counts as a failed sign-in for throttling. On success
+ * session_version is incremented (every other session is signed out) and
+ * outstanding reset links stop working; the caller keeps its own session
+ * with keep_session_after_password_change().
+ *
+ * @return array{status: 'changed'|'wrong_password'|'throttled', session_version: int|null}
+ */
+function change_user_password(int $userId, string $currentPassword, string $newPassword, string $ip): array
+{
+    $email = db_value('SELECT Eaddress FROM users WHERE id = ?', [$userId]);
+    if (!is_string($email)) {
+        return ['status' => 'wrong_password', 'session_version' => null];
+    }
+    if (login_is_throttled($email, $ip)) {
+        return ['status' => 'throttled', 'session_version' => null];
+    }
+
+    $newHash = hash_password($newPassword);
+    $version = db_transaction(static function () use ($userId, $email, $currentPassword, $newHash): ?int {
+        $row = db_one('SELECT pass FROM users WHERE id = ? FOR UPDATE', [$userId]);
+        if ($row === null || !check_password($currentPassword, (string) $row['pass'])['valid']) {
+            return null;
+        }
+        db_run('UPDATE users SET pass = ?, session_version = session_version + 1 WHERE id = ?', [$newHash, $userId]);
+        db_run('DELETE FROM reset_tokens WHERE email = ?', [$email]);
+        return (int) db_value('SELECT session_version FROM users WHERE id = ?', [$userId]);
+    });
+
+    if ($version === null) {
+        record_failed_login($email, $ip);
+        return ['status' => 'wrong_password', 'session_version' => null];
+    }
+    clear_failed_logins($email);
+    return ['status' => 'changed', 'session_version' => $version];
+}
+
+/**
+ * Keeps the current session signed in after its own password change: it
+ * adopts the new session_version and gets a new session ID and CSRF token.
+ */
+function keep_session_after_password_change(int $sessionVersion): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_regenerate_id(true);
+    }
+    $_SESSION['session_version'] = $sessionVersion;
+    rotate_csrf_token();
+}
+
+/**
+ * Tells the account owner that their password was changed.
+ */
+function send_password_changed_email(int $userId): void
+{
+    $account = find_user_account($userId);
+    if ($account === null) {
+        return;
+    }
+    $name = email_verification_required() && $account['email_verified_at'] === null ? '' : $account['name'];
+    $resetLink = absolute_url('index.php?form=reset');
+    $sent = send_localized_mail($account['Eaddress'], $name, $account['locale'], static function () use ($name, $resetLink): array {
+        $greeting = $name !== '' ? t('auth.mail.greeting_name', ['name' => $name]) : t('auth.mail.greeting');
+        return [
+            t('account.mail.password_changed.subject'),
+            mail_html_layout(
+                '<p>' . e($greeting) . '</p>'
+                . '<p>' . e(t('account.mail.password_changed.body')) . '</p>'
+                . '<p>' . e(t('account.mail.password_changed.not_you')) . ' '
+                . '<a href="' . e($resetLink) . '">' . e(t('account.mail.password_changed.reset')) . '</a></p>'
+                . mail_html_signature()
+            ),
+            $greeting . "\n\n"
+                . t('account.mail.password_changed.body') . "\n\n"
+                . t('account.mail.password_changed.not_you') . "\n"
+                . t('account.mail.password_changed.reset') . ': ' . $resetLink . "\n\n"
+                . mail_text_signature(),
+        ];
+    });
+    if (!$sent) {
+        app_log('warning', 'Password change email could not be sent', ['user_id' => $userId]);
+    }
 }

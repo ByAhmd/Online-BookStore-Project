@@ -11,11 +11,11 @@ if (!is_post()) {
 
 // Already signed out (for example after the session expired): nothing to protect.
 if (current_user() === null && current_admin() === null) {
-    flash('info', 'You have been logged out.');
+    flash('info', t('auth.logout.done'));
     redirect('index.php?form=login');
 }
 
 verify_csrf();
 logout_session();
-flash('info', 'You have been logged out.');
+flash('info', t('auth.logout.done'));
 redirect('index.php?form=login');

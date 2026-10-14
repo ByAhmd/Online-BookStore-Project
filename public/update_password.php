@@ -7,28 +7,27 @@ require __DIR__ . '/../src/bootstrap.php';
 require_post();
 verify_csrf();
 
-$invalidLinkMessage = 'This reset link is invalid or has expired. Please request a new one.';
-
 $token = input_string($_POST, 'token', 128);
 if (!preg_match('/^[a-f0-9]{64}$/D', $token)) {
-    flash('error', $invalidLinkMessage);
+    flash('error', t('auth.reset.invalid_link'));
     redirect('index.php?form=reset');
 }
 
 // Passwords are used exactly as typed (never trimmed).
-$password = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
-$confirmation = is_string($_POST['password_confirmation'] ?? null) ? $_POST['password_confirmation'] : '';
+$password = input_password($_POST, 'password');
+$confirmation = input_password($_POST, 'password_confirmation');
 
-if (($error = validate_new_password($password, $confirmation)) !== null) {
-    $mismatchOnly = validate_new_password($password, $password) === null;
-    remember_errors([$mismatchOnly ? 'password_confirmation' : 'password' => $error]);
+$errors = new_password_errors($password, $confirmation, 'password', 'password_confirmation');
+if ($errors !== []) {
+    remember_errors($errors);
     redirect('reset_form.php?token=' . $token);
 }
 
+// Completing a reset also confirms the account's email address.
 if (!complete_password_reset($token, $password)) {
-    flash('error', $invalidLinkMessage);
+    flash('error', t('auth.reset.invalid_link'));
     redirect('index.php?form=reset');
 }
 
-flash('success', 'Your password has been updated. You can now log in.');
+flash('success', t('auth.reset.updated'));
 redirect('index.php?form=login');
