@@ -1,0 +1,44 @@
+# Weekly dependency updates. Minor and patch updates of each ecosystem come
+# as one grouped pull request; major updates come one by one. CI runs on each
+# pull request (.github/workflows/ci.yml).
+version: 2
+updates:
+  # composer.json / composer.lock (resolved for PHP 8.1, see config.platform)
+  - package-ecosystem: composer
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      composer:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # The actions in .github/workflows, pinned to commit SHAs
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # Base images of the Dockerfile (composer, php:*-apache)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      docker:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # Images of docker-compose.yml (the local MySQL)
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      docker-compose:
+        patterns: ['*']
+        update-types: [minor, patch]

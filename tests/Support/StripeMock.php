@@ -199,8 +199,14 @@ final class StripeMock
             'ignore_errors' => true,
             'timeout' => 10,
         ]]);
-        $body = @file_get_contents($this->baseUrl . $path, false, $context);
-        $statusLine = $http_response_header[0] ?? '';
+        // The response headers come from the stream's metadata: the
+        // $http_response_header variable is deprecated as of PHP 8.5.
+        $stream = @fopen($this->baseUrl . $path, 'r', false, $context);
+        $body = $stream !== false ? stream_get_contents($stream) : false;
+        $statusLine = $stream !== false ? (string) (stream_get_meta_data($stream)['wrapper_data'][0] ?? '') : '';
+        if ($stream !== false) {
+            fclose($stream);
+        }
         if ($body === false || !preg_match('#^HTTP/\S+ (\d{3})#', $statusLine, $m)) {
             throw new RuntimeException("Stripe mock request $method $path failed. Server log:\n" . $this->serverLog());
         }

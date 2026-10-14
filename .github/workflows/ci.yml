@@ -10,23 +10,33 @@ permissions:
 
 jobs:
   test:
-    name: PHP ${{ matrix.php }}
+    name: PHP ${{ matrix.php }}, ${{ matrix.database }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.1', '8.2', '8.3', '8.4']
+        php: ['8.1', '8.2', '8.3', '8.4', '8.5']
+        # MySQL 8.4 LTS for every PHP version (MySQL 8.0 reached its end of
+        # life in April 2026).
+        database: ['mysql:8.4']
+        include:
+          # MariaDB, the other supported server, on one PHP version.
+          - php: '8.4'
+            database: 'mariadb:11.4'
 
     services:
-      mysql:
-        image: mysql:8.0
+      database:
+        image: ${{ matrix.database }}
         env:
+          # The mysql image reads MYSQL_*; the mariadb image prefers MARIADB_* (equal values are fine).
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: bookwise_test
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: bookwise_test
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-cmd="${{ startsWith(matrix.database, 'mariadb') && 'mariadb-admin' || 'mysqladmin' }} ping -h 127.0.0.1 -proot"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
@@ -37,13 +47,15 @@ jobs:
       DB_NAME: bookwise_test
       DB_USER: root
       DB_PASS: root
-      # Database-backed suites must fail, not skip, if MySQL is unreachable.
+      # Database-backed suites must fail, not skip, if the database is unreachable.
       BOOKWISE_REQUIRE_DB: 1
 
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to the commit of a release (named in the comment);
+      # Dependabot proposes updates (.github/dependabot.yml).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           extensions: pdo_mysql, mbstring, curl, fileinfo, gd
