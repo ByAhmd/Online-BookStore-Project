@@ -18,7 +18,14 @@ final class DatabaseTest extends DatabaseTestCase
 
         self::assertSame($pdo, db(), 'One shared connection');
         self::assertSame(PDO::ERRMODE_EXCEPTION, $pdo->getAttribute(PDO::ATTR_ERRMODE));
-        self::assertSame((new DateTimeImmutable('now'))->format('P'), db_value('SELECT @@session.time_zone'), 'NOW() follows the app timezone');
+        // Named zone when the server has time zone tables (DST-aware), else the current UTC offset.
+        self::assertContains(
+            db_value('SELECT @@session.time_zone'),
+            [date_default_timezone_get(), (new DateTimeImmutable('now'))->format('P')],
+            'The session uses the app timezone'
+        );
+        $drift = abs((new DateTimeImmutable((string) db_value('SELECT NOW()')))->getTimestamp() - time());
+        self::assertLessThan(5, $drift, 'NOW() matches the application clock');
         self::assertSame('utf8mb4', db_value('SELECT @@character_set_connection'));
     }
 

@@ -51,6 +51,3 @@ desktop.ini
 *.bak
 *.orig
 *.zip
-
-# Local agent/tooling config
-/.claude/
