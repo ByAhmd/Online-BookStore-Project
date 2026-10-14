@@ -187,6 +187,17 @@ return [
         'done' => 'Your account has been deleted. Thank you for reading with us.',
     ],
 
+    // Demo guests: the one-click demo accounts, which have no password.
+    'demo_guest' => [
+        'email_hint' => 'This demo account has a made-up address, which cannot be changed.',
+        'security' => 'You signed in with the demo button, so this account has no password and none can be set. To choose a password, log out and sign up for an account of your own.',
+        'password_locked' => 'Demo accounts have no password, so none can be set or changed.',
+        'delete_intro' => [
+            'one' => 'Demo accounts are deleted automatically :count hour after they were created. You can also delete this one now; no password is needed.',
+            'other' => 'Demo accounts are deleted automatically :count hours after they were created. You can also delete this one now; no password is needed.',
+        ],
+    ],
+
     'errors' => [
         'unknown_action' => 'Unknown profile action.',
     ],

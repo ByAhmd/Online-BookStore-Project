@@ -17,6 +17,8 @@ declare(strict_types=1);
  *  4. creates the tables and loads the sample catalog (bin/install.php
  *     --seed), or applies pending migrations to an existing BookWise database;
  *  5. optionally creates an administrator.
+ * At the end it names the command for the daily cleanup of the demo's
+ * one-click accounts (bin/demo-cleanup.php), to run as a scheduled task.
  * All questions come first: nothing is changed until every answer is valid.
  * Passwords are never printed, and on Linux and macOS they are not shown
  * while you type them.
@@ -368,4 +370,6 @@ if ($adminEmail !== '') {
 } else {
     setup_say('  No administrator was created. Create one later with: php bin/create-admin.php you@example.com "Your Name"');
 }
+setup_say('  Visitors can also try the store in one click, as a demo customer or as a read-only administrator.');
+setup_say("  Delete demo customers older than a day with a daily scheduled task: cd $root && php bin/demo-cleanup.php");
 setup_say('  To change a setting, edit ' . $envFile . '.');

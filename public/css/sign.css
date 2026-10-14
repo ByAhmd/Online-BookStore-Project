@@ -76,6 +76,74 @@
     font-weight: 600;
 }
 
+/* ---------------------------------------------------------------------
+   One-click demo accounts (APP_DEMO=true)
+   --------------------------------------------------------------------- */
+
+.auth-page .demo-logins {
+    display: grid;
+    gap: 12px;
+    margin: 0 0 22px;
+    padding: 16px;
+    border: 1px solid #f3d27a;
+    border-inline-start-width: 4px;
+    border-radius: 6px;
+    background-color: #fff8e1;
+    color: #3d2d00;
+}
+
+.auth-page .demo-logins-title {
+    margin: 0;
+    font-size: 1.35rem;
+    line-height: 1.25;
+}
+
+.auth-page .demo-logins-intro {
+    margin: 0;
+}
+
+.auth-page .demo-login {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+}
+
+.auth-page .demo-login .form-hint {
+    color: #4a3a0a;
+    font-size: 0.95rem;
+}
+
+.auth-page .demo-login-button {
+    min-height: 48px;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 4px;
+    background-color: #19393e;
+    color: #ffffff;
+    font: inherit;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.auth-page .demo-login-button:hover {
+    background-color: #006400;
+}
+
+.auth-page .demo-login-admin {
+    background-color: #3c3939;
+}
+
+.auth-page .demo-login-admin:hover {
+    background-color: #000000;
+}
+
+.auth-page .demo-login-button:disabled {
+    background-color: #5f7375;
+    cursor: progress;
+}
+
 /* Email addresses stay left-to-right inside right-to-left text. */
 .auth-page .auth-intro strong[dir="ltr"] {
     unicode-bidi: isolate;

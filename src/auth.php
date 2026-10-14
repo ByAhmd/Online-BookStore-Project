@@ -14,6 +14,14 @@ const ADMIN_ROLE_OWNER = 'owner';
 /** Administrators who may open every admin page but change nothing. */
 const ADMIN_ROLE_VIEWER = 'viewer';
 
+/**
+ * Reserved domain (RFC 2606: it never receives mail) of the demo's made-up
+ * addresses: the one-click demo customers and the shared demo administrator.
+ */
+const DEMO_EMAIL_DOMAIN = 'demo.invalid';
+/** The shared read-only administrator behind the demo's "Try as an administrator" button. */
+const DEMO_VIEWER_ADMIN_EMAIL = 'viewer@' . DEMO_EMAIL_DOMAIN;
+
 /* ---------------------------------------------------------------------
  * Password hashing
  * ------------------------------------------------------------------- */
@@ -363,6 +371,20 @@ function require_admin_write(): array
 }
 
 /**
+ * The name an admin page greets the administrator with. The shared demo
+ * administrator is greeted in the visitor's language.
+ *
+ * @param array<string, mixed> $admin
+ */
+function admin_display_name(array $admin): string
+{
+    if (($admin['Eaddress'] ?? null) === DEMO_VIEWER_ADMIN_EMAIL) {
+        return t('auth.demo.admin_name');
+    }
+    return (string) ($admin['name'] ?? '');
+}
+
+/**
  * True when admin pages may show customers' names and email addresses in
  * full. A read-only administrator sees them shortened (masked_name(),
  * masked_email()): on a public demo every visitor can sign in as one.
@@ -394,6 +416,34 @@ function masked_email(string $email): string
     $domain = substr($email, $at + 1);
     $dot = strrpos($domain, '.');
     return mb_substr($email, 0, 1) . '…@…' . ($dot === false ? '' : substr($domain, $dot));
+}
+
+/**
+ * The shared read-only administrator that the demo's "Try as an
+ * administrator" button signs in to. It is created on first use with a
+ * random password that nobody knows, and is always a viewer: should its row
+ * ever have been given another role (for example with bin/create-admin.php),
+ * the role is set back before anyone signs in with it.
+ *
+ * @return array<string, mixed>
+ */
+function demo_viewer_admin(): array
+{
+    if (db_value('SELECT 1 FROM admins WHERE Eaddress = ?', [DEMO_VIEWER_ADMIN_EMAIL]) === null) {
+        try {
+            db_run(
+                'INSERT INTO admins (Eaddress, name, password, role) VALUES (?, ?, ?, ?)',
+                [DEMO_VIEWER_ADMIN_EMAIL, 'Demo administrator', hash_password(bin2hex(random_bytes(32))), ADMIN_ROLE_VIEWER]
+            );
+        } catch (PDOException $e) {
+            if (!is_duplicate_key_error($e)) {
+                throw $e; // a duplicate means another visitor created it at the same moment
+            }
+        }
+    }
+    db_run('UPDATE admins SET role = ? WHERE Eaddress = ? AND role <> ?', [ADMIN_ROLE_VIEWER, DEMO_VIEWER_ADMIN_EMAIL, ADMIN_ROLE_VIEWER]);
+    return db_one('SELECT Eaddress, name, role FROM admins WHERE Eaddress = ?', [DEMO_VIEWER_ADMIN_EMAIL])
+        ?? throw new RuntimeException('The demo administrator could not be created.');
 }
 
 /**
@@ -473,7 +523,9 @@ function t_html(string $key, array $html, array $replace = []): string
 function email_error(string $email): ?string
 {
     if (validate_email($email) === null) {
-        return null;
+        // The demo's made-up addresses (DEMO_EMAIL_DOMAIN) never receive mail,
+        // and nobody may sign up with, or ask for links to, the demo accounts' addresses.
+        return str_ends_with($email, '@' . DEMO_EMAIL_DOMAIN) ? t('auth.validation.email_invalid') : null;
     }
     return $email === '' ? t('auth.validation.email_required') : t('auth.validation.email_invalid');
 }

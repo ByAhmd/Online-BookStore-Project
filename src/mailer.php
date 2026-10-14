@@ -48,6 +48,10 @@ function send_mail(string $toEmail, string $toName, string $subject, string $htm
                 return file_put_contents(log_path('mail.log'), $entry, FILE_APPEND | LOCK_EX) !== false;
 
             case 'smtp':
+                // The demo accounts' made-up addresses (DEMO_EMAIL_DOMAIN) can never receive mail.
+                if (str_ends_with(normalize_email($toEmail), '@' . DEMO_EMAIL_DOMAIN)) {
+                    return true;
+                }
                 return send_smtp_mail($toEmail, $toName, $subject, $html, $text);
 
             case 'database':

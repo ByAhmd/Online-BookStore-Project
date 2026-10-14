@@ -18,6 +18,7 @@ if (isset($_GET['return'])) {
 
 $verificationRequired = email_verification_required();
 $isDemo = (bool) config('app.demo');
+$demoLogins = demo_logins_enabled();
 $appName = (string) config('app.name', 'BookWise');
 
 $panels = [
@@ -67,6 +68,25 @@ page_header(t('auth.panels.' . $active), ['sign.css'], ['bodyClass' => 'auth-pag
         <div class="auth-shell">
             <div class="auth-card" data-i18n-mismatch="<?= e(t('auth.js.password_mismatch')) ?>" data-i18n-too-long="<?= e(t('auth.js.password_too_long')) ?>">
                 <h1 class="sr-only"><?= e(t('auth.page_heading')) ?></h1>
+<?php if ($demoLogins): ?>
+
+                <section class="demo-logins" id="demo-logins" aria-labelledby="demo-logins-title">
+                    <h2 class="demo-logins-title" id="demo-logins-title"><?= e(t('auth.demo.heading')) ?></h2>
+                    <p class="demo-logins-intro"><?= e(t('auth.demo.intro')) ?></p>
+                    <form class="demo-login" method="post" action="demo_login.php" data-once>
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="as" value="customer">
+                        <button type="submit" class="demo-login-button" aria-describedby="demo-customer-hint"><?= e(t('auth.demo.customer_button')) ?></button>
+                        <p class="form-hint" id="demo-customer-hint"><?= e(tn('auth.demo.customer_hint', DEMO_GUEST_TTL_HOURS)) ?></p>
+                    </form>
+                    <form class="demo-login" method="post" action="demo_login.php" data-once>
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="as" value="admin">
+                        <button type="submit" class="demo-login-button demo-login-admin" aria-describedby="demo-admin-hint"><?= e(t('auth.demo.admin_button')) ?></button>
+                        <p class="form-hint" id="demo-admin-hint"><?= e(t('auth.demo.admin_hint')) ?></p>
+                    </form>
+                </section>
+<?php endif; ?>
 
                 <div class="auth-switch" role="group" aria-label="<?= e(t('auth.choose_form')) ?>">
                     <a class="pill pill-dark" href="index.php?form=signup" data-auth-target="signup"<?= $currentIf('signup') ?>><?= e(t('auth.panels.signup')) ?></a>

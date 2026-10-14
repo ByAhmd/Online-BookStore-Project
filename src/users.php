@@ -495,21 +495,14 @@ function complete_email_verification(string $rawToken): ?array
  * ------------------------------------------------------------------- */
 
 /**
- * Permanently deletes a customer account after checking its password.
- *
- * Open checkouts are resolved first (settle_pending_orders) while holding the
- * customer's checkout lock, so no payment can complete for an account that
- * no longer exists. Then, in one transaction: the customer's reviews and
- * reactions, reset tokens, login attempts, demo inbox messages, the delivery
- * addresses of orders that no longer need them and the users row are deleted
- * (cart, favorites, sales, saved addresses and verification tokens cascade;
- * orders are kept with user_id set to NULL by the schema).
+ * Permanently deletes a customer account after checking its password
+ * (erase_customer_account() describes what is deleted).
  *
  * @return array{status: 'deleted'|'wrong_password'|'throttled'|'unresolved', account: array<string, mixed>|null}
  */
 function delete_customer_account(int $userId, string $password, string $ip): array
 {
-    $user = db_one('SELECT id, Eaddress, name, pass, locale, profile_image FROM users WHERE id = ?', [$userId]);
+    $user = db_one('SELECT Eaddress, pass FROM users WHERE id = ?', [$userId]);
     if ($user === null) {
         return ['status' => 'wrong_password', 'account' => null];
     }
@@ -521,6 +514,41 @@ function delete_customer_account(int $userId, string $password, string $ip): arr
         record_failed_login($email, $ip);
         return ['status' => 'wrong_password', 'account' => null];
     }
+
+    $result = erase_customer_account($userId, (string) $user['pass']);
+    return match ($result['status']) {
+        'deleted' => ['status' => 'deleted', 'account' => $result['account']],
+        // Deleted meanwhile, or the password changed after it was checked.
+        'gone' => ['status' => 'wrong_password', 'account' => null],
+        'unresolved' => ['status' => 'unresolved', 'account' => null],
+    };
+}
+
+/**
+ * Permanently deletes a customer account that the caller has decided may go
+ * (delete_customer_account() checks the password first; demo guests have none).
+ *
+ * Open checkouts are resolved first (settle_pending_orders) while holding the
+ * customer's checkout lock, so no payment can complete for an account that
+ * no longer exists. Then, in one transaction: the customer's reviews and
+ * reactions, reset tokens, login attempts, demo inbox messages and the users
+ * row are deleted (cart, favorites, sales and verification tokens cascade;
+ * orders are kept with user_id set to NULL by the schema). The uploaded
+ * profile picture is left to the caller (account['profile_image']).
+ *
+ * @param string|null $expectedHash The password hash that was checked: the
+ *   account is not deleted ("gone") when its password changed meanwhile
+ * @param bool $dropAbandonedOrders Also delete the checkouts that ended
+ *   without a payment (canceled or expired orders), as for demo guests
+ * @return array{status: 'deleted'|'gone'|'unresolved', account: array<string, mixed>|null}
+ */
+function erase_customer_account(int $userId, ?string $expectedHash = null, bool $dropAbandonedOrders = false): array
+{
+    $user = db_one('SELECT id, Eaddress, name, locale, profile_image FROM users WHERE id = ?', [$userId]);
+    if ($user === null) {
+        return ['status' => 'gone', 'account' => null];
+    }
+    $email = (string) $user['Eaddress'];
 
     // The same lock start_checkout() takes: no new checkout can begin meanwhile.
     $lock = 'bookwise-checkout-' . $userId;
@@ -538,14 +566,18 @@ function delete_customer_account(int $userId, string $password, string $ip): arr
             return ['status' => 'unresolved', 'account' => null];
         }
 
-        $status = db_transaction(static function () use ($userId, $email, $user): string {
+        $status = db_transaction(static function () use ($userId, $email, $expectedHash, $dropAbandonedOrders): string {
             $locked = db_one('SELECT pass FROM users WHERE id = ? FOR UPDATE', [$userId]);
-            if ($locked === null || !hash_equals((string) $user['pass'], (string) $locked['pass'])) {
-                return 'wrong_password'; // deleted, or the password changed meanwhile
+            if ($locked === null || ($expectedHash !== null && !hash_equals($expectedHash, (string) $locked['pass']))) {
+                return 'gone';
             }
             $pending = (int) db_value("SELECT COUNT(*) FROM orders WHERE user_id = ? AND status = 'pending' FOR UPDATE", [$userId]);
             if ($pending > 0) {
                 return 'unresolved';
+            }
+            if ($dropAbandonedOrders) {
+                // No money ever moved for these (their items go with them).
+                db_run("DELETE FROM orders WHERE user_id = ? AND status IN ('canceled', 'expired')", [$userId]);
             }
             db_run('DELETE FROM comment_interactions WHERE user_id = ?', [$userId]);
             // Reactions to the customer's own reviews go with them (ON DELETE CASCADE).
@@ -566,7 +598,6 @@ function delete_customer_account(int $userId, string $password, string $ip): arr
     if ($status !== 'deleted') {
         return ['status' => $status, 'account' => null];
     }
-    unset($user['pass']);
     return ['status' => 'deleted', 'account' => $user];
 }
 
@@ -597,4 +628,169 @@ function send_account_deleted_email(array $account): void
     if (!$sent) {
         app_log('warning', 'Account deletion email could not be sent');
     }
+}
+
+/* ---------------------------------------------------------------------
+ * Demo guests: the throwaway customers of the demo's "Try as a customer"
+ * button (APP_DEMO=true)
+ * ------------------------------------------------------------------- */
+
+/** Demo guests are deleted this long after they were created (bin/demo-cleanup.php). */
+const DEMO_GUEST_TTL_HOURS = 24;
+/** At most this many demo guests exist at once: the oldest make room for new ones. */
+const DEMO_GUESTS_MAX = 200;
+/** One address may create this many demo guests within DEMO_GUEST_RATE_WINDOW_MINUTES. */
+const DEMO_GUEST_RATE_LIMIT = 10;
+const DEMO_GUEST_RATE_WINDOW_MINUTES = 60;
+/** Books a new demo guest finds among its favorites. */
+const DEMO_GUEST_FAVORITES = 3;
+
+/**
+ * True when the sign-in page offers the one-click demo accounts.
+ */
+function demo_logins_enabled(): bool
+{
+    return (bool) config('app.demo');
+}
+
+function is_demo_guest(int $userId): bool
+{
+    return db_value('SELECT 1 FROM users WHERE id = ? AND demo_guest_at IS NOT NULL', [$userId]) !== null;
+}
+
+/**
+ * Creates a demo guest for the "Try as a customer" button: a new, confirmed
+ * customer account named like "Demo reader 4821" (in the visitor's language),
+ * with a random address at the reserved DEMO_EMAIL_DOMAIN and a random
+ * password that nobody knows, and a few books among its favorites. The
+ * caller signs the visitor in to it.
+ *
+ * One address ($ip) may create DEMO_GUEST_RATE_LIMIT guests per
+ * DEMO_GUEST_RATE_WINDOW_MINUTES ("throttled"). At most $maxGuests demo
+ * guests exist at once: the oldest are deleted with their data to make room
+ * ("busy" when that is not possible right now). Creations are serialised
+ * with a named lock, so concurrent clicks cannot overshoot either limit.
+ *
+ * @return array{status: 'created', user: array<string, mixed>}|array{status: 'throttled'|'busy', user: null}
+ */
+function create_demo_guest(string $ip, int $maxGuests = DEMO_GUESTS_MAX): array
+{
+    $lock = 'bookwise-demo-guests';
+    if ((int) db_value('SELECT GET_LOCK(?, 10)', [$lock]) !== 1) {
+        return ['status' => 'busy', 'user' => null];
+    }
+    try {
+        $recent = (int) db_value(
+            'SELECT COUNT(*) FROM demo_guest_creations WHERE ip_address = ? AND created_at > (NOW() - INTERVAL ? MINUTE)',
+            [$ip, DEMO_GUEST_RATE_WINDOW_MINUTES]
+        );
+        if ($recent >= DEMO_GUEST_RATE_LIMIT) {
+            return ['status' => 'throttled', 'user' => null];
+        }
+        if (!make_room_for_demo_guest($maxGuests)) {
+            return ['status' => 'busy', 'user' => null];
+        }
+
+        db_run('INSERT INTO demo_guest_creations (ip_address) VALUES (?)', [$ip]);
+        db_run('DELETE FROM demo_guest_creations WHERE created_at < (NOW() - INTERVAL 1 DAY)');
+
+        $userId = db_transaction(static function (): int {
+            db_run(
+                'INSERT INTO users (Eaddress, name, pass, locale, email_verified_at, demo_guest_at) VALUES (?, ?, ?, ?, NOW(), NOW())',
+                [
+                    'reader-' . bin2hex(random_bytes(12)) . '@' . DEMO_EMAIL_DOMAIN,
+                    t('auth.demo.guest_name', ['number' => random_int(1000, 9999)]),
+                    hash_password(bin2hex(random_bytes(32))),
+                    current_locale(),
+                ]
+            );
+            $userId = (int) db()->lastInsertId();
+            foreach (recommended_books(DEMO_GUEST_FAVORITES) as $book) {
+                db_run('INSERT IGNORE INTO favorites (user_id, book_id) VALUES (?, ?)', [$userId, (int) $book['id']]);
+            }
+            return $userId;
+        });
+    } finally {
+        db_value('SELECT RELEASE_LOCK(?)', [$lock]);
+    }
+
+    $user = find_user($userId) ?? throw new RuntimeException('The new demo guest could not be loaded.');
+    return ['status' => 'created', 'user' => $user];
+}
+
+/**
+ * Deletes the oldest demo guests until fewer than $maxGuests remain, so
+ * that a new one fits. Returns false when that is not possible right now
+ * (their open checkouts could not be settled).
+ */
+function make_room_for_demo_guest(int $maxGuests): bool
+{
+    $excess = (int) db_value('SELECT COUNT(*) FROM users WHERE demo_guest_at IS NOT NULL') - max(1, $maxGuests) + 1;
+    if ($excess <= 0) {
+        return true;
+    }
+    // A few spare candidates, in case some cannot be deleted right now.
+    $oldest = db_all('SELECT id FROM users WHERE demo_guest_at IS NOT NULL ORDER BY demo_guest_at, id LIMIT ' . ($excess + 5));
+    foreach ($oldest as $row) {
+        if ($excess > 0 && delete_demo_guest((int) $row['id']) !== 'unresolved') {
+            $excess--;
+        }
+    }
+    if ($excess > 0) {
+        app_log('warning', 'Demo guest limit reached and the oldest guests could not be deleted yet', ['limit' => $maxGuests]);
+    }
+    return $excess <= 0;
+}
+
+/**
+ * Deletes a demo guest with its data: what any deleted account loses
+ * (erase_customer_account(): cart, favorites, reviews and reactions, demo
+ * inbox messages and so on), its uploaded profile picture, and the
+ * checkouts it abandoned. Paid and refunded orders are kept, anonymised.
+ * An open checkout is settled first; if that is not possible right now the
+ * guest is kept ("unresolved") for a later attempt.
+ *
+ * @return 'deleted'|'missing'|'unresolved' "missing" also for a customer who is not a demo guest
+ */
+function delete_demo_guest(int $userId): string
+{
+    if (!is_demo_guest($userId)) {
+        return 'missing';
+    }
+    $result = erase_customer_account($userId, null, true);
+    if ($result['status'] === 'deleted') {
+        $picture = $result['account']['profile_image'] ?? null;
+        delete_uploaded_avatar(is_string($picture) ? $picture : null);
+        return 'deleted';
+    }
+    return $result['status'] === 'unresolved' ? 'unresolved' : 'missing';
+}
+
+/**
+ * Deletes every demo guest created more than $hours ago (delete_demo_guest())
+ * and forgets old demo-guest creations and expired demo inbox messages.
+ * Guests whose open checkout cannot be settled yet are kept for the next
+ * run. Safe to run at any time and as often as wanted: bin/demo-cleanup.php
+ * runs it, for example daily from a scheduled task.
+ *
+ * @return array{deleted: int, kept: int}
+ */
+function delete_expired_demo_guests(int $hours = DEMO_GUEST_TTL_HOURS): array
+{
+    $counts = ['deleted' => 0, 'kept' => 0];
+    $expired = db_all(
+        'SELECT id FROM users WHERE demo_guest_at IS NOT NULL AND demo_guest_at < (NOW() - INTERVAL ? HOUR) ORDER BY demo_guest_at, id',
+        [max(0, $hours)]
+    );
+    foreach ($expired as $row) {
+        $status = delete_demo_guest((int) $row['id']);
+        if ($status === 'deleted') {
+            $counts['deleted']++;
+        } elseif ($status === 'unresolved') {
+            $counts['kept']++;
+        }
+    }
+    db_run('DELETE FROM demo_guest_creations WHERE created_at < (NOW() - INTERVAL 1 DAY)');
+    purge_expired_demo_mail();
+    return $counts;
 }

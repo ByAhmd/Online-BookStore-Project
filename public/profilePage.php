@@ -11,6 +11,8 @@ if (!in_array(request_method(), ['GET', 'HEAD', 'POST'], true)) {
 
 $user = require_user();
 $userId = (int) $user['id'];
+// Demo guests (the demo's one-click accounts) have no password that anyone knows.
+$isDemoGuest = is_demo_guest($userId);
 
 $sections = [
     'account' => ['label' => t('account.sections.account'), 'icon' => 'imges/AccountInfo.png'],
@@ -147,6 +149,10 @@ if (is_post()) {
     }
 
     if ($action === 'change_password') {
+        if ($isDemoGuest) {
+            flash('error', t('account.demo_guest.password_locked'));
+            redirect('profilePage.php?section=security');
+        }
         // Passwords are used exactly as typed (never trimmed).
         $current = input_password($_POST, 'current_password');
         $new = input_password($_POST, 'new_password');
@@ -187,13 +193,26 @@ if (is_post()) {
         $confirmed = ($_POST['confirm_delete'] ?? null) === 'yes';
 
         $errors = array_filter([
-            'delete_password' => $password === '' ? t('account.delete.password_required') : null,
+            // Demo guests have no password: confirming is enough.
+            'delete_password' => $password === '' && !$isDemoGuest ? t('account.delete.password_required') : null,
             'confirm_delete' => $confirmed ? null : t('account.delete.confirm_required'),
         ]);
         if ($errors !== []) {
             remember_errors($errors);
             flash('error', t('account.delete.not_deleted'));
             redirect('profilePage.php?section=delete');
+        }
+
+        if ($isDemoGuest) {
+            // Deletes the picture too; paid orders are kept, anonymised.
+            if (delete_demo_guest($userId) === 'unresolved') {
+                flash('error', t('account.delete.unresolved'));
+                redirect('profilePage.php?section=delete');
+            }
+            app_log('info', 'Demo guest account deleted', ['user_id' => $userId]);
+            logout_session();
+            flash('success', t('account.delete.done'));
+            redirect('Home_Page.php');
         }
 
         $result = delete_customer_account($userId, $password, client_ip());
@@ -360,7 +379,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                             <div class="form-field">
                                 <label for="email"><?= e(t('account.profile.email')) ?></label>
                                 <input type="email" id="email" class="form-control" value="<?= e($user['Eaddress']) ?>" readonly aria-describedby="email-hint">
-                                <p class="form-hint" id="email-hint"><?= e(t('account.profile.email_hint')) ?></p>
+                                <p class="form-hint" id="email-hint"><?= e(t($isDemoGuest ? 'account.demo_guest.email_hint' : 'account.profile.email_hint')) ?></p>
                             </div>
 
                             <div class="form-field">
@@ -557,6 +576,9 @@ page_header($sections[$section]['label'], ['profilePage.css']);
 
                     <section class="profile-section" id="section-security" data-section-panel="security" aria-labelledby="security-title"<?= $section === 'security' ? '' : ' hidden' ?>>
                         <h2 id="security-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.security')) ?></h2>
+<?php if ($isDemoGuest): ?>
+                        <p class="profile-notice"><?= e(t('account.demo_guest.security')) ?></p>
+<?php else: ?>
                         <p class="profile-intro"><?= e(t('account.security.intro')) ?></p>
 
                         <form class="profile-form password-form" method="post" action="profilePage.php" data-once
@@ -591,11 +613,15 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                                 <button type="submit" class="btn profile-submit"><?= e(t('account.security.submit')) ?></button>
                             </div>
                         </form>
+<?php endif; ?>
                     </section>
 
                     <section class="profile-section" id="section-delete" data-section-panel="delete" aria-labelledby="delete-title"<?= $section === 'delete' ? '' : ' hidden' ?>>
                         <h2 id="delete-title" class="profile-section-title" tabindex="-1"><?= e(t('account.sections.delete')) ?></h2>
                         <p class="profile-notice danger-notice"><?= e(t('account.delete.intro')) ?></p>
+<?php if ($isDemoGuest): ?>
+                        <p class="profile-intro"><?= e(tn('account.demo_guest.delete_intro', DEMO_GUEST_TTL_HOURS)) ?></p>
+<?php endif; ?>
 
                         <div class="delete-summary">
                             <h3 class="profile-subsection-title"><?= e(t('account.delete.removed_heading')) ?></h3>
@@ -611,6 +637,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                         <form class="profile-form delete-form" method="post" action="profilePage.php" data-once data-confirm="<?= e(t('account.delete.confirm_prompt')) ?>">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="delete_account">
+<?php if (!$isDemoGuest): ?>
                             <input type="email" autocomplete="username" value="<?= e($user['Eaddress']) ?>" readonly hidden>
 
                             <div class="form-field">
@@ -618,6 +645,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
                                 <input type="password" id="delete_password" name="delete_password" class="form-control" autocomplete="current-password" maxlength="255" required<?= $fieldAria('delete_password') ?>>
                                 <?= $fieldError('delete_password') ?>
                             </div>
+<?php endif; ?>
 
                             <div class="form-field checkbox-field">
                                 <div class="checkbox-row">

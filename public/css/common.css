@@ -655,6 +655,11 @@ textarea.form-control {
     font-size: 0.95rem;
 }
 
+/* "Try the store in one click" (the shared focus ring's black outline stays visible on the banner). */
+.demo-banner a {
+    color: inherit;
+}
+
 /* Read-only administrators (role "viewer"): above every page, explaining the switched-off forms. */
 .read-only-note {
     margin: 0;

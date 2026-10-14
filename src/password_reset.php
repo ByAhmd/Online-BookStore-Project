@@ -18,7 +18,8 @@ function reset_token_hash(string $rawToken): string
 function request_password_reset(string $email): void
 {
     $user = find_user_account_by_email($email);
-    if ($user === null) {
+    // Demo guests have no password that anyone knows, and must not get one.
+    if ($user === null || is_demo_guest($user['id'])) {
         return;
     }
 

@@ -132,7 +132,7 @@ page_header(t('admin.dashboard.title'), ['Admin_dashboard.css']);
         <div class="page-container admin-page">
             <header class="admin-heading">
                 <h1 class="page-title"><?= e(t('admin.dashboard.title')) ?></h1>
-                <p class="admin-welcome"><?= t_markup('admin.dashboard.signed_in_as', ['name' => '<span dir="auto">' . e($admin['name']) . '</span>']) ?></p>
+                <p class="admin-welcome"><?= t_markup('admin.dashboard.signed_in_as', ['name' => '<span dir="auto">' . e(admin_display_name($admin)) . '</span>']) ?></p>
             </header>
 
             <section class="admin-stats" aria-label="<?= e(t('admin.dashboard.overview')) ?>">

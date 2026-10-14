@@ -47,7 +47,12 @@ $flashes = take_flashes();
 <body class="<?= e($bodyClass) ?>">
     <a class="skip-link" href="#main-content"><?= e(t('common.skip_link')) ?></a>
 <?php if (config('app.demo')): ?>
-    <p class="demo-banner" role="note"><?= e(t($navInbox ? 'common.demo_banner_inbox' : 'common.demo_banner')) ?></p>
+    <p class="demo-banner" role="note">
+        <?= e(t($navInbox ? 'common.demo_banner_inbox' : 'common.demo_banner')) ?>
+<?php if ($navUser === null && $navAdmin === null): ?>
+        <?= t_html('common.demo_try', ['link' => '<a href="index.php?form=login#demo-logins">' . e(t('common.demo_try_link')) . '</a>']) ?>
+<?php endif; ?>
+    </p>
 <?php endif; ?>
     <header class="site-header">
         <nav class="site-nav" aria-label="<?= e(t('common.main_navigation')) ?>">

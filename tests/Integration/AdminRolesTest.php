@@ -9,7 +9,8 @@ use BookWise\Tests\Support\DatabaseTestCase;
 
 /**
  * Administrator roles: owners may change everything, viewers nothing.
- * bin/create-admin.php makes either.
+ * bin/create-admin.php makes either, and the demo's shared administrator is
+ * always a viewer whose password nobody knows.
  */
 final class AdminRolesTest extends DatabaseTestCase
 {
@@ -62,6 +63,24 @@ final class AdminRolesTest extends DatabaseTestCase
         self::assertFalse(admin_can_write(), 'Customers never');
         $_SESSION = [];
         self::assertFalse(admin_can_write(), 'Guests never');
+    }
+
+    public function testTheDemoAdministratorIsAViewerThatNobodyCanSignInTo(): void
+    {
+        $admin = demo_viewer_admin();
+        self::assertSame(['Eaddress' => DEMO_VIEWER_ADMIN_EMAIL, 'name' => 'Demo administrator', 'role' => ADMIN_ROLE_VIEWER], $admin);
+        $hash = (string) db_value('SELECT password FROM admins WHERE Eaddress = ?', [DEMO_VIEWER_ADMIN_EMAIL]);
+        self::assertSame('bcrypt', password_get_info($hash)['algoName'], 'A random password that nobody knows');
+        self::assertNull(attempt_login(DEMO_VIEWER_ADMIN_EMAIL, ''));
+
+        self::assertSame($admin, demo_viewer_admin(), 'Created once and shared');
+        self::assertSame(1, $this->countRows('admins'));
+        self::assertSame($hash, db_value('SELECT password FROM admins WHERE Eaddress = ?', [DEMO_VIEWER_ADMIN_EMAIL]));
+
+        // Even if someone made it an owner, the demo button signs in to a viewer.
+        db_run('UPDATE admins SET role = ? WHERE Eaddress = ?', [ADMIN_ROLE_OWNER, DEMO_VIEWER_ADMIN_EMAIL]);
+        self::assertSame(ADMIN_ROLE_VIEWER, demo_viewer_admin()['role']);
+        self::assertSame(ADMIN_ROLE_VIEWER, self::role(DEMO_VIEWER_ADMIN_EMAIL));
     }
 
     public function testCreateAdminMakesOwnersOrWithViewerReadOnlyAdministrators(): void
