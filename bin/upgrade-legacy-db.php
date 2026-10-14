@@ -33,7 +33,7 @@ if (PHP_SAPI !== 'cli') {
 
 require __DIR__ . '/../src/bootstrap.php';
 
-if (!in_array('--i-have-a-backup', $argv, true)) {
+if (!in_array('--i-have-a-backup', (array) ($GLOBALS['argv'] ?? []), true)) {
     fwrite(STDERR, "This script modifies your database. Back it up first (outside the project folder), e.g.:\n"
         . "  mysqldump -u <user> -p " . config('db.name') . " > ../" . config('db.name') . "-backup.sql\n"
         . "then re-run with --i-have-a-backup\n");

@@ -29,8 +29,9 @@ if (PHP_SAPI !== 'cli') {
 
 require __DIR__ . '/../src/bootstrap.php';
 
-$options = array_values(array_filter(array_slice($argv, 1), static fn (string $arg): bool => str_starts_with($arg, '-')));
-$directories = array_values(array_filter(array_slice($argv, 1), static fn (string $arg): bool => !str_starts_with($arg, '-')));
+$arguments = array_map('strval', array_slice((array) ($GLOBALS['argv'] ?? []), 1));
+$options = array_values(array_filter($arguments, static fn (string $arg): bool => str_starts_with($arg, '-')));
+$directories = array_values(array_filter($arguments, static fn (string $arg): bool => !str_starts_with($arg, '-')));
 $unknown = array_diff($options, ['--force']);
 if ($unknown !== []) {
     fwrite(STDERR, 'Unknown option ' . implode(', ', $unknown) . '. Usage: php bin/optimize-images.php [--force] [directory ...]' . PHP_EOL);

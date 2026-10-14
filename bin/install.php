@@ -23,7 +23,8 @@ if (PHP_SAPI !== 'cli') {
 
 require __DIR__ . '/../src/bootstrap.php';
 
-$seed = in_array('--seed', $argv, true);
+// The command-line arguments (bin/setup.php sets them too when it includes this script).
+$seed = in_array('--seed', (array) ($GLOBALS['argv'] ?? []), true);
 
 if (!db_table_exists('users')) {
     $leftovers = array_values(array_filter([...MIGRATION_BASELINE_TABLES, 'email_verifications', 'schema_migrations'], 'db_table_exists'));

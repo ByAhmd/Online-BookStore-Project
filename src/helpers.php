@@ -273,11 +273,30 @@ function absolute_url(string $path): string
 }
 
 /**
+ * Sets the response status. Codes outside the HTTP standard (419 Page
+ * Expired) get a full status line with their reason phrase: Apache (mod_php)
+ * answers 500 for a code it does not know unless PHP names it.
+ */
+function send_status(int $status): void
+{
+    $reasons = [419 => 'Page Expired'];
+    if (!isset($reasons[$status])) {
+        http_response_code($status);
+        return;
+    }
+    $protocol = (string) ($_SERVER['SERVER_PROTOCOL'] ?? '');
+    if (!preg_match('#^HTTP/\d(\.\d)?$#D', $protocol)) {
+        $protocol = 'HTTP/1.1';
+    }
+    header("$protocol $status {$reasons[$status]}", true, $status);
+}
+
+/**
  * @param array<string, mixed> $data
  */
 function json_response(array $data, int $status = 200): never
 {
-    http_response_code($status);
+    send_status($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
     echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
@@ -295,7 +314,7 @@ function abort(int $status, string $message = ''): never
 function render_error_page(int $status, string $message = '', ?string $detail = null): never
 {
     if (!headers_sent()) {
-        http_response_code($status);
+        send_status($status);
         header('Content-Type: text/html; charset=utf-8');
     }
     while (ob_get_level() > 0) {
