@@ -29,6 +29,31 @@ final class UsersTest extends DatabaseTestCase
         self::assertTrue(password_verify('a-secret-pass', $hash));
     }
 
+    public function testNewAccountsAreUnverifiedAndRememberTheLanguage(): void
+    {
+        $visitorLanguage = register_user('english@example.com', 'English Reader', 'a-secret-pass');
+        use_locale('ar');
+        try {
+            $arabicVisitor = register_user('arabic@example.com', 'Arabic Reader', 'a-secret-pass');
+        } finally {
+            use_locale(null);
+        }
+        $explicit = register_user('explicit@example.com', 'Explicit Reader', 'a-secret-pass', 'ar');
+        $unsupported = register_user('fallback@example.com', 'Fallback Reader', 'a-secret-pass', 'fr');
+
+        $locales = [];
+        foreach ([$visitorLanguage, $arabicVisitor, $explicit, $unsupported] as $id) {
+            self::assertIsInt($id);
+            $account = find_user_account($id);
+            self::assertNotNull($account);
+            self::assertNull($account['email_verified_at'], 'New accounts start unverified');
+            $locales[] = $account['locale'];
+        }
+        self::assertSame(['en', 'ar', 'ar', 'en'], $locales);
+        self::assertSame(find_user_account((int) $explicit), find_user_account_by_email('explicit@example.com'));
+        self::assertNull(find_user_account_by_email('nobody@example.com'));
+    }
+
     public function testDuplicateEmailIsRejected(): void
     {
         self::assertIsInt(register_user('dup@example.com', 'First', 'a-secret-pass'));

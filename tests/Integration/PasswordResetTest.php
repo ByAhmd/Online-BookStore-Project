@@ -4,11 +4,21 @@ declare(strict_types=1);
 
 namespace BookWise\Tests\Integration;
 
+use BookWise\Tests\Support\AccountHelpers;
 use BookWise\Tests\Support\DatabaseTestCase;
-use BookWise\Tests\Support\IsolatedPhp;
 
 final class PasswordResetTest extends DatabaseTestCase
 {
+    use AccountHelpers;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // PHPUnit turns value="false" in phpunit.xml.dist into an empty string,
+        // which leaves the application default (verification required) in effect.
+        $this->setEnv('REQUIRE_EMAIL_VERIFICATION', 'false');
+    }
+
     /**
      * Inserts a token directly and returns the raw value the email would carry.
      */
@@ -20,22 +30,78 @@ final class PasswordResetTest extends DatabaseTestCase
     }
 
     /**
-     * Runs request_password_reset() with the "log" mail driver in an isolated
-     * process and returns the raw token from the emailed link (null if no email).
+     * Runs request_password_reset() with the "log" mail driver writing to a
+     * temporary LOG_DIR and returns the raw token from the emailed link (null
+     * if no email). It runs in this process (not IsolatedPhp, whose throwaway
+     * BASE_PATH has no lang/ directory) because the email is translated.
      */
-    private function requestResetAndReadEmail(string $email): ?string
+    private function requestResetAndReadEmail(string $email, string $expectedName = 'Test Reader', string $expectedSubject = 'Reset your BookWise password'): ?string
     {
-        $run = IsolatedPhp::run('request_password_reset', ['email' => $email], ['MAIL_DRIVER' => 'log', 'APP_URL' => 'https://books.example.com']);
-        self::assertSame(['ok' => true], $run['result'], $run['stderr']);
-
-        $mail = $run['files']['storage/logs/mail.log'] ?? null;
-        if ($mail === null) {
+        $this->setEnv('APP_URL', 'https://books.example.com');
+        $mails = $this->captureMail(static fn () => request_password_reset($email));
+        if ($mails === []) {
             return null;
         }
-        self::assertStringContainsString("To: Test Reader <$email>", $mail);
-        self::assertStringContainsString('Subject: Reset your BookWise password', $mail);
-        self::assertSame(1, preg_match('#https://books\.example\.com/reset_form\.php\?token=([a-f0-9]{64})\b#', $mail, $m), $mail);
+        self::assertCount(1, $mails);
+        self::assertSame([$email, $expectedName, $expectedSubject], [$mails[0]['to'], $mails[0]['name'], $mails[0]['subject']]);
+        self::assertSame(1, preg_match('#https://books\.example\.com/reset_form\.php\?token=([a-f0-9]{64})\b#', $mails[0]['body'], $m), $mails[0]['body']);
         return $m[1];
+    }
+
+    public function testResetEmailUsesTheAccountsLanguage(): void
+    {
+        $user = $this->createUser('arabic-reader@example.com', 'قارئ عربي');
+        update_user_locale((int) $user['id'], 'ar');
+
+        $raw = $this->requestResetAndReadEmail('arabic-reader@example.com', 'قارئ عربي', 'إعادة تعيين كلمة المرور في BookWise');
+
+        self::assertNotNull($raw);
+        self::assertSame('en', current_locale(), 'The visitor language is restored after composing the email');
+    }
+
+    public function testUnconfirmedAccountNamesAreLeftOutWhenVerificationIsRequired(): void
+    {
+        // A pre-registered (unconfirmed) account's name may have been typed by someone else.
+        $this->setEnv('REQUIRE_EMAIL_VERIFICATION', 'true');
+        $user = $this->createUser('pending@example.com', 'Call +1 555 0100 now');
+
+        self::assertNotNull($this->requestResetAndReadEmail('pending@example.com', ''));
+
+        $this->markVerified((int) $user['id']);
+        $this->ageResetTokens('pending@example.com');
+        self::assertNotNull($this->requestResetAndReadEmail('pending@example.com', 'Call +1 555 0100 now'));
+    }
+
+    public function testCompletingAResetConfirmsTheEmailAddress(): void
+    {
+        $user = $this->createUser('unconfirmed@example.com');
+        $userId = (int) $user['id'];
+        $verification = $this->issueVerificationToken($userId);
+        self::assertFalse($this->isVerified($userId));
+
+        self::assertTrue(complete_password_reset($this->issueToken('unconfirmed@example.com'), 'brand-new-password'));
+
+        self::assertTrue($this->isVerified($userId), 'The reset link proved ownership of the mailbox');
+        self::assertSame(0, $this->countRows('email_verifications', 'user_id = ?', [$userId]), 'Pending confirmation links are dropped');
+        self::assertNull(complete_email_verification($verification));
+
+        $this->setEnv('REQUIRE_EMAIL_VERIFICATION', 'true');
+        self::assertFalse(customer_awaits_verification($userId));
+    }
+
+    public function testResetKeepsAnEarlierConfirmationDate(): void
+    {
+        $user = $this->createUser('confirmed@example.com');
+        db_run("UPDATE users SET email_verified_at = '2024-01-02 03:04:05' WHERE id = ?", [$user['id']]);
+
+        self::assertTrue(complete_password_reset($this->issueToken('confirmed@example.com'), 'brand-new-password'));
+
+        self::assertSame('2024-01-02 03:04:05', db_value('SELECT email_verified_at FROM users WHERE id = ?', [$user['id']]));
+    }
+
+    private function ageResetTokens(string $email): void
+    {
+        db_run('UPDATE reset_tokens SET expiry = NOW() + INTERVAL ? MINUTE WHERE email = ?', [RESET_TOKEN_TTL_MINUTES - RESET_REQUEST_COOLDOWN_MINUTES - 1, $email]);
     }
 
     public function testRequestEmailsALinkAndStoresOnlyTheTokenHash(): void

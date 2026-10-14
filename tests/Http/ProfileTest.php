@@ -243,6 +243,7 @@ final class ProfileTest extends HttpTestCase
         self::assertFalse($document->first('//section[@id="section-orders"]')?->hasAttribute('hidden'));
         self::assertSame(['Order #' . $orderId], $document->texts('//h3[contains(@class, "order-number")]'));
         self::assertSame(['paid'], $document->texts('//span[contains(@class, "status-badge")]'));
+        self::assertNotNull($document->first('//span[contains(@class, "status-badge") and contains(@class, "status-paid")]'));
         self::assertSame(['Esabella × 2', 'The Danger Bridge × 1'], $document->texts('//ul[@class="order-items"]/li'));
         $this->assertPageText('Total ' . format_money((string) $purchase['order']['total_amount']), $page);
 
@@ -254,7 +255,10 @@ final class ProfileTest extends HttpTestCase
 
     public function testUnknownProfileActionIsABadRequest(): void
     {
-        [$customer] = $this->signedInCustomer();
-        $this->assertHtmlPage($customer->postWithToken('profilePage.php', ['action' => 'delete_account']), 400);
+        [$customer, $user] = $this->signedInCustomer();
+        // "delete_account" is a real action now (see AccountSecurityTest); this one is not.
+        $this->assertHtmlPage($customer->postWithToken('profilePage.php', ['action' => 'drop_everything']), 400);
+        $this->assertHtmlPage($customer->postWithToken('profilePage.php', ['action' => '']), 400);
+        self::assertNotNull(find_user((int) $user['id']));
     }
 }

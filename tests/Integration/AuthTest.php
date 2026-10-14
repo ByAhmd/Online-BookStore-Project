@@ -27,6 +27,18 @@ final class AuthTest extends DatabaseTestCase
         self::assertNull(attempt_login('nobody@example.com', self::DEFAULT_PASSWORD));
     }
 
+    public function testCredentialCheckIgnoresTheVerificationState(): void
+    {
+        // attempt_login() only checks credentials; Register.php applies the verification gate
+        // afterwards, so a wrong password never reveals whether an address is confirmed.
+        $this->setEnv('REQUIRE_EMAIL_VERIFICATION', 'true');
+        $user = $this->createUser('unconfirmed@example.com', 'Unconfirmed');
+
+        self::assertSame('user', attempt_login('unconfirmed@example.com', self::DEFAULT_PASSWORD)['type'] ?? null);
+        self::assertNull(attempt_login('unconfirmed@example.com', 'wrong-password'));
+        self::assertTrue(customer_awaits_verification((int) $user['id']));
+    }
+
     public function testAdministratorLogsIn(): void
     {
         $this->createAdmin('admin@example.com', 'Store Admin');
