@@ -466,8 +466,9 @@ The free alwaysdata plan cannot be used for a store that makes money.
 
 **The demo itself:**
 
-- Anyone can register. Do not enter real personal data, and expect the data to be reset.
+- Anyone can register. Do not enter real personal data (delivery addresses included: any made-up Saudi address in the right format works), and expect the data to be reset.
 - Visitors' purchases never take a book below 3 copies, and `php bin/install.php` (or a container start) restocks the catalog.
+- Nothing is ever shipped: a demo order stays *processing* until an administrator marks it shipped and delivered on its order page, which only updates the order and sends its emails to the demo inbox.
 
 ## Security notes
 
@@ -523,7 +524,7 @@ The **Docker image** job in `.github/workflows/ci.yml` runs next to the test mat
 2. It builds the image with `docker compose build`. The build fails if a PHP extension or a gd image format is missing, or if the Apache configuration is invalid.
 3. It starts `docker compose up` and waits until `/health.php` answers. Then it checks:
    - that the app runs as `www-data`;
-   - `tests/Docker/smoke.sh`: the home page with the 55 books, sign-up, add to cart, checkout to `pay.php`, the refused form without a CSRF token, the simulated payment, the paid confirmation on `success_pay.php`, the simulator's own 404 for an unknown payment session, and 404 from `stripe_webhook.php`.
+   - `tests/Docker/smoke.sh`: the home page with the 55 books, sign-up, add to cart, the checkout page with a new delivery address, checkout to `pay.php`, the refused form without a CSRF token, the simulated payment, the paid confirmation on `success_pay.php`, the simulator's own 404 for an unknown payment session, and 404 from `stripe_webhook.php`.
      It also checks that `/.env`, `/composer.json`, `/vendor/autoload.php`, `/storage/logs/app.log`, `/storage/payment-simulator.json` and other private paths answer 403/404, and the security headers;
    - that the order is stored as `paid` in MySQL, and that the simulator's state file in `storage/` belongs to `www-data` and records the payment;
    - that the container refuses the local-only administrator password with a public `APP_URL`, and `PAYMENT_SIMULATOR=true` on a real store (`APP_ENV=production`, `APP_DEMO=false`);

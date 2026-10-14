@@ -4,10 +4,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 BookWise is an online bookstore written in plain PHP with MySQL/MariaDB.
-Customers browse a catalog, search and filter by genre, keep favorites, buy books
-through **Stripe Checkout** (or the built-in **payment simulator**) and review the books
-they bought. Administrators manage the catalog, stock and covers, follow orders and
-refund them. The whole interface is available in **English and Arabic** (right-to-left).
+Customers browse a catalog, search and filter by genre, keep favorites, buy printed books
+through **Stripe Checkout** (or the built-in **payment simulator**) for delivery to a
+**Saudi National Address**, follow each order until it is delivered, and review the books
+they bought. Administrators manage the catalog, stock and covers, ship and deliver orders
+and refund them. The whole interface is available in **English and Arabic** (right-to-left).
 
 It runs locally with PHP's built-in server or Docker, and can be published as a free
 **live demo** with simulated payments on ordinary PHP hosting such as alwaysdata
@@ -30,6 +31,7 @@ page architecture is unchanged; there is no framework.
 - [Configuration reference](#configuration-reference)
 - [Languages](#languages)
 - [Payments: the simulator and Stripe](#payments-the-simulator-and-stripe)
+- [Checkout, delivery and order emails](#checkout-delivery-and-order-emails)
 - [Email](#email)
 - [Database migrations](#database-migrations)
 - [Upgrading a database from the original project](#upgrading-a-database-from-the-original-project)
@@ -61,19 +63,24 @@ page architecture is unchanged; there is no framework.
   - Add to cart with a quantity, and add to or remove from favorites.
   - Reviews with a 1–5 star rating, only for customers who bought the book and only once per book. Other readers can like or dislike a review.
 - Cart: change quantities (1–10 per title, never more than in stock), remove items, and see totals computed from catalog prices on the server.
-- Checkout on Stripe's hosted payment page, or on the built-in payment simulator's page. An order is confirmed only after BookWise has verified the payment.
+- Checkout page between the cart and the payment: the books, the totals (prices include 15% VAT, delivery is free) and the delivery address, chosen from the customer's saved addresses or typed in there and then.
+- Payment on Stripe's hosted payment page, or on the built-in payment simulator's page. An order is confirmed only after BookWise has verified the payment.
+- Order page for every order: its progress (paid, processing, shipped with carrier and tracking number, delivered, or refunded), the delivery address, a receipt that prints on its own, and **Buy again**, which puts the books that are still available back into the cart.
+- Order emails in the customer's language, each sent once: confirmation, shipped (with the tracking number), delivered and refunded.
 - Profile:
   - Name, favorite genre, date of birth and profile picture (JPEG/PNG/GIF/WebP, max 2 MB, re-encoded on upload).
   - A payment-method *preference* (no card data is ever stored).
-  - Order history with status, including refunds.
+  - Delivery addresses (Saudi National Address): up to five, one of them the default, to add, edit, delete and make the default.
+  - Order history with status, delivery stage and refunds, each order linking to its page.
   - Interface language (English or Arabic), remembered on the account.
-  - Change password (signs out every other session) and delete the account (asks for the password; past orders are kept anonymously for the store's records).
+  - Change password (signs out every other session) and delete the account (asks for the password; past orders are kept anonymously for the store's records, and their delivery addresses are deleted, except for orders still on their way, which keep theirs until they are delivered).
 
 **Administrators**
 - Add, edit and delete books, with server-side validation, stock levels and cover uploads (JPEG/PNG/GIF/WebP, max 5 MB, re-encoded).
 - Dashboard with catalog and sales totals, stock per book and the 20 most recent orders.
-- Orders page: filter by status, search by order number or customer email, and open any order.
-  A paid order can be refunded in full through Stripe from its page; the copies go back into stock.
+- Orders page: filter by status and by delivery stage, search by order number or customer email, and open any order.
+  An order's page shows the delivery address and moves a paid order from *processing* to *shipped* (with an optional carrier and tracking number) and then to *delivered*; the customer is emailed at each step.
+  A paid order can be refunded in full through Stripe from its page, at any stage of its delivery; the copies go back into stock.
   Refunds made in the Stripe Dashboard are picked up by the `charge.refunded` webhook.
 - Accounts are created from the command line (`bin/create-admin.php`, or `bin/install.php` in containers); there is no public admin sign-up.
 
@@ -103,6 +110,7 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 .
 ├── public/                 Web root: point your server's document root here
 │   ├── *.php               Pages and form handlers (index.php = login/sign-up, Home_Page.php, Explore_Page.php,
+│   │                       checkout.php = delivery and review, order.php = an order's page,
 │   │                       pay.php = the payment simulator's page, …)
 │   ├── css/  js/           Stylesheets and scripts (common.css/common.js are shared)
 │   ├── imges/              Catalog covers and UI images (folder name kept: database rows reference it)
@@ -111,11 +119,12 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 │   ├── bootstrap.php       Loaded by every page: config, error handling, session, security headers, language
 │   ├── auth.php users.php password_reset.php csrf.php validation.php
 │   ├── books.php cart.php orders.php   Catalog, stock, cart, Stripe orders and refunds
+│   ├── addresses.php fulfilment.php    Delivery addresses; delivery of paid orders, order emails, order page data
 │   ├── payment_simulator.php           Built-in stand-in for the Stripe API (demo payments)
 │   ├── i18n.php            Translations (t(), tn()), Arabic plurals, language switching
 │   ├── migrations.php      Schema migration runner
 │   ├── db.php env.php helpers.php mailer.php uploads.php
-│   └── views/              Shared header (navigation), footer and error page
+│   └── views/              Shared header (navigation), footer, error page and delivery-address fields
 ├── lang/en/  lang/ar/      Interface text, one file per area (common, auth, account, shop, admin, mail)
 ├── database/
 │   ├── schema.sql          Latest database schema (fresh installs)
@@ -325,7 +334,7 @@ More details are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#the-payment-simulato
 
 How a payment becomes an order:
 
-1. `checkout.php` copies the cart into a **pending** order, using prices from the database and integer minor units.
+1. `checkout.php` copies the cart into a **pending** order, using prices from the database and integer minor units, together with a copy of the delivery address the customer chose (see [Checkout, delivery and order emails](#checkout-delivery-and-order-emails)).
    It then creates a Checkout Session for exactly that amount.
    Checkouts are serialised per customer, so double clicks, two tabs or two devices cannot open two payable sessions.
    Orders below the minimum charge (2.00 in the store currency) are refused before Stripe is called.
@@ -358,9 +367,54 @@ A leaked webhook secret alone therefore cannot mark an unpaid order as paid or a
 **Stock.** Adding to the cart and starting a checkout check the stock. The copies are taken out of stock when the payment is confirmed, and put back when an order is refunded.
 Two customers can still pay for the last copy at the same moment; the second order is then recorded and logged as `OVERSOLD` in `app.log` so that staff can restock or refund it.
 
+## Checkout, delivery and order emails
+
+BookWise sells printed books delivered within Saudi Arabia. Delivery is free, and every price includes 15% VAT.
+
+**Delivery addresses.** Customers keep up to five addresses on the **Delivery Addresses** page of their profile, one of them the default. Each is a Saudi National Address:
+
+- the recipient's full name and a Saudi mobile number (typed as `05XXXXXXXX`, `+966 5X XXX XXXX` and so on, stored as `+9665XXXXXXXX`);
+- the city, district and street;
+- the building number (4 digits), the postal code (5 digits) and, optionally, the additional number (4 digits) and the short address code (4 letters and 4 digits, such as `RRRD2929`).
+
+Digits may also be typed as Arabic-Indic digits (`٠١٢٣`). Every field is checked on the server, and a problem is explained next to its field in the visitor's language.
+
+**Checkout.** The cart's **Proceed to Checkout** button opens `checkout.php`:
+
+1. GET shows the books, the total with the VAT it contains, free delivery, and the delivery address: the saved addresses (the default one is selected) or **Deliver to a new address**, typed in on the same page. A customer without saved addresses only sees the address form.
+2. POST saves a new address in the customer's address book (their first address becomes the default), then starts the payment as before with `start_checkout()`: the stock is checked, the minimum total applies, one checkout runs at a time per customer, and earlier pending orders are settled first.
+   The chosen address must be one of the customer's own. It is read under the checkout lock and copied into the order (`order_addresses`), so editing or deleting the saved address later never changes an order that was already placed.
+3. The customer pays on Stripe's page or on the payment simulator's page, as described above.
+
+**Delivery.** The delivery of an order is tracked separately from its payment status (`orders.fulfilment_status`):
+
+- When the payment is confirmed, the order is **processing**.
+- On `admin_order.php`, staff mark it **shipped**, optionally with the carrier (the field suggests SMSA Express, Aramex and others) and the tracking number, and later **delivered**. Each step happens once and only moves forward; a second click from a page that is out of date changes nothing.
+- The orders page filters paid orders by their delivery stage.
+- A refund works at any stage. The order then shows as **refunded**, and its delivery is no longer updated.
+- Orders paid before delivery addresses existed (before migration `006_order_fulfilment`) have no delivery stage.
+
+**The order page.** `order.php?id=N` is open only to the customer who placed the order; anyone else gets 404. It shows the order's progress, the delivery address and a receipt: the books, the total before VAT, the VAT (total × 15/115), free delivery and the total.
+Printing the page (also with its **Print receipt** button) prints only the receipt and the delivery address. The receipt is not a tax invoice, because the store has no VAT registration number.
+**Buy again** puts the order's books back into the cart, as many copies as were ordered within the stock, and names the books that are no longer available.
+The profile's order list, the payment confirmation page and every order email link to the order page.
+
+**Order emails.** The customer is emailed in the account's language:
+
+| Email | Sent when |
+| --- | --- |
+| Order confirmation: the books, the total with its VAT, the delivery address | the payment is confirmed (by the return page, a webhook, or the next checkout) |
+| Shipped, with the carrier and tracking number | staff mark the order shipped |
+| Delivered | staff mark the order delivered |
+| Refunded, with the amount | the order is refunded from its admin page or in the Stripe Dashboard |
+
+Each email is sent by the request that made the change, once that change is committed, and each change happens exactly once: the payment is recorded under a lock on the order row, and every delivery step only moves on from the step before.
+The confirmation is therefore sent once even when the return page and a webhook confirm the same payment at the same moment.
+As in the account emails, the customer's name and the delivery address appear only once the account's email address is confirmed. With the demo inbox (`MAIL_DRIVER=database`), order emails appear in the customer's inbox like every other email.
+
 ## Email
 
-The app sends, in the customer's language: the email-verification (or welcome) email, a notice when someone tries to sign up with an existing address, the password-reset email, a password-changed notice and an account-deleted confirmation.
+The app sends, in the customer's language: the email-verification (or welcome) email, a notice when someone tries to sign up with an existing address, the password-reset email, a password-changed notice, an account-deleted confirmation and the [order emails](#checkout-delivery-and-order-emails) (confirmation, shipped, delivered, refunded).
 Every email has a plain-text and an HTML part. `MAIL_DRIVER` decides where it goes:
 
 - **`log`** (default) writes every email, including password-reset and verification links, to `storage/logs/mail.log`. Nothing is sent. For local development only.
@@ -449,7 +503,7 @@ The suites are:
 
 - **unit:** pure functions, plus the image tools (WebP copies, `bin/optimize-images.php`) on scratch files.
 - **integration:** domain code against a real database.
-- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, checkout (with Stripe and with every ending of the payment simulator), refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, the demo inbox and the Arabic interface.
+- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, cart and stock, the checkout page and delivery addresses, checkout (with Stripe and with every ending of the payment simulator), the order page, deliveries and order emails, refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, the demo inbox and the Arabic interface.
   Every page check also loads the page's CSS, scripts and images, including each WebP copy in a `srcset`.
 - **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes) and of the Apache cache rules. The image itself is built and smoke-tested by the CI's Docker job.
 
@@ -497,7 +551,7 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
 - **Sessions:** HttpOnly, `SameSite=Lax` cookies (plus `Secure` when served over HTTPS), strict mode and ID regeneration on login.
   Sessions expire after 2 hours of inactivity or 24 hours after sign-in, and a password change signs out every other session.
 - **Access control:** customer and admin checks are enforced on the server for every page and action.
-  Cart lines, orders and payment returns are always scoped to the signed-in user.
+  Cart lines, delivery addresses, orders, order pages and payment returns are always scoped to the signed-in user; a checkout accepts only one of the customer's own addresses.
 - **Passwords:** bcrypt via `password_hash()`, with a transparent upgrade of legacy MD5 hashes.
   Sign-in performs one hash verification per attempt, so response times don't reveal which accounts exist.
   Login is throttled after 5 failures for one email from one IP address, 20 failures from one IP, or 100 failures for one email from anywhere, within 15 minutes.
@@ -544,6 +598,10 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
 
 - **Stock is not reserved during checkout:** it is taken when the payment is confirmed, so two simultaneous payments for the last copy can oversell it (logged as `OVERSOLD`).
 - **Single currency:** prices are stored without a currency and charged in `STRIPE_CURRENCY` (SAR by default).
+- **Delivery only within Saudi Arabia, always free:** there is no shipping-cost calculation, no delivery zones or dates, and an order is always one parcel.
+- **Addresses are checked for their format only:** they are not looked up in Saudi Post's National Address register. The carrier and tracking number are plain text: there is no link to the carrier's tracking page and no automatic status update; staff mark orders shipped and delivered by hand.
+- **Receipts, not tax invoices:** prices include 15% VAT, but the store has no VAT registration number, so it issues receipts rather than tax invoices.
+- **Orders cannot be changed or canceled by customers** once they are paid; staff refund them instead.
 - **Limited account self-service:** customers cannot change their email address or export their data. Administrators cannot manage customers from the UI.
 - **Refunds are full refunds only.** Partial refunds and disputes are handled in the Stripe Dashboard and are not reflected in orders.
   A payment that does not match its order is marked `failed` and logged as `MANUAL REVIEW REQUIRED` in `app.log`.
