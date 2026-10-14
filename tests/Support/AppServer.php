@@ -214,6 +214,11 @@ final class AppServer
             'MAIL_FROM_NAME' => 'BookWise',
             'SENDGRID_API_KEY' => '',
             'LOG_DIR' => $logDirectory,
+            'APP_DEMO' => 'false',
+            'APP_DEFAULT_LOCALE' => 'en',
+            'REQUIRE_EMAIL_VERIFICATION' => 'false',
+            'DB_SSL_CA' => '',
+            'DB_SSL_CA_PEM' => '',
         ];
 
         $missing = array_diff(self::exampleKeys(), array_keys($configuration));

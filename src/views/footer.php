@@ -18,15 +18,15 @@ try {
 
     <footer class="site-footer">
         <p class="footer-brand"><?= e($appName) ?></p>
-        <p class="footer-tagline">Your personalized reading companion since 2024!</p>
+        <p class="footer-tagline"><?= e(t('common.footer.tagline')) ?></p>
         <ul class="footer-links">
-            <li><?= e($appName) ?> &copy; 2024</li>
+            <li><?= e(t('common.footer.copyright', ['app' => $appName])) ?></li>
 <?php if ($footerAdmin): ?>
-            <li><a href="admin_dashboard.php">Dashboard</a></li>
+            <li><a href="admin_dashboard.php"><?= e(t('common.footer.dashboard')) ?></a></li>
 <?php else: ?>
-            <li><a href="Explore_Page.php">Explore</a></li>
+            <li><a href="Explore_Page.php"><?= e(t('common.footer.explore')) ?></a></li>
 <?php endif; ?>
-            <li><a href="About_us.php">About Us</a></li>
+            <li><a href="About_us.php"><?= e(t('common.footer.about_us')) ?></a></li>
         </ul>
     </footer>
 

@@ -20,12 +20,20 @@ function db(): PDO
         config('db.name')
     );
 
-    $pdo = new PDO($dsn, (string) config('db.user'), (string) config('db.pass'), [
+    $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
         PDO::ATTR_STRINGIFY_FETCHES => false,
-    ]);
+    ];
+    $caFile = db_ssl_ca_file();
+    if ($caFile !== null) {
+        // Encrypted connection that verifies the server certificate (required by most hosted MySQL services).
+        $options[PDO::MYSQL_ATTR_SSL_CA] = $caFile;
+        $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
+    }
+
+    $pdo = new PDO($dsn, (string) config('db.user'), (string) config('db.pass'), $options);
 
     // Keep TIMESTAMP values and NOW() in the application's timezone. Named zones
     // handle daylight saving but need the server's time zone tables; fall back
@@ -37,6 +45,37 @@ function db(): PDO
     }
 
     return $pdo;
+}
+
+/**
+ * Path of the CA certificate for TLS database connections, or null for an
+ * unencrypted local connection. DB_SSL_CA_PEM (certificate text) is written
+ * to a private temporary file once per process.
+ */
+function db_ssl_ca_file(): ?string
+{
+    $path = config('db.ssl_ca');
+    if (is_string($path) && $path !== '') {
+        if (!is_file($path)) {
+            throw new RuntimeException('DB_SSL_CA does not point to a readable file');
+        }
+        return $path;
+    }
+
+    $pem = config('db.ssl_ca_pem');
+    if (!is_string($pem) || trim($pem) === '') {
+        return null;
+    }
+    $pem = str_replace('\n', "\n", trim($pem)) . "\n";
+    if (!str_contains($pem, '-----BEGIN CERTIFICATE-----')) {
+        throw new RuntimeException('DB_SSL_CA_PEM does not contain a PEM certificate');
+    }
+    $file = sys_get_temp_dir() . '/bookwise-db-ca-' . hash('sha256', $pem) . '.pem';
+    if (!is_file($file)) {
+        file_put_contents($file, $pem, LOCK_EX);
+        @chmod($file, 0600);
+    }
+    return $file;
 }
 
 /**

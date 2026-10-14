@@ -25,11 +25,11 @@ page_header($title);
 <?php endif; ?>
             <p class="error-actions">
 <?php if ($errorAdmin): ?>
-                <a class="btn" href="admin_dashboard.php">Back to dashboard</a>
-                <a class="btn btn-secondary" href="Home_Page.php">View storefront</a>
+                <a class="btn" href="admin_dashboard.php"><?= e(t('common.error.back_dashboard')) ?></a>
+                <a class="btn btn-secondary" href="Home_Page.php"><?= e(t('common.error.view_storefront')) ?></a>
 <?php else: ?>
-                <a class="btn" href="Home_Page.php">Back to home</a>
-                <a class="btn btn-secondary" href="Explore_Page.php">Explore books</a>
+                <a class="btn" href="Home_Page.php"><?= e(t('common.error.back_home')) ?></a>
+                <a class="btn btn-secondary" href="Explore_Page.php"><?= e(t('common.error.explore_books')) ?></a>
 <?php endif; ?>
             </p>
         </section>

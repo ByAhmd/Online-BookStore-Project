@@ -4,8 +4,11 @@
 --
 -- Fresh install (see README.md):
 --   CREATE DATABASE bookwise CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
---   mysql -u <user> -p bookwise < database/schema.sql
---   mysql -u <user> -p bookwise < database/seed.sql      (optional sample catalog)
+--   php bin/install.php --seed          (or import this file, then seed.sql)
+--
+-- This file always describes the LATEST schema and records the migrations it
+-- contains in schema_migrations. Databases created from an older version are
+-- updated with:  php bin/migrate.php
 --
 -- Upgrading the original "signup" database instead? Run
 --   php bin/upgrade-legacy-db.php --i-have-a-backup   (see README.md)
@@ -29,6 +32,8 @@ CREATE TABLE users (
     payment_method VARCHAR(50)  NULL DEFAULT NULL COMMENT 'Display preference only; card data is never stored',
     profile_image  VARCHAR(255) NULL DEFAULT 'imges/profileImage2.png',
     session_version INT         NOT NULL DEFAULT 0 COMMENT 'Incremented on password change to sign out other sessions',
+    email_verified_at DATETIME  NULL DEFAULT NULL COMMENT 'Set when the address is confirmed',
+    locale         VARCHAR(5)   NOT NULL DEFAULT 'en' COMMENT 'Interface/email language',
     PRIMARY KEY (id),
     UNIQUE KEY uq_users_email (Eaddress)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -50,11 +55,13 @@ CREATE TABLE books (
     description TEXT          NOT NULL,
     genre       VARCHAR(255)  NOT NULL,
     price       DECIMAL(10,2) NOT NULL,
+    stock       INT           NOT NULL DEFAULT 0 COMMENT 'Copies available to sell',
     cover_image VARCHAR(255)  NOT NULL,
     created_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_books_genre (genre),
-    CONSTRAINT chk_books_price CHECK (price >= 0)
+    CONSTRAINT chk_books_price CHECK (price >= 0),
+    CONSTRAINT chk_books_stock CHECK (stock >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- One row per (user, book); quantity is updated in place.
@@ -112,6 +119,19 @@ CREATE TABLE comment_interactions (
     CONSTRAINT fk_interactions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Email-verification tokens. Only the SHA-256 hash of the emailed token is stored.
+CREATE TABLE email_verifications (
+    id         INT       NOT NULL AUTO_INCREMENT,
+    user_id    INT       NOT NULL,
+    token      CHAR(64)  NOT NULL COMMENT 'SHA-256 hex digest of the emailed token',
+    expiry     DATETIME  NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_email_verifications_token (token),
+    KEY idx_email_verifications_user (user_id),
+    CONSTRAINT fk_email_verifications_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Password-reset tokens. Only the SHA-256 hash of the emailed token is stored.
 CREATE TABLE reset_tokens (
     id     INT          NOT NULL AUTO_INCREMENT,
@@ -125,23 +145,28 @@ CREATE TABLE reset_tokens (
 
 -- Checkout orders. An order becomes `paid` only after the Stripe Checkout
 -- Session has been retrieved from Stripe (or delivered by a signed webhook)
--- and its amount, currency and payment status match this row.
+-- and its amount, currency and payment status match this row. Orders are
+-- kept as financial records when a customer deletes their account (user_id
+-- becomes NULL).
 CREATE TABLE orders (
     id                    INT           NOT NULL AUTO_INCREMENT,
-    user_id               INT           NOT NULL,
-    status                ENUM('pending', 'paid', 'canceled', 'expired', 'failed') NOT NULL DEFAULT 'pending',
+    user_id               INT           NULL DEFAULT NULL,
+    status                ENUM('pending', 'paid', 'canceled', 'expired', 'failed', 'refunded') NOT NULL DEFAULT 'pending',
     currency              CHAR(3)       NOT NULL,
     total_amount          DECIMAL(10,2) NOT NULL,
     amount_minor          INT           NOT NULL COMMENT 'Total in the smallest currency unit, as sent to Stripe',
     stripe_session_id     VARCHAR(255)  NULL DEFAULT NULL,
     stripe_payment_intent VARCHAR(255)  NULL DEFAULT NULL,
+    stripe_refund_id      VARCHAR(255)  NULL DEFAULT NULL,
     created_at            TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at            TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     paid_at               DATETIME      NULL DEFAULT NULL,
+    refunded_at           DATETIME      NULL DEFAULT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_orders_stripe_session (stripe_session_id),
     KEY idx_orders_user_status (user_id, status),
-    CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    KEY idx_orders_status_created (status, created_at),
+    CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT chk_orders_amount CHECK (amount_minor > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -190,3 +215,14 @@ CREATE TABLE login_attempts (
     KEY idx_login_attempts_email_time (email, attempted_at),
     KEY idx_login_attempts_ip_time (ip_address, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Applied schema migrations (see src/migrations.php and bin/migrate.php).
+CREATE TABLE schema_migrations (
+    version    VARCHAR(100) NOT NULL,
+    applied_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO schema_migrations (version) VALUES
+    ('001_initial'),
+    ('002_accounts_commerce_i18n');

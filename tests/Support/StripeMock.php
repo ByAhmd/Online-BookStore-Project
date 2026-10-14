@@ -52,6 +52,7 @@ final class StripeMock
 
         $env = getenv();
         $env['STRIPE_MOCK_STORE'] = $storeFile;
+        $env['STRIPE_SIM_TEST_API'] = '1'; // test controls + customer emails
         $process = proc_open(
             [PHP_BINARY, '-d', 'display_errors=stderr', '-S', '127.0.0.1:' . $port, BASE_PATH . '/tests/Support/stripe_mock_router.php'],
             [0 => ['pipe', 'r'], 1 => ['file', $logFile, 'a'], 2 => ['file', $logFile, 'a']],

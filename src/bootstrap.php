@@ -34,4 +34,5 @@ if (PHP_SAPI !== 'cli') {
         start_secure_session();
     }
     send_security_headers();
+    handle_locale_switch();
 }

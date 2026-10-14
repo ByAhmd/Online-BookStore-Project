@@ -18,15 +18,17 @@ try {
     $navCartCount = 0;
 }
 $appName = (string) config('app.name', 'BookWise');
+$locale = current_locale();
 $navCurrent = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
 $navLink = static function (string $href, string $label) use ($navCurrent): string {
     $current = $navCurrent === $href ? ' aria-current="page"' : '';
     return '<a href="' . e($href) . '"' . $current . '>' . e($label) . '</a>';
 };
+$otherLocales = array_diff_key(SUPPORTED_LOCALES, [$locale => true]);
 $flashes = take_flashes();
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= e($locale) ?>" dir="<?= e(text_direction()) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -34,42 +36,52 @@ $flashes = take_flashes();
     <title><?= e($title) ?> · <?= e($appName) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300..700&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300..700&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
 <?php foreach ($styles as $style): ?>
     <link rel="stylesheet" href="css/<?= e($style) ?>">
 <?php endforeach; ?>
 </head>
 <body class="<?= e($bodyClass) ?>">
-    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <a class="skip-link" href="#main-content"><?= e(t('common.skip_link')) ?></a>
+<?php if (config('app.demo')): ?>
+    <p class="demo-banner" role="note"><?= e(t('common.demo_banner')) ?></p>
+<?php endif; ?>
     <header class="site-header">
-        <nav class="site-nav" aria-label="Main">
+        <nav class="site-nav" aria-label="<?= e(t('common.main_navigation')) ?>">
             <a class="brand" href="<?= $navAdmin !== null ? 'admin_dashboard.php' : 'Home_Page.php' ?>">
-                <?= e($appName) ?><?php if ($navAdmin !== null): ?> <span class="brand-tag">Admin</span><?php endif; ?>
+                <?= e($appName) ?><?php if ($navAdmin !== null): ?> <span class="brand-tag"><?= e(t('common.admin_tag')) ?></span><?php endif; ?>
             </a>
 
             <ul class="nav-links">
 <?php if ($navAdmin !== null): ?>
-                <li><?= $navLink('admin_dashboard.php', 'Dashboard') ?></li>
-                <li><?= $navLink('Home_Page.php', 'Storefront') ?></li>
+                <li><?= $navLink('admin_dashboard.php', t('common.nav.dashboard')) ?></li>
+                <li><?= $navLink('admin_orders.php', t('common.nav.orders')) ?></li>
+                <li><?= $navLink('Home_Page.php', t('common.nav.storefront')) ?></li>
 <?php else: ?>
-                <li><?= $navLink('Home_Page.php', 'Home') ?></li>
-                <li><?= $navLink('Explore_Page.php', 'Explore') ?></li>
-                <li><?= $navLink('About_us.php', 'About') ?></li>
+                <li><?= $navLink('Home_Page.php', t('common.nav.home')) ?></li>
+                <li><?= $navLink('Explore_Page.php', t('common.nav.explore')) ?></li>
+                <li><?= $navLink('About_us.php', t('common.nav.about')) ?></li>
 <?php endif; ?>
             </ul>
 
             <ul class="nav-actions">
+<?php foreach ($otherLocales as $code => $nativeName): ?>
+                <li>
+                    <a class="lang-switch" href="<?= e(locale_switch_url($code)) ?>" lang="<?= e($code) ?>" hreflang="<?= e($code) ?>"
+                       title="<?= e(t('common.language.switch_to', ['language' => $nativeName])) ?>"><?= e($nativeName) ?></a>
+                </li>
+<?php endforeach; ?>
 <?php if ($navUser !== null): ?>
                 <li>
-                    <a class="cart-link" href="cart.php" aria-label="Cart, <?= (int) $navCartCount ?> <?= (int) $navCartCount === 1 ? 'item' : 'items' ?>"<?= $navCurrent === 'cart.php' ? ' aria-current="page"' : '' ?>>
+                    <a class="cart-link" href="cart.php" aria-label="<?= e(tn('common.nav.cart', (int) $navCartCount)) ?>"<?= $navCurrent === 'cart.php' ? ' aria-current="page"' : '' ?>>
                         <img src="imges/cart-icon.png" alt="" width="28" height="28">
                         <span class="cart-badge" aria-hidden="true"><?= (int) $navCartCount ?></span>
                     </a>
                 </li>
                 <li>
-                    <a class="avatar-link" href="profilePage.php" title="My profile">
-                        <img class="nav-avatar" src="<?= e(avatar_url($navUser['profile_image'] ?? null)) ?>" alt="My profile" width="44" height="44">
+                    <a class="avatar-link" href="profilePage.php" title="<?= e(t('common.nav.my_profile')) ?>">
+                        <img class="nav-avatar" src="<?= e(avatar_url($navUser['profile_image'] ?? null)) ?>" alt="<?= e(t('common.nav.my_profile')) ?>" width="44" height="44">
                     </a>
                 </li>
 <?php endif; ?>
@@ -77,12 +89,12 @@ $flashes = take_flashes();
                 <li>
                     <form class="logout-form" method="post" action="logout.php">
                         <?= csrf_field() ?>
-                        <button type="submit" class="pill pill-dark">Log out</button>
+                        <button type="submit" class="pill pill-dark"><?= e(t('common.nav.logout')) ?></button>
                     </form>
                 </li>
 <?php else: ?>
-                <li><a class="pill pill-dark" href="index.php?form=signup">Sign Up</a></li>
-                <li><a class="pill pill-red" href="index.php?form=login">Login</a></li>
+                <li><a class="pill pill-dark" href="index.php?form=signup"><?= e(t('common.nav.sign_up')) ?></a></li>
+                <li><a class="pill pill-red" href="index.php?form=login"><?= e(t('common.nav.login')) ?></a></li>
 <?php endif; ?>
             </ul>
         </nav>
@@ -94,7 +106,7 @@ $flashes = take_flashes();
 <?php foreach ($flashes as $flash): ?>
             <div class="flash flash-<?= e($flash['type']) ?>" role="<?= $flash['type'] === 'error' ? 'alert' : 'status' ?>">
                 <p dir="auto"><?= e($flash['message']) ?></p>
-                <button type="button" class="flash-close" aria-label="Dismiss message">&times;</button>
+                <button type="button" class="flash-close" aria-label="<?= e(t('common.flash.dismiss')) ?>">&times;</button>
             </div>
 <?php endforeach; ?>
         </div>

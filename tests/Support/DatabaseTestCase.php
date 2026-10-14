@@ -35,6 +35,7 @@ abstract class DatabaseTestCase extends TestCase
         'order_items',
         'orders',
         'reset_tokens',
+        'email_verifications',
         'login_attempts',
         'admins',
         'users',
@@ -163,7 +164,7 @@ abstract class DatabaseTestCase extends TestCase
     private static function catalogFingerprint(PDO $pdo): string
     {
         $row = $pdo->query(
-            "SELECT COUNT(*) AS n, COALESCE(SUM(CRC32(CONCAT_WS('|', id, title, author, description, genre, price, cover_image, created_at))), 0) AS crc
+            "SELECT COUNT(*) AS n, COALESCE(SUM(CRC32(CONCAT_WS('|', id, title, author, description, genre, price, stock, cover_image, created_at))), 0) AS crc
              FROM books"
         )->fetch();
         return $row['n'] . ':' . $row['crc'];

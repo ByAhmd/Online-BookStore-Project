@@ -33,7 +33,7 @@ function verify_csrf(): void
 {
     $token = $_POST['_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
     if (!csrf_is_valid($token)) {
-        abort(419, 'Your session expired or the form could not be verified. Please go back, refresh the page and try again.');
+        abort(419, t('common.error.csrf'));
     }
 }
 

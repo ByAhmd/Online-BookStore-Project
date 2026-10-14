@@ -62,6 +62,9 @@
         <env name="STRIPE_WEBHOOK_SECRET" value="whsec_phpunit" force="false"/>
         <env name="STRIPE_CURRENCY" value="sar" force="false"/>
         <env name="MAIL_DRIVER" value="null" force="false"/>
+        <env name="APP_DEMO" value="false" force="false"/>
+        <env name="APP_DEFAULT_LOCALE" value="en" force="false"/>
+        <env name="REQUIRE_EMAIL_VERIFICATION" value="false" force="false"/>
         <!-- Keep test log output out of storage/logs. -->
         <env name="LOG_DIR" value=".phpunit.cache/logs" force="false"/>
     </php>

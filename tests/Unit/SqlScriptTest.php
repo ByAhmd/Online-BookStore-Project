@@ -58,11 +58,25 @@ final class SqlScriptTest extends TestCase
     {
         $schema = SqlScript::split((string) file_get_contents(BASE_PATH . '/database/schema.sql'));
         $creates = array_values(array_filter($schema, static fn (string $s): bool => str_starts_with($s, 'CREATE TABLE')));
-        self::assertCount(count($schema) - 1, $creates, 'SET NAMES plus one CREATE TABLE per table');
-        self::assertCount(12, $creates);
+        self::assertCount(count($schema) - 2, $creates, 'SET NAMES, one CREATE TABLE per table, and the migrations record');
+        self::assertCount(14, $creates);
+        self::assertStringStartsWith('INSERT INTO schema_migrations', (string) end($schema));
 
         $seed = SqlScript::split((string) file_get_contents(BASE_PATH . '/database/seed.sql'));
-        self::assertCount(2, $seed);
+        self::assertCount(3, $seed, 'SET NAMES, the catalog INSERT and the stock UPDATE');
         self::assertSame(55, substr_count($seed[1], "', 'imges/"), 'All 55 seed rows stay in one INSERT');
+        self::assertStringStartsWith('UPDATE books SET stock', $seed[2]);
+    }
+
+    public function testApplicationSplitterMatchesTheTestSplitterOnTheProjectScripts(): void
+    {
+        foreach (['database/schema.sql', 'database/seed.sql'] as $file) {
+            $sql = (string) file_get_contents(BASE_PATH . '/' . $file);
+            self::assertSame(
+                array_map('trim', SqlScript::split($sql)),
+                sql_split_statements($sql),
+                "$file splits identically in src/migrations.php"
+            );
+        }
     }
 }

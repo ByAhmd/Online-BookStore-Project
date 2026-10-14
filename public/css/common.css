@@ -99,7 +99,7 @@ a:hover {
 
 .skip-link {
     position: absolute;
-    left: 8px;
+    inset-inline-start: 8px;
     top: -60px;
     z-index: 100;
     padding: 8px 14px;
@@ -197,7 +197,7 @@ a:hover {
 .cart-badge {
     position: absolute;
     top: -4px;
-    right: -8px;
+    inset-inline-end: -8px;
     min-width: 20px;
     height: 20px;
     padding: 0 5px;
@@ -537,6 +537,11 @@ textarea.form-control {
     color: var(--color-error-text);
 }
 
+.status-refunded {
+    background: #fff4e5;
+    color: #7a4100;
+}
+
 .error-page {
     max-width: 640px;
     margin: 60px auto;
@@ -552,7 +557,7 @@ textarea.form-control {
 }
 
 .error-detail {
-    text-align: left;
+    text-align: start;
     white-space: pre-wrap;
     background: var(--color-surface-muted);
     padding: 12px;
@@ -600,4 +605,47 @@ textarea.form-control {
         transition: none !important;
         animation: none !important;
     }
+}
+
+/* ---------------------------------------------------------------------
+   Demo banner, language switch and right-to-left (Arabic) support
+   --------------------------------------------------------------------- */
+
+.demo-banner {
+    margin: 0;
+    padding: 8px 16px;
+    background: #ffbf47;
+    color: #0b0c0c;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.lang-switch {
+    color: var(--color-chrome-text);
+    font-weight: 700;
+    text-decoration: none;
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 40px;
+}
+
+.lang-switch:hover,
+.lang-switch:visited {
+    color: var(--color-chrome-text);
+}
+
+.lang-switch:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* Quicksand has no Arabic glyphs; Tajawal keeps a similar rounded, friendly feel. */
+[lang="ar"] body,
+body [lang="ar"],
+[dir="rtl"] body {
+    font-family: "Tajawal", var(--font-body);
+}
+
+[dir="rtl"] body {
+    line-height: 1.7;
 }

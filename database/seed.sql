@@ -1,7 +1,7 @@
 -- BookWise sample catalog (55 books).
 -- Recovered from the project's original database export. Contains catalog data only:
 -- no user accounts, admins, orders, comments or tokens.
--- Import AFTER database/schema.sql:  mysql -u <user> -p <database> < database/seed.sql
+-- Import AFTER database/schema.sql (or run: php bin/install.php --seed).
 
 SET NAMES utf8mb4;
 
@@ -61,3 +61,6 @@ INSERT INTO books (id, title, author, description, genre, price, cover_image, cr
 (59, 'Stay With Me', 'Claudia Wilson', 'Stay With Me is about a married Nigerian couple, Yejide and Akin, who experience ups and downs while trying to conceive and raise children. The couple previously agreed to pass on some of their culture\'s traditions in favor of having a more modern marriage.', 'Romantic', '22.50', 'imges/Romantic_Section/14.png', '2024-12-08 21:09:04'),
 (60, 'Love', 'Olivia Wilson', 'My favorite thing about her is her deep love for her community and how she shares her love through the gift of food.', 'Romantic', '33.00', 'imges/Romantic_Section/15.png', '2024-12-08 21:11:23'),
 (61, 'My First Love', 'Olivia Wilson', 'Amy Wyse has everything—except love. She doesn\'t want a boyfriend to get in the way of her dreams of college and a swimming scholarship, goals toward which she\'s worked hard. But then she\'s swept off her feet by Chris Shepherd, an irresistible senior from the swim team. Suddenly Amy has romance and a promising future.', 'Romantic', '49.99', 'imges/Romantic_Section/16.png', '2024-12-08 21:12:23');
+
+-- Varied stock levels (3 to 30 copies) so the demo shows both plenty and "only a few left".
+UPDATE books SET stock = 3 + ((id * 7) % 28);

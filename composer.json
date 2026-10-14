@@ -25,7 +25,9 @@
         "files": [
             "src/env.php",
             "src/helpers.php",
+            "src/i18n.php",
             "src/db.php",
+            "src/migrations.php",
             "src/csrf.php",
             "src/validation.php",
             "src/auth.php",

@@ -119,6 +119,13 @@ function app_config(bool $refresh = false): array
             'timezone' => env('APP_TIMEZONE', 'Asia/Riyadh'),
             // Directory for app.log, mail.log and php-error.log; relative paths start at the project root.
             'log_dir' => env('LOG_DIR', 'storage/logs'),
+            // Public demo: shows a banner, uses the built-in payment simulator and sends no email.
+            'demo' => env_bool('APP_DEMO', false),
+            'default_locale' => env('APP_DEFAULT_LOCALE', 'en'),
+        ],
+        'auth' => [
+            // New accounts must confirm their email address before signing in.
+            'require_email_verification' => env_bool('REQUIRE_EMAIL_VERIFICATION', true),
         ],
         'db' => [
             'host' => env('DB_HOST', '127.0.0.1'),
@@ -126,6 +133,9 @@ function app_config(bool $refresh = false): array
             'name' => env('DB_NAME', 'bookwise'),
             'user' => env('DB_USER', 'root'),
             'pass' => env('DB_PASS', ''),
+            // TLS for hosted databases: a CA certificate file, or its PEM text (e.g. from a hosting dashboard).
+            'ssl_ca' => env('DB_SSL_CA'),
+            'ssl_ca_pem' => env('DB_SSL_CA_PEM'),
         ],
         'stripe' => [
             'secret_key' => env('STRIPE_SECRET_KEY'),

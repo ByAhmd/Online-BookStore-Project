@@ -78,7 +78,7 @@ function configure_runtime(): void
         }
 
         $detail = config('app.debug') ? get_class($e) . ': ' . $e->getMessage() : null;
-        render_error_page(500, 'Something went wrong on our side. Please try again in a moment.', $detail);
+        render_error_page(500, t('common.error.server_error'), $detail);
     });
 }
 
@@ -210,7 +210,7 @@ function require_post(): void
 {
     if (!is_post()) {
         header('Allow: POST');
-        abort(405, 'This action only accepts form submissions.');
+        abort(405, t('common.error.post_only'));
     }
 }
 
@@ -293,16 +293,6 @@ function abort(int $status, string $message = ''): never
 
 function render_error_page(int $status, string $message = '', ?string $detail = null): never
 {
-    $titles = [
-        400 => 'Bad request',
-        403 => 'Access denied',
-        404 => 'Page not found',
-        405 => 'Method not allowed',
-        419 => 'Page expired',
-        429 => 'Too many requests',
-        500 => 'Server error',
-        503 => 'Service unavailable',
-    ];
     if (!headers_sent()) {
         http_response_code($status);
         header('Content-Type: text/html; charset=utf-8');
@@ -311,8 +301,10 @@ function render_error_page(int $status, string $message = '', ?string $detail = 
         ob_end_clean();
     }
 
-    $title = $titles[$status] ?? 'Error';
-    $message = $message !== '' ? $message : 'The request could not be completed.';
+    $title = translation_entry('common.error.titles.' . $status, current_locale()) !== null
+        ? t('common.error.titles.' . $status)
+        : t('common.error.titles.default');
+    $message = $message !== '' ? $message : t('common.error.default_message');
     try {
         render('error', compact('status', 'title', 'message', 'detail'));
     } catch (Throwable) {
