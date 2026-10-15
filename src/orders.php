@@ -112,9 +112,56 @@ function stripe_client(): \Stripe\StripeClient
     if (is_string($apiBase) && $apiBase !== '') {
         $options['api_base'] = rtrim($apiBase, '/');
     }
+    // A client takes the global setting when it is created (stripe-php 17+).
+    // With retries on, the cURL client also gives POST requests that have no
+    // idempotency key of their own (expiring a session) a generated one.
     \Stripe\Stripe::setMaxNetworkRetries(2);
+    $http = \Stripe\ApiRequestor::httpClient();
+    if (!$http instanceof StripeNoticeLogger) {
+        \Stripe\ApiRequestor::setHttpClient(new StripeNoticeLogger($http));
+    }
 
     return $client = new \Stripe\StripeClient($options);
+}
+
+/**
+ * stripe-php's HTTP client for the Stripe API, wrapped so that a Stripe-Notice
+ * response header (Stripe adds one to some answers, for example in test mode)
+ * is logged instead of reaching stripe-php. Since version 20.2 stripe-php raises
+ * the notice as a PHP warning once the request has succeeded, and the store
+ * turns warnings into exceptions (configure_runtime()): a notice would lose
+ * the Checkout Session or refund that Stripe had just created.
+ */
+final class StripeNoticeLogger implements \Stripe\HttpClient\ClientInterface
+{
+    public function __construct(private readonly \Stripe\HttpClient\ClientInterface $inner)
+    {
+    }
+
+    /**
+     * @param 'delete'|'get'|'post' $method
+     * @param string $absUrl
+     * @param array<int, string> $headers
+     * @param array<mixed> $params
+     * @param bool $hasFile
+     * @param 'v1'|'v2' $apiMode
+     * @param int|null $maxNetworkRetries
+     * @return array{0: mixed, 1: mixed, 2: mixed}
+     * @throws \Stripe\Exception\ApiConnectionException
+     */
+    #[\Override]
+    public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1', $maxNetworkRetries = null)
+    {
+        [$body, $status, $responseHeaders] = $this->inner->request($method, $absUrl, $headers, $params, $hasFile, $apiMode, $maxNetworkRetries);
+        if ((is_array($responseHeaders) || $responseHeaders instanceof ArrayAccess) && isset($responseHeaders['stripe-notice'])) {
+            app_log('warning', 'Stripe notice', [
+                'path' => (string) parse_url((string) $absUrl, PHP_URL_PATH),
+                'notice' => mb_substr((string) $responseHeaders['stripe-notice'], 0, 500),
+            ]);
+            unset($responseHeaders['stripe-notice']);
+        }
+        return [$body, $status, $responseHeaders];
+    }
 }
 
 /* ---------------------------------------------------------------------
@@ -428,7 +475,9 @@ function start_checkout_locked(array $user, ?int $addressId): string
     try {
         $session = $stripe->checkout->sessions->create([
             'mode' => 'payment',
-            'payment_method_types' => ['card'],
+            // Cards only. API version 2026-09-30.endive (stripe-php 22) replaced
+            // payment_method_types with allowed_payment_method_types.
+            'allowed_payment_method_types' => ['card'],
             'line_items' => $lineItems,
             'client_reference_id' => (string) $orderId,
             'customer_email' => (string) $user['Eaddress'],

@@ -101,6 +101,19 @@ final class RefundTest extends CheckoutTestCase
         self::assertSame($stock, $this->stockOf(self::ESABELLA));
     }
 
+    public function testARefundWhoseAnswerCarriesAStripeNoticeIsRecorded(): void
+    {
+        [, $order] = $this->paidOrder([self::ESABELLA => 1]);
+        $orderId = (int) $order['id'];
+        $this->stripe->http->noticeOnNextResponse('POST', self::REFUNDS, 'A notice for test mode.');
+
+        self::assertSame('refunded', refund_order($orderId), 'Stripe has refunded the payment, so the order is refunded');
+
+        $stripeRefunds = $this->stripe->refunds((string) $order['stripe_payment_intent']);
+        self::assertCount(1, $stripeRefunds);
+        self::assertSame($stripeRefunds[0]['id'], $this->reloadOrder($orderId)['stripe_refund_id']);
+    }
+
     public function testOnlyPaidOrdersWithAStripePaymentCanBeRefunded(): void
     {
         $user = $this->customerWithCart([self::ESABELLA => 1]);

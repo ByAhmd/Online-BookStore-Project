@@ -505,6 +505,7 @@ Starting from the Docker setup, or from a server prepared with `bin/setup.php`, 
    - Set `STRIPE_SECRET_KEY` to your secret key. Live keys (`sk_live_…`) are accepted only with `APP_ENV=production` and outside demo mode; use a test key (`sk_test_…`) for a staging copy.
    - In the Stripe Dashboard, add a webhook endpoint at `APP_URL/stripe_webhook.php` for these events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired` and `charge.refunded`.
      Set `STRIPE_WEBHOOK_SECRET` to its signing secret (`whsec_…`).
+     The store's requests use API version `2026-09-30.endive` (that of `stripe/stripe-php` 22). From an event it reads only the type, ids and amounts, and it checks each event through the API before acting on it.
    - Keep `STRIPE_CURRENCY` (default `sar`) or set another two-decimal currency.
    - Make sure `STRIPE_API_BASE` is **not** set.
 3. **Email:**

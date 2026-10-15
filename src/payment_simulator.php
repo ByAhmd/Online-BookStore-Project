@@ -358,7 +358,8 @@ function payment_simulator_route(array &$state, string $method, string $path, ar
 
 /**
  * POST /v1/checkout/sessions: the line items must have integer amounts and
- * quantities in one currency; the session total is computed from them.
+ * quantities in one currency; the session total is computed from them. Like
+ * the API version stripe-php pins, payment_method_types is refused.
  *
  * @param array{sessions: array<string, array<string, mixed>>, refunds: array<string, array<string, mixed>>, idempotency: array<string, array<string, mixed>>} $state
  * @param array<string, mixed> $params
@@ -367,6 +368,10 @@ function payment_simulator_route(array &$state, string $method, string $path, ar
  */
 function payment_simulator_create_session(array &$state, array $params, array $options): array
 {
+    if (array_key_exists('payment_method_types', $params)) {
+        // Removed in API version 2026-09-30.endive, the one stripe-php 22 uses.
+        return payment_simulator_error(400, 'Received unknown parameter: payment_method_types. Use allowed_payment_method_types instead.', 'parameter_unknown');
+    }
     $lineItems = $params['line_items'] ?? null;
     if (!is_array($lineItems) || $lineItems === []) {
         return payment_simulator_error(400, 'Missing required param: line_items.', 'parameter_missing');
@@ -617,17 +622,20 @@ final class PaymentSimulatorHttpClient implements \Stripe\HttpClient\ClientInter
      * @param array<mixed> $params
      * @param bool $hasFile
      * @param 'v1'|'v2' $apiMode
+     * @param int|null $maxNetworkRetries Unused: nothing goes over the network
      * @return array{0: string, 1: int, 2: \Stripe\Util\CaseInsensitiveArray}
      * @throws \Stripe\Exception\ApiConnectionException when the simulator cannot answer
      */
-    public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1')
+    #[\Override]
+    public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1', $maxNetworkRetries = null)
     {
         if ($apiMode !== 'v1' || $hasFile) {
             throw \Stripe\Exception\ApiConnectionException::factory('The payment simulator only answers form-encoded v1 requests.');
         }
         // Encode and decode the parameters as they would travel over HTTP, so
-        // the simulator sees exactly what Stripe would: strings in nested arrays.
-        parse_str(\Stripe\Util\Util::encodeParameters(\Stripe\Util\Util::objectsToIds($params)), $form);
+        // the simulator sees exactly what Stripe would: strings in nested arrays,
+        // without null values (as stripe-php's own cURL client sends v1 requests).
+        parse_str(\Stripe\Util\Util::encodeParameters(\Stripe\Util\Util::objectsToIds($params, false)), $form);
         $idempotencyKey = null;
         foreach ($headers as $header) {
             if (stripos((string) $header, 'Idempotency-Key:') === 0) {

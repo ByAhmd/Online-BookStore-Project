@@ -33,15 +33,17 @@ final class StripeHttpRecorder implements ClientInterface
      * @param array<mixed> $params
      * @param bool $hasFile
      * @param 'v1'|'v2' $apiMode
+     * @param int|null $maxNetworkRetries
      * @return array{0: string, 1: int, 2: mixed}
      */
-    public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1')
+    #[\Override]
+    public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1', $maxNetworkRetries = null)
     {
         $verb = strtoupper($method);
         $path = (string) parse_url($absUrl, PHP_URL_PATH);
         $this->requests[] = ['method' => $verb, 'path' => $path, 'headers' => array_values($headers), 'params' => $params];
 
-        $forward = fn (): array => $this->inner->request($method, $absUrl, $headers, $params, $hasFile, $apiMode);
+        $forward = fn (): array => $this->inner->request($method, $absUrl, $headers, $params, $hasFile, $apiMode, $maxNetworkRetries);
         foreach ($this->interceptors as $index => $interceptor) {
             if ($interceptor['method'] === $verb && preg_match($interceptor['pattern'], $path) === 1) {
                 array_splice($this->interceptors, $index, 1);
@@ -91,6 +93,19 @@ final class StripeHttpRecorder implements ClientInterface
             [$body, $status, $headers] = $forward();
             $decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
             return [json_encode($rewrite($decoded), JSON_THROW_ON_ERROR), $status, $headers];
+        });
+    }
+
+    /**
+     * Sends the next matching request to the mock and adds a Stripe-Notice
+     * header to its response, as Stripe does for some requests in test mode.
+     */
+    public function noticeOnNextResponse(string $method, string $pathPattern, string $notice): void
+    {
+        $this->intercept($method, $pathPattern, static function (Closure $forward) use ($notice): array {
+            [$body, $status, $headers] = $forward();
+            $headers['Stripe-Notice'] = $notice;
+            return [$body, $status, $headers];
         });
     }
 

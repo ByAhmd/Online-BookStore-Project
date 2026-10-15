@@ -60,6 +60,8 @@ final class CheckoutTest extends CheckoutTestCase
         self::assertCount(1, $requests);
         $params = $requests[0]['params'];
         self::assertSame('payment', $params['mode']);
+        self::assertSame(['card'], $params['allowed_payment_method_types']);
+        self::assertArrayNotHasKey('payment_method_types', $params, 'Removed in the API version stripe-php pins');
         self::assertSame((string) $order['id'], $params['client_reference_id']);
         self::assertSame(['order_id' => (string) $order['id'], 'user_id' => (string) $user['id']], $params['metadata']);
         self::assertSame($params['metadata'], $params['payment_intent_data']['metadata']);
@@ -78,6 +80,28 @@ final class CheckoutTest extends CheckoutTestCase
         $idempotency = array_values(array_filter($requests[0]['headers'], static fn (string $h): bool => stripos($h, 'Idempotency-Key:') === 0));
         self::assertCount(1, $idempotency);
         self::assertStringStartsWith('Idempotency-Key: bookwise-order-' . $order['id'] . '-', $idempotency[0]);
+    }
+
+    public function testAStripeNoticeIsLoggedAndTheCheckoutGoesOn(): void
+    {
+        $user = $this->customerWithCart([self::ESABELLA => 1]);
+        $logFile = log_path('app.log');
+        clearstatcache(true, $logFile);
+        $logOffset = is_file($logFile) ? (int) filesize($logFile) : 0;
+        // stripe-php raises this header as a PHP warning, after Stripe has created the session.
+        $this->stripe->http->noticeOnNextResponse('POST', self::CREATE_SESSION, 'A notice for test mode.');
+
+        [$sessionId, $order] = $this->checkout($user);
+
+        self::assertSame('pending', $order['status'], 'The order keeps its session');
+        self::assertNotNull($this->stripe->session($sessionId));
+        $log = (string) file_get_contents($logFile, false, null, $logOffset);
+        self::assertStringContainsString('WARNING: Stripe notice {"path":"/v1/checkout/sessions","notice":"A notice for test mode."}', $log);
+
+        // The next answers carry no notice and log nothing.
+        $this->stripe->pay($sessionId);
+        self::assertSame('paid', confirm_checkout_return((int) $user['id'], $sessionId)['state']);
+        self::assertSame(1, substr_count((string) file_get_contents($logFile, false, null, $logOffset), 'Stripe notice'));
     }
 
     public function testLongTitlesAreTruncatedForStripe(): void

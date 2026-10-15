@@ -12,7 +12,7 @@
         "ext-pdo": "*",
         "ext-pdo_mysql": "*",
         "phpmailer/phpmailer": "^7.1",
-        "stripe/stripe-php": "^16.3"
+        "stripe/stripe-php": "^22.0"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.1",

@@ -142,12 +142,15 @@ final class PaymentSimulatorTest extends TestCase
         unset($missing['line_items']);
         $mixedCurrencies = self::sessionParams();
         $mixedCurrencies['line_items'][1]['price_data']['currency'] = 'usd';
+        // Removed in API version 2026-09-30.endive, which stripe-php 22 pins.
+        $paymentMethodTypes = self::sessionParams() + ['payment_method_types' => ['card']];
 
         $cases = [
             'no line items' => [$missing, 'parameter_missing'],
             'decimal amount' => [self::sessionParams('2', '12.50'), 'parameter_invalid_integer'],
             'zero quantity' => [self::sessionParams('0'), 'parameter_invalid_integer'],
             'two currencies' => [$mixedCurrencies, 'parameter_invalid_string'],
+            'payment_method_types' => [$paymentMethodTypes, 'parameter_unknown'],
         ];
         foreach ($cases as $label => [$params, $code]) {
             [$status, $body] = $this->api('POST', '/v1/checkout/sessions', $params);

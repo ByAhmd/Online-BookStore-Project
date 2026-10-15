@@ -112,7 +112,7 @@ page architecture is unchanged; there is no framework.
 | --- | --- |
 | Language | PHP ≥ 8.3 (tested on 8.3 and 8.4; CI covers 8.3–8.5) |
 | Database | MySQL ≥ 8.0.16 or MariaDB ≥ 10.4 (InnoDB, utf8mb4), accessed with PDO prepared statements |
-| Payments | [Stripe Checkout](https://stripe.com/docs/payments/checkout) via `stripe/stripe-php` 16.x, or the built-in payment simulator |
+| Payments | [Stripe Checkout](https://stripe.com/docs/payments/checkout) via `stripe/stripe-php` 22.x, or the built-in payment simulator |
 | Email | Any SMTP server through PHPMailer (`phpmailer/phpmailer` 7.x), a demo inbox stored in the database, or a local log file for development |
 | Frontend | Server-rendered HTML, plain CSS and vanilla JavaScript (no build step), Google Fonts (Quicksand) |
 | Tooling | Composer, PHPUnit 12, PHPStan 2 (level 8), GitHub Actions |
@@ -406,6 +406,10 @@ stripe listen --forward-to localhost:8000/stripe_webhook.php
 `stripe listen` prints a `whsec_…` secret to use. Every webhook request's signature is verified, and unsigned requests are rejected.
 A webhook is treated only as a notification: BookWise re-fetches the Checkout Session (or the refunds) from the Stripe API and acts on that state.
 A leaked webhook secret alone therefore cannot mark an unpaid order as paid or a paid order as refunded, and out-of-order deliveries are harmless.
+
+**API version.** `stripe/stripe-php` 22 sends every request with Stripe API version `2026-09-30.endive`.
+Checkout therefore limits the payment methods to cards with `allowed_payment_method_types`; that version no longer has `payment_method_types`.
+When Stripe adds a notice to an answer (a `Stripe-Notice` header, for example in test mode), it is written to `app.log` as a `Stripe notice` warning and never interrupts a checkout or a refund.
 
 **Stock.** Adding to the cart and starting a checkout check the stock. The copies are taken out of stock when the payment is confirmed, and put back when an order is refunded before it is shipped.
 Once shipped, the copies have left the store, so a refund does not change the stock; staff add any returned copies on the book's edit page.
