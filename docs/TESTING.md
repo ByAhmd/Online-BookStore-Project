@@ -89,7 +89,7 @@ docker compose up -d --build
 BASE_URL=http://localhost:8080 npx playwright test
 ```
 
-`BASE_URL` must be the store's `APP_URL`, because the payment page sends the browser back there. Any store set up like `docker-compose.yml` works (demo mode, the demo inbox and `REQUIRE_EMAIL_VERIFICATION=false`).
+`BASE_URL` must be the store's `APP_URL`, because the payment page sends the browser back there. Any store set up like `docker-compose.yml` works (demo mode, the demo inbox and `REQUIRE_EMAIL_VERIFICATION=false`), also one in a subfolder such as `BASE_URL=http://localhost/bookwise`.
 The Compose store keeps its database between runs; `docker compose down -v` deletes it if the demo-customer limit is reached.
 The tests create customers and orders, so never point them at a public demo.
 

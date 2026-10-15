@@ -11,7 +11,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const localUrl = 'http://127.0.0.1:8181';
-const baseURL = (process.env.BASE_URL || localUrl).replace(/\/+$/, '');
+// The tests open pages by relative paths ('index.php'), which Playwright
+// resolves like a link on the page at baseURL. With exactly one trailing
+// slash they stay inside a store in a subfolder (http://localhost/bookwise/).
+const baseURL = `${(process.env.BASE_URL || localUrl).replace(/\/+$/, '')}/`;
 const ci = Boolean(process.env.CI);
 
 export default defineConfig({
