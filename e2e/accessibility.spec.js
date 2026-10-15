@@ -55,6 +55,10 @@ for (const locale of ['en', 'ar']) {
         });
 
         test('pages a customer sees', async ({ page }) => {
+            // About fifteen pages, each scanned by axe: close to the default
+            // timeout when the single-threaded local server is shared with the
+            // other workers.
+            test.slow();
             // English: a customer who signed up types an address at checkout;
             // Arabic: a demo customer, whose saved address is chosen.
             if (locale === 'en') {
