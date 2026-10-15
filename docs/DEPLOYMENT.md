@@ -609,6 +609,9 @@ The **Docker image** job in `.github/workflows/ci.yml` runs next to the test mat
    - that `/health.php` answers 503 after the database is stopped.
 4. On failure it prints the container logs.
 
+The **Browser tests** job starts the same Compose store and drives it in Chromium with the Playwright tests of `e2e/` (journeys in English and Arabic, the demo inbox, the read-only administrator, keyboard use and axe-core accessibility checks).
+When a test fails, it keeps Playwright's HTML report as the `playwright-report` artifact and prints the container logs. [TESTING.md](TESTING.md) explains how to run these tests yourself, also against `docker compose up`.
+
 Locally, without Docker:
 
 - `bash tests/Docker/entrypoint_test.sh` tests the entrypoint's configuration logic.

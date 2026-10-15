@@ -585,6 +585,7 @@ DB_PORT=3306 DB_USER=root DB_PASS=secret npx playwright test   # starts a local 
 BASE_URL=http://localhost:8080 npx playwright test             # or tests the Docker store
 ```
 
+The CI's **Browser tests** job runs them against the Docker Compose store and keeps the HTML report when a test fails.
 [docs/TESTING.md](docs/TESTING.md) explains the setup and the accessibility checks.
 
 ### Images and browser caching

@@ -220,3 +220,65 @@ jobs:
         run: |
           docker rm -f bookwise-real || true
           docker compose down -v
+
+  browser:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the test dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build the image
+        run: docker compose build
+
+      # The demo store of docker-compose.yml: the payment simulator, the demo
+      # inbox (MAIL_DRIVER=database) and the one-click demo accounts.
+      - name: Start the store (MySQL + app in demo mode)
+        run: docker compose up -d --wait --wait-timeout 300
+
+      - name: Wait for /health.php
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 5 http://localhost:8080/health.php; then
+              echo
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "/health.php did not answer in time" >&2
+          exit 1
+
+      - name: Browser tests (Playwright with axe-core)
+        env:
+          BASE_URL: http://localhost:8080
+        run: npx playwright test
+
+      - name: Upload the test report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Container logs
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --timestamps
+
+      - name: Stop the containers
+        if: always()
+        run: docker compose down -v

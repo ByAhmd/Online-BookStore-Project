@@ -12,6 +12,7 @@ They are not needed to run the store: Node.js is only used for these tests (`pac
 - [Running them against Docker](#running-them-against-docker)
 - [Useful options](#useful-options)
 - [Accessibility checks](#accessibility-checks)
+- [On CI](#on-ci)
 
 ## What the browser tests cover
 
@@ -123,3 +124,8 @@ What the checks found, and how it was fixed:
 - The scrolling tables of the admin pages had the same name as the section around them, so the two regions could not be told apart. They are now named "Table: …" (`admin.table_region`).
 
 The HTTP suite checks both rules on every page it opens (`HtmlDocument::contentOutsideLandmarks()` and `duplicateLandmarks()` in `tests/Support`, used by `assertHtmlPage()`), and `tests/Http/AccessibilityMarkupTest.php` checks the two fixes.
+
+## On CI
+
+The **Browser tests** job of `.github/workflows/ci.yml` builds the image, starts the Compose store as the Docker job does, installs Chromium and runs `npx playwright test` against `http://localhost:8080`.
+On CI, a failed test is tried once more and two tests run at a time. When a test fails, the job uploads the HTML report (with screenshots and traces) as the `playwright-report` artifact of the workflow run, and prints the containers' logs.
