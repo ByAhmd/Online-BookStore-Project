@@ -28,6 +28,9 @@ if ($as === 'customer') {
         if ($result['status'] === 'throttled') {
             app_log('warning', 'Demo guest creation blocked by throttling', ['ip' => $ip]);
             flash('error', t('auth.demo.throttled'));
+        } elseif ($result['status'] === 'crowded') {
+            app_log('warning', 'Demo guest creation blocked by the limit for all visitors', ['limit' => DEMO_GUEST_RATE_LIMIT_TOTAL]);
+            flash('error', t('auth.demo.crowded'));
         } else {
             flash('error', t('auth.demo.busy'));
         }

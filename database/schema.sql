@@ -288,9 +288,11 @@ CREATE TABLE demo_mail (
     KEY idx_demo_mail_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- One-click demo customers (APP_DEMO=true): when, and from which address, each
--- was created, to limit how many one visitor can create per hour. Rows older
--- than a day are deleted whenever a demo customer is created or cleaned up.
+-- One-click demo customers (APP_DEMO=true): when, and from which network, each
+-- was created (ip_address: an IPv4 address, or an IPv6 /64 such as
+-- "2001:db8:1:2::/64"), to limit how many one visitor, and all visitors
+-- together, can create per hour. Rows older than a day are deleted whenever a
+-- demo customer is created or cleaned up.
 CREATE TABLE demo_guest_creations (
     id         INT         NOT NULL AUTO_INCREMENT,
     ip_address VARCHAR(45) NOT NULL,

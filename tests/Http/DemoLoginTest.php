@@ -283,6 +283,34 @@ final class DemoLoginTest extends HttpTestCase
         $this->assertRedirect($this->tryAs($visitor, 'admin'), 'admin_dashboard.php');
     }
 
+    public function testDemoCustomersAreLimitedForAllVisitorsTogether(): void
+    {
+        $this->enableDemo();
+        // Visitors from many other networks started demo accounts within the hour.
+        for ($i = 1; $i <= DEMO_GUEST_RATE_LIMIT_TOTAL; $i++) {
+            db_run('INSERT INTO demo_guest_creations (ip_address, created_at) VALUES (?, NOW() - INTERVAL 10 MINUTE)', ['2001:db8:' . dechex($i) . '::/64']);
+        }
+
+        $visitor = $this->client();
+        $refused = $this->tryAs($visitor, 'customer');
+        $this->assertRedirect($refused, 'index.php?form=login');
+        $this->assertFlash(
+            $visitor->follow($refused),
+            'error',
+            'Many visitors have started demo accounts in the last hour. Please try again later, or sign up for an account of your own.'
+        );
+        self::assertFalse($this->isSignedInCustomer($visitor));
+        self::assertSame(0, $this->countRows('users'));
+        self::assertNotSame([], array_filter($this->appLogLines(), static fn (string $line): bool => str_contains($line, 'WARNING: Demo guest creation blocked by the limit for all visitors')));
+
+        $visitor->follow($visitor->get('index.php?form=login&lang=ar'));
+        $this->assertFlash(
+            $visitor->follow($this->tryAs($visitor, 'customer')),
+            'error',
+            'أنشأ كثير من الزوار حسابات تجريبية خلال الساعة الماضية. يُرجى المحاولة لاحقًا، أو إنشاء حساب خاص بك.'
+        );
+    }
+
     public function testTheReadOnlyAdministratorNeverSeesTheKeyToACustomersPaymentPage(): void
     {
         // As on the alwaysdata demo: payments go through the simulator, whose page

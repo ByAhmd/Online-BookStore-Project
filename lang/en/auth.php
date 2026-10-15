@@ -151,6 +151,7 @@ return [
         ],
         'admin_welcome' => 'You are signed in as a read-only demo administrator. Look around as you like: nothing can be changed.',
         'throttled' => 'Too many demo accounts were started from your network in the last hour. Please try again later, or sign up for an account of your own.',
+        'crowded' => 'Many visitors have started demo accounts in the last hour. Please try again later, or sign up for an account of your own.',
         'busy' => 'The demo is busy right now. Please try again in a moment.',
     ],
 

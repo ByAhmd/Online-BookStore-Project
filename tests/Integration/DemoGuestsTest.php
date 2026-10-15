@@ -10,7 +10,8 @@ use BookWise\Tests\Support\CheckoutTestCase;
 /**
  * Demo guests, the throwaway customers of the demo's "Try as a customer"
  * button: how they are created (confirmed, unknown password, favorites),
- * the per-address rate limit and the cap on live guests, what deleting one
+ * the rate limits (per IPv4 address or IPv6 /64, and for all visitors
+ * together) and the cap on live guests, what deleting one
  * removes and keeps, the daily cleanup (in code and bin/demo-cleanup.php),
  * and that they can never get a password.
  */
@@ -120,6 +121,40 @@ final class DemoGuestsTest extends CheckoutTestCase
             self::assertSame('deleted', delete_demo_guest((int) $guest['id']));
         }
         self::assertSame('throttled', create_demo_guest(self::IP)['status'], 'The limit counts creations, not live guests');
+    }
+
+    public function testAnIpv6VisitorIsLimitedByItsWholeNetwork(): void
+    {
+        // Every address of one /64 counts together: picking a new address does not help.
+        for ($i = 1; $i <= DEMO_GUEST_RATE_LIMIT; $i++) {
+            $this->createGuest(sprintf('2001:db8:1:2:%x::%x', $i, random_int(1, 0xffff)));
+        }
+        self::assertSame([['ip_address' => '2001:db8:1:2::/64', 'created' => DEMO_GUEST_RATE_LIMIT]], db_all('SELECT ip_address, COUNT(*) AS created FROM demo_guest_creations GROUP BY ip_address'));
+        self::assertSame(['status' => 'throttled', 'user' => null], create_demo_guest('2001:db8:1:2:ffff:ffff:ffff:fffe'));
+
+        // The next network is another visitor.
+        $this->createGuest('2001:db8:1:3::1');
+        self::assertSame(DEMO_GUEST_RATE_LIMIT + 1, $this->countRows('users', 'demo_guest_at IS NOT NULL'));
+    }
+
+    public function testAllVisitorsTogetherMayCreateSixtyGuestsAnHour(): void
+    {
+        self::assertSame(60, DEMO_GUEST_RATE_LIMIT_TOTAL);
+        $live = $this->createGuest('203.0.113.1', 3);
+        // Creations from many different networks within the hour.
+        for ($i = 2; $i <= DEMO_GUEST_RATE_LIMIT_TOTAL; $i++) {
+            db_run('INSERT INTO demo_guest_creations (ip_address, created_at) VALUES (?, NOW() - INTERVAL 30 MINUTE)', ['2001:db8:' . dechex($i) . '::/64']);
+        }
+
+        // A new visitor is refused, and nobody else's guest is pushed out to make room.
+        self::assertSame(['status' => 'crowded', 'user' => null], create_demo_guest(self::IP, 1));
+        self::assertTrue($this->userExists((int) $live['id']));
+        self::assertSame(1, $this->countRows('users'));
+        self::assertSame(DEMO_GUEST_RATE_LIMIT_TOTAL, $this->countRows('demo_guest_creations'), 'Refusals are not counted');
+
+        // An hour later there is room again.
+        db_run('UPDATE demo_guest_creations SET created_at = NOW() - INTERVAL ? MINUTE WHERE ip_address LIKE ?', [DEMO_GUEST_RATE_WINDOW_MINUTES + 1, '2001:db8:%']);
+        $this->createGuest();
     }
 
     public function testTheOldestGuestsMakeRoomWhenTheLimitIsReached(): void

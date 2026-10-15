@@ -99,7 +99,7 @@ page architecture is unchanged; there is no framework.
 - One-click demo accounts (only with `APP_DEMO=true`), offered on the sign-in page and pointed to by the banner:
   - **Try as a customer** creates a fresh account for that visitor ("Demo reader 4821", a random address at the reserved `demo.invalid` domain, a random password nobody knows, already confirmed, with a few favorites) and signs it in.
     It can use the whole store (cart, simulated checkout, reviews of the books it bought, the demo inbox) and delete itself, but it has no password to change or reset.
-    One address may create 10 per hour, and at most 200 exist at once (the oldest are deleted, with their data, to make room).
+    One visitor (an IPv4 address, or an IPv6 /64 network) may create 10 per hour and all visitors together 60 per hour, and at most 200 exist at once (the oldest are deleted, with their data, to make room).
     `php bin/demo-cleanup.php` deletes them after 24 hours, with their carts, favorites, reviews and abandoned checkouts; paid orders are kept, anonymised, as when customers delete their accounts.
   - **Try as an administrator (read-only)** signs in to a shared viewer administrator, created on first use with a random password nobody knows.
 
@@ -583,7 +583,7 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
 - **Access control:** customer and admin checks are enforced on the server for every page and action.
   Cart lines, delivery addresses, orders, order pages and payment returns are always scoped to the signed-in user; a checkout accepts only one of the customer's own addresses.
   Guests may only read the catalog and book pages. Every admin request that changes something (book forms, cover uploads, deletions, refunds) requires an owner (`require_admin_write()`): read-only administrators get 403.
-- **Demo accounts:** only in demo mode, through POST forms with a CSRF token. Demo customers get random, unguessable addresses and passwords that nobody knows; they cannot set a password (no password change, no reset link), and their creation is limited per IP address and in total.
+- **Demo accounts:** only in demo mode, through POST forms with a CSRF token. Demo customers get random, unguessable addresses and passwords that nobody knows; they cannot set a password (no password change, no reset link), and their creation is limited per IPv4 address or IPv6 /64 network, for all visitors together, and in number.
   The shared demo administrator is always a viewer, and sees customers' names, email addresses and payment references only shortened.
   In particular it never sees a checkout session id, which would let anyone finish that customer's payment on the simulator's page (`pay.php` needs no sign-in, like Stripe's).
 - **Passwords:** bcrypt via `password_hash()`, with a transparent upgrade of legacy MD5 hashes.
@@ -644,7 +644,8 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
   The Docker image takes the address from `X-Forwarded-For` on connections from private addresses; on alwaysdata this was not confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#step-9-check-the-visitors-addresses) for a check).
 - **No sign-up rate limit:** only verification and sign-up notice emails are limited, to one per account every few minutes.
 - **Demo accounts:**
-  - Demo customers are limited per IP address (10 per hour), with the same caveat as login throttling behind a proxy: if every visitor shares the proxy's address, they share the limit too.
+  - Demo customers are limited per visitor (10 per hour for an IPv4 address or an IPv6 /64 network), with the same caveat as login throttling behind a proxy: if every visitor shares the proxy's address, they share the limit too.
+  - Someone with many addresses can still use up the limit for all visitors (60 per hour). Nobody can then start a demo customer until the hour is over, but existing demo customers are not pushed out faster than that.
   - At most 200 demo customers exist at once. On a busy demo the oldest are deleted to make room, so a visitor's demo account can disappear before its 24 hours are over.
   - They are deleted after 24 hours only when `php bin/demo-cleanup.php` runs (a daily scheduled task, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-demo-cleanup)); a checkout still being confirmed delays it to the next run.
   - Every visitor who presses **Try as an administrator** shares the same read-only account, and sees every order of the demo (with shortened customer details and payment references).

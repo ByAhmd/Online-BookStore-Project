@@ -325,7 +325,7 @@ rm public/ip-check.php
 ```
 
 If the page showed your address, throttling works per visitor. If it showed another address (the proxy's), every visitor shares that address: after 20 failed sign-ins within 15 minutes, sign-in is refused for everyone until the 15 minutes have passed.
-The same holds for the one-click demo customers: 10 per hour for everyone together instead of per visitor.
+The same holds for the one-click demo customers: 10 per hour for everyone together instead of 10 per visitor (and 60 for everyone).
 That is acceptable for a demo; note it in the limits you present.
 
 ### Schedule the demo cleanup
@@ -484,7 +484,7 @@ The free alwaysdata plan cannot be used for a store that makes money.
 **The demo itself:**
 
 - Anyone can register. Do not enter real personal data (delivery addresses included: any made-up Saudi address in the right format works), and expect the data to be reset.
-- One-click demo customers are limited to 10 per visitor address and hour and 200 at once (the oldest are deleted first), and are deleted after 24 hours by `php bin/demo-cleanup.php`.
+- One-click demo customers are limited to 10 per visitor address (for IPv6, per /64 network) and hour, 60 per hour for all visitors together, and 200 at once (the oldest are deleted first). They are deleted after 24 hours by `php bin/demo-cleanup.php`.
   Everybody who tries the read-only administrator shares one account, which shows every order of the demo with shortened customer names, addresses and payment references (a full checkout session id would open that customer's payment page).
 - Visitors' purchases never take a book below 3 copies, and `php bin/install.php` (or a container start) restocks the catalog.
 - Nothing is ever shipped: a demo order stays *processing* until an administrator marks it shipped and delivered on its order page, which only updates the order and sends its emails to the demo inbox.

@@ -10,9 +10,10 @@ declare(strict_types=1);
  *  - users.demo_guest_at: set on the throwaway customers that the demo's
  *    "Try as a customer" button creates; bin/demo-cleanup.php deletes them
  *    after 24 hours.
- *  - demo_guest_creations: when, and from which address, those customers were
- *    created, so that one visitor cannot create too many. Rows older than a
- *    day are deleted.
+ *  - demo_guest_creations: when, and from which network (an IPv4 address or
+ *    an IPv6 /64), those customers were created, so that neither one visitor
+ *    nor all of them together can create too many. Rows older than a day are
+ *    deleted.
  * Every step checks the current schema first, so re-running is harmless.
  */
 return static function (PDO $pdo): void {

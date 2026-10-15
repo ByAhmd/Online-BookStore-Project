@@ -9,8 +9,9 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Pure helpers behind read-only administrators and the demo's one-click
- * accounts: shortened customer details, the reserved demo address domain
- * and the demo administrator's name.
+ * accounts: shortened customer details and payment references, the
+ * networks that demo customers are counted against, the reserved demo
+ * address domain and the demo administrator's name.
  */
 final class DemoAccountsTest extends TestCase
 {
@@ -48,6 +49,27 @@ final class DemoAccountsTest extends TestCase
         self::assertSame('pi_…', masked_reference('pi_3MtwBwLkdIwHu7ix28a3tqPa'));
         self::assertSame('re_test_…', masked_reference('re_test_0a1b2c'));
         self::assertSame('…', masked_reference('nounderscore'));
+    }
+
+    /**
+     * @return iterable<string, array{0: string, 1: string}>
+     */
+    public static function demoGuestNetworks(): iterable
+    {
+        yield 'IPv4 on its own' => ['198.51.100.7', '198.51.100.7'];
+        yield 'IPv6 by its /64' => ['2001:db8:1:2:3:4:5:6', '2001:db8:1:2::/64'];
+        yield 'another address in the same /64' => ['2001:DB8:1:2:ffff::1', '2001:db8:1:2::/64'];
+        yield 'the next /64' => ['2001:db8:1:3::1', '2001:db8:1:3::/64'];
+        yield 'IPv6 loopback' => ['::1', '::/64'];
+        yield 'IPv4-mapped IPv6' => ['::ffff:198.51.100.7', '198.51.100.7'];
+        yield 'what client_ip() gives for a bad address' => ['0.0.0.0', '0.0.0.0'];
+    }
+
+    #[DataProvider('demoGuestNetworks')]
+    public function testDemoGuestsAreCountedPerIpv4AddressOrIpv6Network(string $ip, string $expected): void
+    {
+        self::assertSame($expected, demo_guest_network($ip));
+        self::assertLessThanOrEqual(45, strlen($expected), 'Fits demo_guest_creations.ip_address');
     }
 
     public function testNobodyMaySignUpWithTheDemoDomain(): void
