@@ -162,7 +162,7 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 ├── docs/                   DEPLOYMENT.md (Docker, alwaysdata demo, Tailscale Funnel), TESTING.md (browser tests), AUDIT.md (audit record), screenshots/
 ├── storage/                logs/ (app.log, php-error.log, mail.log) and the payment simulator's state (git-ignored)
 ├── tests/                  PHPUnit suites (unit, integration, http, deploy) and an HTTP wrapper around the payment simulator
-├── e2e/  package.json  playwright.config.js   Browser tests (Playwright with axe-core; Node.js, tests only)
+├── e2e/  package.json  playwright.config.js   Browser tests (Playwright with axe-core) and the README screenshots (Node.js, tests only)
 ├── .env.example            Configuration template
 └── .github/workflows/ci.yml
 ```
@@ -586,7 +586,7 @@ BASE_URL=http://localhost:8080 npx playwright test             # or tests the Do
 ```
 
 The CI's **Browser tests** job runs them against the Docker Compose store and keeps the HTML report when a test fails.
-[docs/TESTING.md](docs/TESTING.md) explains the setup and the accessibility checks.
+[docs/TESTING.md](docs/TESTING.md) explains the setup, the accessibility checks and `npm run screenshots`, which takes the [screenshots](#screenshots) of this README.
 
 ### Images and browser caching
 

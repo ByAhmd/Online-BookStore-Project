@@ -1,8 +1,8 @@
 # Testing BookWise in a real browser
 
 The PHPUnit suites (unit, integration, http and deploy) are described in the README under [Testing and quality checks](../README.md#testing-and-quality-checks).
-This page covers the **browser tests**, which drive the store in Chromium with [Playwright](https://playwright.dev) and check its accessibility with [axe-core](https://github.com/dequelabs/axe-core).
-They are not needed to run the store: Node.js is only used for these tests (`package.json`, `e2e/`).
+This page covers the **browser tests**, which drive the store in Chromium with [Playwright](https://playwright.dev) and check its accessibility with [axe-core](https://github.com/dequelabs/axe-core), and the script that takes the **README screenshots**.
+Neither is needed to run the store: Node.js is only used for these tools (`package.json`, `e2e/`).
 
 ## Contents
 
@@ -13,6 +13,7 @@ They are not needed to run the store: Node.js is only used for these tests (`pac
 - [Useful options](#useful-options)
 - [Accessibility checks](#accessibility-checks)
 - [On CI](#on-ci)
+- [README screenshots](#readme-screenshots)
 
 ## What the browser tests cover
 
@@ -129,3 +130,25 @@ The HTTP suite checks both rules on every page it opens (`HtmlDocument::contentO
 
 The **Browser tests** job of `.github/workflows/ci.yml` builds the image, starts the Compose store as the Docker job does, installs Chromium and runs `npx playwright test` against `http://localhost:8080`.
 On CI, a failed test is tried once more and two tests run at a time. When a test fails, the job uploads the HTML report (with screenshots and traces) as the `playwright-report` artifact of the workflow run, and prints the containers' logs.
+
+## README screenshots
+
+`npm run screenshots` takes the README's screenshots, as JPEG files (quality 78) in `docs/screenshots/`:
+
+| File | Shows |
+| --- | --- |
+| `home.jpg`, `explore.jpg`, `home-ar.jpg` | The home page, the Explore page and the Arabic home page, as a guest |
+| `book.jpg`, `checkout.jpg`, `payment-simulator.jpg`, `order.jpg`, `inbox.jpg` | A demo customer's book page, checkout page, simulated payment page, order page (with its timeline) and demo inbox |
+| `admin-dashboard.jpg` | The admin dashboard |
+| `mobile.jpg` | The home page on a phone (375 pixels wide) |
+
+Desktop pages are taken at 1280 × 800 pixels, the phone at 375 × 812 with a device pixel ratio of 2.
+Like the tests, the script uses the store at `BASE_URL`, or starts the local store described above:
+
+```bash
+npm run screenshots
+BASE_URL=http://localhost:8080 SCREENSHOT_ADMIN_EMAIL=admin@bookwise.test SCREENSHOT_ADMIN_PASSWORD=local-admin-password npm run screenshots
+```
+
+With `SCREENSHOT_ADMIN_EMAIL` and `SCREENSHOT_ADMIN_PASSWORD` (an owner administrator of that store, such as the local one of `docker-compose.yml` above), the order is marked shipped first, so its timeline shows the carrier and the tracking number, and the dashboard is the owner's. Without them, the dashboard is the read-only demo administrator's.
+The script overwrites the files of the same name; look at them before you commit them.

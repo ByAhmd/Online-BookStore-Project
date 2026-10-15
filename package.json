@@ -1,12 +1,13 @@
 {
     "name": "bookwise-browser-tests",
     "private": true,
-    "description": "Real-browser end-to-end and accessibility tests of BookWise (Playwright with axe-core). The store itself needs no Node.js.",
+    "description": "Real-browser end-to-end and accessibility tests of BookWise (Playwright with axe-core), and the README screenshots. The store itself needs no Node.js.",
     "license": "MIT",
     "type": "module",
     "scripts": {
         "test:e2e": "playwright test",
-        "serve:e2e": "node e2e/local-server.js"
+        "serve:e2e": "node e2e/local-server.js",
+        "screenshots": "playwright test --config=e2e/screenshots.config.js"
     },
     "devDependencies": {
         "@axe-core/playwright": "4.13.0",
