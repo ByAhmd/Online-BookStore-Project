@@ -42,8 +42,8 @@ final class MigrationsTest extends DatabaseTestCase
         $orders = [];
         foreach (['paid', 'pending', 'refunded'] as $status) {
             db_run(
-                'INSERT INTO orders (user_id, status, currency, total_amount, amount_minor) VALUES (?, ?, ?, ?, ?)',
-                [$user['id'], $status, 'sar', '39.98', 3998]
+                'INSERT INTO orders (user_id, status, currency, total_amount, amount_minor, paid_at) VALUES (?, ?, ?, ?, ?, ?)',
+                [$user['id'], $status, 'sar', '39.98', 3998, $status === 'pending' ? null : date('Y-m-d H:i:s')]
             );
             $orders[$status] = (int) db()->lastInsertId();
             db_run(
@@ -63,6 +63,57 @@ final class MigrationsTest extends DatabaseTestCase
         }
         self::assertSame(['paid' => 2, 'pending' => 0, 'refunded' => 0], $taken, 'Only paid orders hold copies');
         self::assertSame([], run_migrations(), 'Applied once');
+    }
+
+    public function testOrdersPaidBeforeStockTrackingTookNoCopies(): void
+    {
+        $user = $this->createUser();
+        $paid = static function (string $paidAt) use ($user): int {
+            db_run(
+                "INSERT INTO orders (user_id, status, currency, total_amount, amount_minor, paid_at) VALUES (?, 'paid', 'sar', '39.98', 3998, ?)",
+                [$user['id'], $paidAt]
+            );
+            $orderId = (int) db()->lastInsertId();
+            db_run("INSERT INTO order_items (order_id, book_id, title, unit_price, quantity) VALUES (?, 51, 'Esabella', '19.99', 2)", [$orderId]);
+            return $orderId;
+        };
+        $before = $paid(date('Y-m-d H:i:s', strtotime('-10 days')));
+        $after = $paid(date('Y-m-d H:i:s', strtotime('-2 days')));
+
+        // A database that had stock tracking (002) for the last five days, but not 003 yet.
+        db()->exec('ALTER TABLE order_items DROP COLUMN stock_taken');
+        db_run('DELETE FROM schema_migrations WHERE version = ?', ['003_order_stock_taken']);
+        db_run('UPDATE schema_migrations SET applied_at = ? WHERE version = ?', [date('Y-m-d H:i:s', strtotime('-5 days')), '002_accounts_commerce_i18n']);
+
+        self::assertSame(['003_order_stock_taken'], run_migrations());
+        self::assertSame(0, (int) db_value('SELECT stock_taken FROM order_items WHERE order_id = ?', [$before]), 'Paid before the stock existed');
+        self::assertSame(2, (int) db_value('SELECT stock_taken FROM order_items WHERE order_id = ?', [$after]));
+    }
+
+    public function testADatabaseOfTheFirstSchemaRestocksNothingForItsOldOrders(): void
+    {
+        $user = $this->createUser();
+        db_run(
+            "INSERT INTO orders (user_id, status, currency, total_amount, amount_minor, paid_at, stripe_payment_intent) VALUES (?, 'paid', 'sar', '39.98', 3998, NOW() - INTERVAL 1 DAY, 'pi_test_old')",
+            [$user['id']]
+        );
+        $orderId = (int) db()->lastInsertId();
+        db_run("INSERT INTO order_items (order_id, book_id, title, unit_price, quantity) VALUES (?, 51, 'Esabella', '19.99', 2)", [$orderId]);
+
+        // The first published schema: no stock, no stock_taken, no delivery stages; 002 and 003 not applied.
+        db()->exec('ALTER TABLE books DROP CONSTRAINT chk_books_stock');
+        db()->exec('ALTER TABLE books DROP COLUMN stock');
+        db()->exec('ALTER TABLE order_items DROP COLUMN stock_taken');
+        db_run('UPDATE orders SET fulfilment_status = NULL WHERE id = ?', [$orderId]);
+        db_run('DELETE FROM schema_migrations WHERE version IN (?, ?)', ['002_accounts_commerce_i18n', '003_order_stock_taken']);
+
+        self::assertSame(['002_accounts_commerce_i18n', '003_order_stock_taken'], run_migrations());
+        self::assertSame(20, (int) db_value('SELECT stock FROM books WHERE id = 51'));
+        self::assertSame(0, (int) db_value('SELECT stock_taken FROM order_items WHERE order_id = ?', [$orderId]), 'Its copies never came out of the new stock');
+
+        // Refunding it later leaves the stock alone.
+        self::assertTrue(apply_order_refund($orderId, 're_test_old', 'pi_test_old'));
+        self::assertSame(20, (int) db_value('SELECT stock FROM books WHERE id = 51'));
     }
 
     public function testMigration006CreatesTheSameTablesAndColumnsAsTheSchema(): void
