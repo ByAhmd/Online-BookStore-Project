@@ -337,8 +337,10 @@ You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Do
 
 Notes:
 
-- **Port in use:** if port 8080 is taken, change the left side of `"8080:8080"` in `docker-compose.yml`, for example `"8090:8080"`, and start the store with `BOOKWISE_APP_URL=http://localhost:8090 docker compose up -d`.
-  The payment page sends the browser back to `APP_URL`, so it must be the address you browse to.
+- **Only this computer:** the store listens on `127.0.0.1:8080`, not on every network interface, so other devices on your network (a campus or café Wi-Fi) cannot open it: the local administrator password is published.
+  To show the store to others, use [(c)](#c-present-it-from-your-own-pc-with-tailscale-funnel).
+- **Port in use:** if port 8080 is taken, change the middle number of `"127.0.0.1:8080:8080"` in `docker-compose.yml`, for example to `"127.0.0.1:8090:8080"`, and start the store with its new address: `BOOKWISE_APP_URL=http://localhost:8090 docker compose up -d` (Bash), or in PowerShell `$env:BOOKWISE_APP_URL = 'http://localhost:8090'; docker compose up -d`.
+  The payment page sends the browser back to `APP_URL`, so it must be the address you browse to. In PowerShell the variable stays set until you close the window or run `Remove-Item Env:BOOKWISE_APP_URL`.
 - **Volumes:** the database lives in the `db-data` volume and uploaded pictures in the `uploads` volume, mounted at `public/uploads`.
   The `uploads` volume keeps the `public/uploads/.htaccess` file it was created with. The virtual host enforces the same rules either way.
   The payment simulator's state lives in the container's `storage/`; it is lost when the container is recreated, which only matters for refunds (see [the payment simulator](#the-payment-simulator)).
@@ -588,13 +590,20 @@ The `tailscale funnel` commands below changed in version 1.52; `tailscale versio
    ```
 
    It must no longer list your `ts.net` address. If it still does (for example after `--bg`), run `tailscale funnel reset` and check again.
-6. **Only then** go back to the local store:
+6. **Only then** go back to the local store, without the two variables. In Bash (a new terminal, or the same one: the one-line form of step 3 set them for that command only):
 
    ```bash
    docker compose up -d
    ```
 
-   Without the two variables, this puts the store back on `http://localhost:8080` with the local administrator password, which is published in `docker-compose.yml`.
+   PowerShell keeps `$env:` variables until the window is closed, so remove them first (or open a new window):
+
+   ```powershell
+   Remove-Item Env:BOOKWISE_APP_URL, Env:BOOKWISE_ADMIN_PASSWORD
+   docker compose up -d
+   ```
+
+   This puts the store back on `http://localhost:8080` with the local administrator password, which is published in `docker-compose.yml`.
    The container accepts that password because `APP_URL` is local again; it cannot tell whether Funnel is still running. So never run this while Funnel is still on.
 
 ### Check the visitors' addresses through Funnel
@@ -625,7 +634,7 @@ Notes:
 
 - The store is public while Funnel runs: anyone with the address can register and "buy". Your computer must stay on and awake, and Funnel traffic has bandwidth limits.
 - `APP_URL` must be exactly the Funnel address, or the payment page sends customers back to the wrong place.
-- Do not publish the store any other way (for example by forwarding port 8080 on your router): the container trusts `X-Forwarded-For` from private addresses, see [Logs and proxies](#logs-and-proxies).
+- Do not publish the store any other way (for example by removing `127.0.0.1:` from its port in `docker-compose.yml` and forwarding port 8080 on your router): the container trusts `X-Forwarded-For` from private addresses, see [Logs and proxies](#logs-and-proxies).
 
 ## (d) A real store: Stripe payments and email
 
@@ -716,7 +725,7 @@ For any server, with Docker or without:
   Errors are not displayed, and neither Apache nor PHP reveal their versions in the container.
 - **Use TLS for hosted databases that require it.** Set `DB_SSL_CA_PEM` (or `DB_SSL_CA`, a file path); the server certificate is then verified. alwaysdata's own databases are reached inside its network and do not need it.
 - **Logs stay clean.** URLs are logged without query strings, so reset tokens stay out of the access log. `mail.log` is never copied to the container output.
-- **The local Compose setup is not for the internet.** `docker-compose.yml` contains placeholder passwords and an administrator with a published password; the container refuses that password on a non-local `APP_URL`.
+- **The local Compose setup is not for the internet.** `docker-compose.yml` contains placeholder passwords and an administrator with a published password; the container refuses that password on a non-local `APP_URL`, and the store's port is published on `127.0.0.1` only, so other devices on the same network cannot reach it.
   Publish it only through Tailscale Funnel as in (c), with a password of your own, and stop Funnel before you start the store with the local password again.
 - **Check the proxy rule for other setups.** In the container, the visitor's address is read from `X-Forwarded-For` only on connections from private addresses.
   If you deploy behind a different proxy setup, check that this rule fits it.

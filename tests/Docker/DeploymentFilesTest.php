@@ -228,9 +228,13 @@ final class DeploymentFilesTest extends TestCase
         self::assertStringContainsString('image: mysql:8.4', $compose);
         self::assertStringContainsString('healthcheck:', $compose);
         self::assertStringContainsString('condition: service_healthy', $compose);
-        self::assertStringContainsString('"8080:8080"', $compose);
-
         $app = substr($compose, (int) strpos($compose, "\n  app:\n"));
+
+        // The store has a published administrator password: only this computer may reach it,
+        // never the other devices of a campus or café network (Funnel forwards to 127.0.0.1).
+        preg_match_all('/^ {6}- "([^"]*)"$/m', (string) strstr(substr($app, (int) strpos($app, "    ports:\n")), "    environment:\n", true), $ports);
+        self::assertSame(['127.0.0.1:8080:8080'], $ports[1], 'The store is published on the loopback address only');
+        self::assertStringNotContainsString("\n    ports:", substr($compose, 0, (int) strpos($compose, "\n  app:\n")), 'The database is not published at all');
         $environment = [];
         preg_match_all('/^      ([A-Z][A-Z0-9_]*): (.*)$/m', $app, $matches, PREG_SET_ORDER);
         foreach ($matches as $match) {

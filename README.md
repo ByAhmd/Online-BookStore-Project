@@ -118,7 +118,7 @@ cd bookwise
 docker compose up --build
 ```
 
-Open <http://localhost:8080>. The store runs in demo mode with MySQL 8.4, the sample catalog and the showcase. The local owner administrator is `admin@bookwise.test` with the password `local-admin-password`, which is for local use only.
+Open <http://localhost:8080> (only this computer can reach it). The store runs in demo mode with MySQL 8.4, the sample catalog and the showcase. The local owner administrator is `admin@bookwise.test` with the password `local-admin-password`, which is for local use only.
 Every release also publishes the image to GitHub Container Registry ([DEPLOYMENT.md](docs/DEPLOYMENT.md#use-a-published-image)).
 
 **With PHP 8.3 or newer** (with `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo` and preferably `gd`), [Composer](https://getcomposer.org/) and MySQL 8.0.16+ or MariaDB 10.4+:

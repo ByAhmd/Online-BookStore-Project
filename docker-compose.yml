@@ -45,7 +45,10 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      # Only this computer can open the store (127.0.0.1, not every network
+      # interface): the administrator password below is public. Tailscale
+      # Funnel forwards to 127.0.0.1:8080 as well.
+      - "127.0.0.1:8080:8080"
     environment:
       PORT: "8080"
       # The address browsers use; payments return there.
