@@ -272,7 +272,7 @@ final class PaymentSimulatorTest extends HttpTestCase
 
     public function testStaffRefundAPaidOrderThroughTheSimulator(): void
     {
-        [$customer] = $this->signedInCustomer();
+        [$customer, $user] = $this->signedInCustomer();
         $sessionId = $this->checkoutToPaymentPage($customer, [self::ESABELLA => 1]);
         $this->assertRedirect($this->press($customer, $this->paymentPage($customer, $sessionId), $sessionId, 'pay'), $this->successUrl($sessionId));
         $customer->get('success_pay.php?session_id=' . $sessionId);
@@ -290,6 +290,24 @@ final class PaymentSimulatorTest extends HttpTestCase
         self::assertSame('refunded', $order['status']);
         self::assertCount(1, $refunds);
         self::assertSame([$order['stripe_refund_id'], 1999, $order['stripe_payment_intent']], [$refunds[0]['id'], $refunds[0]['amount'], $refunds[0]['payment_intent']]);
+
+        // The customer is told that no money moved, never that it is on its way back.
+        $orderPage = $customer->get('order.php?id=' . $orderId);
+        self::assertSame(
+            'The full amount was refunded. The payment was simulated, so no money moved.',
+            $this->assertHtmlPage($orderPage)->text('//li[@aria-current="step"]//p[' . HtmlDocument::hasClass('timeline-text') . ']')
+        );
+        $this->assertNotPageText('payment method', $orderPage);
+        $refundMails = array_values(array_filter(
+            $this->mailsTo((string) $user['Eaddress']),
+            static fn (array $mail): bool => $mail['subject'] === 'Your BookWise order #' . $orderId . ' was refunded'
+        ));
+        self::assertCount(1, $refundMails);
+        self::assertStringContainsString(
+            "Your order #$orderId was refunded in full (SAR 19.99).\n\nPayments in this store are simulated: no money was taken, so none needs to be returned to you.",
+            $refundMails[0]['body']
+        );
+        self::assertStringNotContainsString('statement', $refundMails[0]['body']);
 
         // A payment the simulator has forgotten (its state file was lost) is refunded in the store only:
         // no money ever moved.

@@ -252,6 +252,10 @@ final class ArabicPagesTest extends HttpTestCase
         $detail = $this->assertArabicPage($admin->get('admin_order.php?id=' . $orderId), 'الطلب رقم ' . $orderId);
         self::assertSame('تحديد الطلب كمشحون', $detail->text('//form[.//input[@value="ship"]]//button'));
         self::assertSame('قيد التجهيز', $detail->text('//span[' . HtmlDocument::hasClass('fulfilment-badge') . ']'));
+        self::assertSame(
+            ['سمسا إكسبرس', 'أرامكس', 'سبل (البريد السعودي)', 'ناقل إكسبرس', 'جي آند تي إكسبرس', 'دي إتش إل إكسبرس'],
+            array_map(static fn (\DOMElement $option): string => $option->getAttribute('value'), $detail->elements('//datalist[@id="carrier-options"]/option'))
+        );
         $shipped = $admin->follow($admin->submitForm($admin->get('admin_order.php?id=' . $orderId), 'admin_order.php?id=' . $orderId, ['tracking_number' => 'SA1'], ['action' => 'ship']));
         $this->assertFlash($shipped, 'success', 'حُدّد أن الطلب رقم ' . $orderId . ' قد شُحن.');
         $this->assertArabicPage($admin->get('admin_orders.php?fulfilment=shipped'), 'الطلبات');

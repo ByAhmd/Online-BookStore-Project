@@ -160,4 +160,31 @@ final class OrderPresentationTest extends TestCase
         self::assertSame('تم استرداد مبلغ طلبك رقم 12 من BookWise', $subject);
         self::assertStringContainsString('يُعاد 45.48 ر.س إلى وسيلة الدفع الأصلية', $text);
     }
+
+    public function testTheRefundEmailOfASimulatedPaymentPromisesNoMoneyBack(): void
+    {
+        $refunded = self::order(['status' => 'refunded']);
+        $link = 'http://shop.test/order.php?id=12';
+
+        [, , $text] = order_email_content('refunded', $refunded, self::items(), null, '', $link);
+        self::assertStringContainsString("Your order #12 was refunded in full: SAR 45.48 is being returned to your original payment method.\n\nIt can take a few business days to appear on your statement.\n\n", $text);
+
+        [$subject, $html, $text] = order_email_content('refunded', $refunded, self::items(), null, '', $link, true);
+        self::assertSame('Your BookWise order #12 was refunded', $subject);
+        self::assertStringContainsString("Hello,\n\nYour order #12 was refunded in full (SAR 45.48).\n\nPayments in this store are simulated: no money was taken, so none needs to be returned to you.\n\nView your order:", $text);
+        self::assertStringNotContainsString('payment method', $text);
+        self::assertStringNotContainsString('statement', $html);
+
+        use_locale('ar');
+        [$subject, , $text] = order_email_content('refunded', $refunded, self::items(), null, '', $link, true);
+        self::assertSame('تم استرداد مبلغ طلبك رقم 12 من BookWise', $subject);
+        self::assertStringContainsString("استُرد مبلغ طلبك رقم 12 كاملًا (45.48 ر.س).\n\nعمليات الدفع في هذا المتجر محاكاة: لم يُخصم منك أي مبلغ، لذلك لا يلزم إعادة أي مبلغ إليك.\n\n", $text);
+        self::assertStringNotContainsString('وسيلة الدفع الأصلية', $text);
+
+        // The other emails read the same either way.
+        self::assertSame(
+            order_email_content('shipped', self::order(['fulfilment_status' => 'shipped']), self::items(), null, '', $link),
+            order_email_content('shipped', self::order(['fulfilment_status' => 'shipped']), self::items(), null, '', $link, true)
+        );
+    }
 }

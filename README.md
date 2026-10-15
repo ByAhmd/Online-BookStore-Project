@@ -65,7 +65,7 @@ page architecture is unchanged; there is no framework.
 - Cart: change quantities (1–10 per title, never more than in stock), remove items, and see totals computed from catalog prices on the server.
 - Checkout page between the cart and the payment: the books, the totals (prices include 15% VAT, delivery is free) and the delivery address, chosen from the customer's saved addresses or typed in there and then.
 - Payment on Stripe's hosted payment page, or on the built-in payment simulator's page. An order is confirmed only after BookWise has verified the payment.
-- Order page for every order: its progress (paid, processing, shipped with carrier and tracking number, delivered, or refunded), the delivery address, a receipt that prints on its own, and **Buy again**, which puts the books that are still available back into the cart.
+- Order page for every order: its progress (paid, processing, shipped with carrier and tracking number, delivered, or refunded), the delivery address, a receipt that prints on its own, and, for paid orders, **Buy again**, which puts the books that are still available back into the cart.
 - Order emails in the customer's language, each sent once: confirmation, shipped (with the tracking number), delivered and refunded.
 - Profile:
   - Name, favorite genre, date of birth and profile picture (JPEG/PNG/GIF/WebP, max 2 MB, re-encoded on upload).
@@ -80,7 +80,7 @@ page architecture is unchanged; there is no framework.
 - Dashboard with catalog and sales totals, stock per book and the 20 most recent orders.
 - Orders page: filter by status and by delivery stage, search by order number or customer email, and open any order.
   An order's page shows the delivery address and moves a paid order from *processing* to *shipped* (with an optional carrier and tracking number) and then to *delivered*; the customer is emailed at each step.
-  A paid order can be refunded in full through Stripe from its page, at any stage of its delivery; the copies go back into stock.
+  A paid order can be refunded in full through Stripe from its page, at any stage of its delivery; the copies go back into stock only if the order had not been shipped yet.
   Refunds made in the Stripe Dashboard are picked up by the `charge.refunded` webhook.
 - Accounts are created from the command line (`bin/create-admin.php`, or `bin/install.php` in containers); there is no public admin sign-up.
 
@@ -364,7 +364,8 @@ stripe listen --forward-to localhost:8000/stripe_webhook.php
 A webhook is treated only as a notification: BookWise re-fetches the Checkout Session (or the refunds) from the Stripe API and acts on that state.
 A leaked webhook secret alone therefore cannot mark an unpaid order as paid or a paid order as refunded, and out-of-order deliveries are harmless.
 
-**Stock.** Adding to the cart and starting a checkout check the stock. The copies are taken out of stock when the payment is confirmed, and put back when an order is refunded.
+**Stock.** Adding to the cart and starting a checkout check the stock. The copies are taken out of stock when the payment is confirmed, and put back when an order is refunded before it is shipped.
+Once shipped, the copies have left the store, so a refund does not change the stock; staff add any returned copies on the book's edit page.
 Two customers can still pay for the last copy at the same moment; the second order is then recorded and logged as `OVERSOLD` in `app.log` so that staff can restock or refund it.
 
 ## Checkout, delivery and order emails
@@ -391,14 +392,17 @@ Digits may also be typed as Arabic-Indic digits (`٠١٢٣`). Every field is che
 **Delivery.** The delivery of an order is tracked separately from its payment status (`orders.fulfilment_status`):
 
 - When the payment is confirmed, the order is **processing**.
-- On `admin_order.php`, staff mark it **shipped**, optionally with the carrier (the field suggests SMSA Express, Aramex and others) and the tracking number, and later **delivered**. Each step happens once and only moves forward; a second click from a page that is out of date changes nothing.
+- On `admin_order.php`, staff mark it **shipped**, optionally with the carrier (the field suggests carriers common in Saudi Arabia, in the admin's language; the name is stored as typed) and the tracking number, and later **delivered**. Each step happens once and only moves forward; a second click from a page that is out of date changes nothing.
 - The orders page filters paid orders by their delivery stage.
 - A refund works at any stage. The order then shows as **refunded**, and its delivery is no longer updated.
+  Its copies go back into stock only if it had not been shipped: shipped books have left the store, and staff add any that are returned on the book's edit page.
+- A second click on **Mark as delivered** from a page that is out of date says why nothing changed: the order was already delivered, was refunded, or has not been shipped yet.
 - Orders paid before delivery addresses existed (before migration `006_order_fulfilment`) have no delivery stage.
 
 **The order page.** `order.php?id=N` is open only to the customer who placed the order; anyone else gets 404. It shows the order's progress, the delivery address and a receipt: the books, the total before VAT, the VAT (total × 15/115), free delivery and the total.
 Printing the page (also with its **Print receipt** button) prints only the receipt and the delivery address. The receipt is not a tax invoice, because the store has no VAT registration number.
-**Buy again** puts the order's books back into the cart, as many copies as were ordered within the stock, and names the books that are no longer available.
+**Buy again** (for paid and refunded orders) puts the order's books back into the cart, as many copies as were ordered within the stock, and names the books that are no longer available.
+It is not offered for unpaid orders, whose books are still in the cart: only a confirmed payment takes them out.
 The profile's order list, the payment confirmation page and every order email link to the order page.
 
 **Order emails.** The customer is emailed in the account's language:
@@ -413,6 +417,8 @@ The profile's order list, the payment confirmation page and every order email li
 Each email is sent by the request that made the change, once that change is committed, and each change happens exactly once: the payment is recorded under a lock on the order row, and every delivery step only moves on from the step before.
 The confirmation is therefore sent once even when the return page and a webhook confirm the same payment at the same moment.
 As in the account emails, the customer's name and the delivery address appear only once the account's email address is confirmed. With the demo inbox (`MAIL_DRIVER=database`), order emails appear in the customer's inbox like every other email.
+While the payment simulator takes the payments, the refund email and the order page say that the payment was simulated and no money moved, instead of promising the money back on the customer's statement.
+An email that cannot be sent at that moment is logged (`Order email could not be sent` in `app.log`) and not tried again; see [Known limitations](#known-limitations).
 
 ## Email
 
@@ -602,6 +608,7 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
 - **Single currency:** prices are stored without a currency and charged in `STRIPE_CURRENCY` (SAR by default).
 - **Delivery only within Saudi Arabia, always free:** there is no shipping-cost calculation, no delivery zones or dates, and an order is always one parcel.
 - **Addresses are checked for their format only:** they are not looked up in Saudi Post's National Address register. The carrier and tracking number are plain text: there is no link to the carrier's tracking page and no automatic status update; staff mark orders shipped and delivered by hand.
+- **Order emails are not retried:** each is sent once, by the request that made the change. If the mail server fails at that moment, the failure is logged and that email is never sent; the order page always shows the current state.
 - **Receipts, not tax invoices:** prices include 15% VAT, but the store has no VAT registration number, so it issues receipts rather than tax invoices.
 - **Orders cannot be changed or canceled by customers** once they are paid; staff refund them instead.
 - **Limited account self-service:** customers cannot change their email address or export their data. Administrators cannot manage customers from the UI.

@@ -31,6 +31,11 @@ if (is_post()) {
     if (input_string($_POST, 'action', 50) !== 'buy_again') {
         abort(400, t('shop.order.unknown_action'));
     }
+    if (!order_can_be_bought_again($order)) {
+        // An unpaid order's books are still in the cart; adding them again would double them.
+        flash('error', t('shop.order.buy_again_unpaid', ['id' => $id]));
+        redirect($orderUrl);
+    }
     $result = buy_again($userId, $id);
     if ($result === null) {
         abort(404, t('shop.order.not_found'));
@@ -55,9 +60,15 @@ $reached = array_values(array_filter($progress, static fn (array $step): bool =>
 $currentStep = $reached !== [] ? $reached[count($reached) - 1]['step'] : null;
 // Only paid (and later refunded) orders have a receipt; others show their summary.
 $hasReceipt = $progress !== [];
+// An unpaid order's books are still in the cart, so they are not offered again.
+$canBuyAgain = order_can_be_bought_again($order);
 $address = is_array($order['address']) ? $order['address'] : null;
 $items = is_array($order['items']) ? $order['items'] : [];
 $appName = (string) config('app.name', 'BookWise');
+// The payment simulator takes no money, so its refunds return none.
+$stepText = static fn (string $step): string => $step === 'refunded' && payment_simulator_enabled()
+    ? t('shop.pay.order_refunded_text')
+    : t('shop.order.progress.' . $step . '_text');
 
 $time = static function (?string $value, bool $withTime = true): string {
     if ($value === null || $value === '') {
@@ -81,6 +92,7 @@ page_header(t('shop.order.title', ['id' => $id]), ['checkout.css', 'order.css'])
                 </p>
             </header>
 
+<?php if ($canBuyAgain): ?>
             <div class="order-actions">
                 <form method="post" action="<?= e($orderUrl) ?>" data-once>
                     <?= csrf_field() ?>
@@ -92,6 +104,7 @@ page_header(t('shop.order.title', ['id' => $id]), ['checkout.css', 'order.css'])
 <?php endif; ?>
                 <p class="order-actions-hint" id="buy-again-hint"><?= e(t('shop.order.buy_again_hint')) ?></p>
             </div>
+<?php endif; ?>
 
             <div class="order-layout">
                 <section class="card order-card order-status" aria-labelledby="status-title">
@@ -110,7 +123,7 @@ page_header(t('shop.order.title', ['id' => $id]), ['checkout.css', 'order.css'])
                                 <p class="timeline-label"><?= e(t('shop.order.progress.' . $step['step'])) ?><?php if (!$done): ?> <span class="timeline-upcoming">(<?= e(t('shop.order.progress.upcoming')) ?>)</span><?php endif; ?></p>
 <?php if ($done): ?>
                                 <p class="timeline-date"><?= $time($step['at']) ?></p>
-                                <p class="timeline-text"><?= e(t('shop.order.progress.' . $step['step'] . '_text')) ?></p>
+                                <p class="timeline-text"><?= e($stepText($step['step'])) ?></p>
 <?php endif; ?>
 <?php if ($step['step'] === 'shipped' && $done && is_string($order['carrier'] ?? null) && $order['carrier'] !== ''): ?>
                                 <p class="timeline-text"><?= t_markup('shop.order.progress.carrier', ['carrier' => '<bdi dir="auto">' . e($order['carrier']) . '</bdi>']) ?></p>

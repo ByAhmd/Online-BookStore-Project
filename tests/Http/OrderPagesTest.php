@@ -113,6 +113,13 @@ final class OrderPagesTest extends HttpTestCase
         $adminDocument = $this->assertHtmlPage($detail);
         $this->assertPageText('Sara Ahmed', $detail);
         self::assertSame('tel:+966512345678', $adminDocument->first('//p[' . HtmlDocument::hasClass('address-call') . ']/a')?->getAttribute('href'));
+        self::assertSame(
+            ['SMSA Express', 'Aramex', 'SPL (Saudi Post)', 'Naqel Express', 'J&T Express', 'DHL Express'],
+            array_map(static fn (\DOMElement $option): string => $option->getAttribute('value'), $adminDocument->elements('//datalist[@id="carrier-options"]/option')),
+            "Carrier suggestions in the admin's language"
+        );
+        $early = $admin->postWithToken('admin_order.php?id=' . $orderId, ['action' => 'deliver']);
+        $this->assertFlash($admin->follow($early), 'info', 'Order #' . $orderId . ' has not been shipped, so it cannot be marked as delivered.');
 
         $invalid = $admin->submitForm($detail, 'admin_order.php?id=' . $orderId, ['carrier' => 'SMSA Express', 'tracking_number' => 'SA<123>'], ['action' => 'ship']);
         $this->assertRedirect($invalid, 'admin_order.php?id=' . $orderId . '#fulfilment');
@@ -136,14 +143,23 @@ final class OrderPagesTest extends HttpTestCase
         // Then delivered.
         $this->assertFlash($admin->follow($this->adminAction($admin, $orderId, 'deliver')), 'success', 'Order #' . $orderId . ' was marked as delivered.');
         $staleDeliver = $admin->postWithToken('admin_order.php?id=' . $orderId, ['action' => 'deliver']);
-        $this->assertFlash($admin->follow($staleDeliver), 'info', 'Order #' . $orderId . ' has not been shipped, so it cannot be marked as delivered.');
+        $this->assertFlash($admin->follow($staleDeliver), 'info', 'Order #' . $orderId . ' was already marked as delivered, so nothing was changed.');
         self::assertSame('Delivered', self::badge($customer->get($orderUrl)->document()));
         self::assertSame(['#' . $orderId], $admin->get('admin_orders.php?fulfilment=delivered')->document()->texts('//tbody/tr/th'));
         self::assertSame([], $admin->get('admin_orders.php?fulfilment=processing')->document()->texts('//tbody/tr/th'));
         $this->assertPageText('This order has been delivered.', $admin->get('admin_order.php?id=' . $orderId));
 
-        // A refund after delivery: the order shows as refunded.
+        // A refund after delivery: the order shows as refunded, and the books, which have left the store, are not restocked.
+        $stock = [$this->stockOf(self::ESABELLA), $this->stockOf(self::BIOLOGY)];
+        self::assertSame(
+            'Refunds the full SAR 45.48 to the customer through Stripe and removes the books from their purchase history. '
+            . "The books have already been shipped, so the stock does not change. If they are returned, add the copies on the book's edit page.",
+            $admin->get('admin_order.php?id=' . $orderId)->document()->text('//p[@id="refund-help"]')
+        );
         $this->assertFlash($admin->follow($this->adminAction($admin, $orderId, 'refund')), 'success', 'Order #' . $orderId . ' was refunded.');
+        self::assertSame($stock, [$this->stockOf(self::ESABELLA), $this->stockOf(self::BIOLOGY)]);
+        $lateDeliver = $admin->postWithToken('admin_order.php?id=' . $orderId, ['action' => 'deliver']);
+        $this->assertFlash($admin->follow($lateDeliver), 'info', 'Order #' . $orderId . ' was refunded, so its delivery is no longer updated.');
         $document = $customer->get($orderUrl)->document();
         self::assertSame('Refunded', self::badge($document));
         self::assertSame(['Paid', 'Processing', 'Shipped', 'Delivered', 'Refunded'], self::timeline($document));
@@ -199,7 +215,7 @@ final class OrderPagesTest extends HttpTestCase
     {
         [$alice] = $this->signedInCustomer('Alice');
         $orderId = (int) $this->purchase($alice, [self::ESABELLA => 1])['order']['id'];
-        [$bob] = $this->signedInCustomer('Bob');
+        [$bob, $bobUser] = $this->signedInCustomer('Bob');
 
         $this->assertHtmlPage($bob->get('order.php?id=' . $orderId), 404);
         $this->assertHtmlPage($bob->postWithToken('order.php?id=' . $orderId, ['action' => 'buy_again']), 404);
@@ -222,6 +238,15 @@ final class OrderPagesTest extends HttpTestCase
         $this->assertNotPageText('This receipt is not a tax invoice.', $page);
         self::assertNull($document->first('//button[@data-print]'));
         self::assertSame(0, $document->count('//ol[' . HtmlDocument::hasClass('order-timeline') . ']'));
+
+        // Its books are still in the cart, so they are not offered (or added) again.
+        self::assertSame(0, $document->count('//form[.//input[@value="buy_again"]]'));
+        $refused = $bob->postWithToken('order.php?id=' . $pending, ['action' => 'buy_again']);
+        $this->assertRedirect($refused, 'order.php?id=' . $pending);
+        $this->assertFlash($bob->follow($refused), 'error', 'Order #' . $pending . ' was not paid, so it cannot be bought again. Its books stay in your cart until you remove them.');
+        self::assertSame([self::BIOLOGY => 1], $this->cartQuantities((int) $bobUser['id']));
+        $unpaidDeliver = $admin->postWithToken('admin_order.php?id=' . $pending, ['action' => 'deliver']);
+        $this->assertFlash($admin->follow($unpaidDeliver), 'info', 'Only paid orders that have been shipped can be marked as delivered. Order #' . $pending . ' was not changed.');
 
         // The profile's order list leads to the order pages.
         $orders = $bob->get('profilePage.php?section=orders')->document();

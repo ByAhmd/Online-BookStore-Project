@@ -182,6 +182,11 @@ final class AdminOrdersTest extends HttpTestCase
         [$admin] = $this->signedInAdmin();
 
         $page = $admin->get('admin_order.php?id=' . $orderId);
+        self::assertSame(
+            'Refunds the full SAR 39.98 to the customer through Stripe and removes the books from their purchase history. The copies go back into stock.',
+            $page->document()->text('//p[@id="refund-help"]'),
+            'Not shipped yet: the copies are still in the store'
+        );
         $response = $admin->submitForm($page, 'admin_order.php?id=' . $orderId, [], ['action' => 'refund']);
         $this->assertRedirect($response, 'admin_order.php?id=' . $orderId);
         $after = $admin->follow($response);

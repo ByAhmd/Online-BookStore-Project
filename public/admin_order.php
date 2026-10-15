@@ -37,8 +37,20 @@ if (is_post()) {
     }
 
     if ($action === 'deliver') {
-        $delivered = deliver_order($id);
-        flash($delivered ? 'success' : 'info', t($delivered ? 'admin.fulfilment.delivered' : 'admin.fulfilment.not_shipped', ['id' => $id]));
+        if (deliver_order($id)) {
+            flash('success', t('admin.fulfilment.delivered', ['id' => $id]));
+        } else {
+            // Nothing changed: say why, from the order as it is now (a page out
+            // of date may have been clicked after someone else's change).
+            $current = find_order($id) ?? $order;
+            $reason = match (true) {
+                $current['status'] === 'refunded' => 'admin.fulfilment.refunded_unchanged',
+                $current['fulfilment_status'] === 'delivered' => 'admin.fulfilment.already_delivered',
+                $current['status'] === 'paid' && $current['fulfilment_status'] === 'processing' => 'admin.fulfilment.not_shipped',
+                default => 'admin.fulfilment.not_deliverable',
+            };
+            flash('info', t($reason, ['id' => $id]));
+        }
         redirect($orderUrl . '#fulfilment');
     }
 
@@ -72,6 +84,8 @@ $total = $money((string) $order['total_amount']);
 $status = (string) $order['status'];
 $address = is_array($order['address']) ? $order['address'] : null;
 $fulfilment = in_array($order['fulfilment_status'], FULFILMENT_STATUSES, true) ? (string) $order['fulfilment_status'] : null;
+// Carrier suggestions in the admin's language; any other name may be typed, and it is stored as typed.
+$carriers = translation_entry('admin.fulfilment.carriers', current_locale());
 $shipmentValues = ['carrier' => old('carrier'), 'tracking_number' => old('tracking_number')];
 $shipmentErrors = ['carrier' => form_error('carrier'), 'tracking_number' => form_error('tracking_number')];
 $shipmentAria = static function (string $field, string $hintId) use ($shipmentErrors): string {
@@ -192,11 +206,13 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
                         <div class="form-field">
                             <label for="shipment-carrier"><?= e(t('admin.fulfilment.carrier')) ?></label>
                             <input class="form-control" type="text" id="shipment-carrier" name="carrier" maxlength="<?= CARRIER_MAX_LENGTH ?>" list="carrier-options" autocomplete="off" dir="auto" value="<?= e($shipmentValues['carrier']) ?>"<?= $shipmentAria('carrier', 'shipment-carrier-hint') ?>>
+<?php if (is_array($carriers)): ?>
                             <datalist id="carrier-options">
-<?php foreach (CARRIER_SUGGESTIONS as $carrier): ?>
+<?php foreach ($carriers as $carrier): ?>
                                 <option value="<?= e($carrier) ?>"></option>
 <?php endforeach; ?>
                             </datalist>
+<?php endif; ?>
                             <p class="form-hint" id="shipment-carrier-hint"><?= e(t('admin.fulfilment.carrier_hint')) ?></p>
 <?php if ($shipmentErrors['carrier'] !== null): ?>
                             <p class="field-error" id="shipment-carrier-error"><?= e($shipmentErrors['carrier']) ?></p>
@@ -235,7 +251,7 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
                 <section class="admin-content order-refund" id="refund" aria-labelledby="order-refund-title">
                     <h2 id="order-refund-title"><?= e(t('admin.order.refund_title')) ?></h2>
 <?php if (order_is_refundable($order)): ?>
-                    <p id="refund-help"><?= e(t(payment_simulator_enabled() ? 'shop.pay.refund_text' : 'admin.order.refund_text', ['amount' => $total])) ?></p>
+                    <p id="refund-help"><?= e(t(payment_simulator_enabled() ? 'shop.pay.refund_text' : 'admin.order.refund_text', ['amount' => $total])) ?> <?= e(t(order_refund_restocks($order) ? 'admin.order.refund_restock' : 'admin.order.refund_no_restock')) ?></p>
                     <form method="post" action="<?= e($orderUrl) ?>" data-confirm="<?= e(t('admin.order.refund_confirm', ['id' => (int) $order['id'], 'amount' => $total])) ?>" data-once>
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="refund">

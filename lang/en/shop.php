@@ -205,6 +205,7 @@ return [
         'print_title' => 'Receipt for order #:id',
         'buy_again' => 'Buy again',
         'buy_again_hint' => 'Adds the books of this order that are still available to your cart.',
+        'buy_again_unpaid' => 'Order #:id was not paid, so it cannot be bought again. Its books stay in your cart until you remove them.',
         'buy_again_added' => [
             'one' => 'Added :count book from order #:id to your cart.',
             'other' => 'Added :count books from order #:id to your cart.',
@@ -549,9 +550,12 @@ return [
         'cart_note' => "Payments in this store are simulated: you will pay on the store's own payment page, no money is taken and no card details are needed.",
         'processing_lead' => 'Your simulated slow payment is being confirmed, as some banks do. This takes about 15 seconds.',
         'profile_intro' => "Payments in :app are simulated on the store's own payment page, so no card details are ever asked for or stored.",
-        'refund_text' => 'Refunds the full :amount to the customer (a simulated refund: no money moves), removes the books from their purchase history and puts the copies back in stock.',
+        'refund_text' => 'Refunds the full :amount to the customer (a simulated refund: no money moves) and removes the books from their purchase history.',
         'refund_no_payment' => 'This order has no simulated payment to refund.',
         'refund_failed' => 'The payment simulator could not refund this order right now, so nothing was changed. Please try again later.',
+        'order_refunded_text' => 'The full amount was refunded. The payment was simulated, so no money moved.',
+        'refund_mail_body' => 'Your order #:id was refunded in full (:amount).',
+        'refund_mail_note' => 'Payments in this store are simulated: no money was taken, so none needs to be returned to you.',
     ],
 
     'about' => [

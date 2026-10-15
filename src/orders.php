@@ -20,8 +20,9 @@ declare(strict_types=1);
  *     confirmation email happen exactly once. The order's delivery then
  *     starts at `processing` (see src/fulfilment.php).
  *  5. refund_order() (admin) or a confirmed charge.refunded webhook marks a
- *     paid order `refunded`, removes its sales rows and puts the copies back
- *     in stock, again exactly once, at any stage of the delivery.
+ *     paid order `refunded` and removes its sales rows, again exactly once,
+ *     at any stage of the delivery. The copies go back in stock only while
+ *     they are still in the store (the order has not been shipped).
  */
 
 /** A checkout problem whose message is safe to show to the customer. */
@@ -822,16 +823,20 @@ function refund_order(int $orderId): string
 
 /**
  * Records a full refund of a paid order exactly once, at any stage of its
- * delivery: status refunded, refunded_at and the Stripe refund id, the
+ * delivery: status refunded, refunded_at and the Stripe refund id, and the
  * order's sales rows removed (the books no longer count as sold or
- * reviewable through this order) and the copies put back in stock. The
+ * reviewable through this order). Copies that are still in the store go
+ * back in stock; once the order is shipped they have left it, so the stock
+ * is left alone (see order_refund_restocks()). The delivery stage is read
+ * under the same row lock that ship_order() waits for, so a refund and a
+ * shipment at the same moment can never both count the copies. The
  * customer is emailed after the change is committed. Returns false when the
  * order is not (or no longer) a paid order with this payment intent.
  */
 function apply_order_refund(int $orderId, string $refundId, string $paymentIntent): bool
 {
     $applied = db_transaction(static function () use ($orderId, $refundId, $paymentIntent): bool {
-        $order = db_one('SELECT id, status, stripe_payment_intent FROM orders WHERE id = ? FOR UPDATE', [$orderId]);
+        $order = db_one('SELECT id, status, stripe_payment_intent, fulfilment_status FROM orders WHERE id = ? FOR UPDATE', [$orderId]);
         if ($order === null || $order['status'] !== 'paid' || $order['stripe_payment_intent'] !== $paymentIntent) {
             return false;
         }
@@ -840,15 +845,18 @@ function apply_order_refund(int $orderId, string $refundId, string $paymentInten
             [$refundId, $orderId]
         );
         db_run('DELETE FROM sales WHERE order_id = ?', [$orderId]);
-        db_run(
-            'UPDATE books b
-             JOIN order_items oi ON oi.book_id = b.id AND oi.order_id = ?
-             SET b.stock = b.stock + oi.stock_taken',
-            [$orderId]
-        );
+        $restock = order_refund_restocks($order);
+        if ($restock) {
+            db_run(
+                'UPDATE books b
+                 JOIN order_items oi ON oi.book_id = b.id AND oi.order_id = ?
+                 SET b.stock = b.stock + oi.stock_taken',
+                [$orderId]
+            );
+        }
         // A refunded order of a deleted account no longer needs its delivery address.
         forget_anonymous_order_address($orderId);
-        app_log('info', 'Order refunded', ['order_id' => $orderId, 'refund' => $refundId]);
+        app_log('info', 'Order refunded', ['order_id' => $orderId, 'refund' => $refundId, 'restocked' => $restock]);
         return true;
     });
     if ($applied) {

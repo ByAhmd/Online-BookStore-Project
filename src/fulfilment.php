@@ -11,8 +11,9 @@ declare(strict_types=1);
  * 'processing'; staff then mark it 'shipped' (optionally with the carrier
  * and tracking number) and 'delivered' on admin_order.php, one step at a
  * time. Refunds work at any stage; a refunded order keeps the stage it had
- * reached but shows as refunded. Delivery is free and only within Saudi
- * Arabia, and prices include 15% VAT.
+ * reached but shows as refunded, and its copies go back in stock only if it
+ * had not been shipped. Delivery is free and only within Saudi Arabia, and
+ * prices include 15% VAT.
  *
  * The customer gets one email for each event (order confirmation, shipped,
  * delivered, refunded), sent by the request that made the change once the
@@ -27,8 +28,6 @@ const FULFILMENT_STATUSES = ['processing', 'shipped', 'delivered'];
 const VAT_RATE_PERCENT = 15;
 const CARRIER_MAX_LENGTH = 60;
 const TRACKING_NUMBER_MAX_LENGTH = 40;
-/** Suggestions for the carrier field on the admin order page; any other name may be typed. */
-const CARRIER_SUGGESTIONS = ['SMSA Express', 'Aramex', 'SPL (Saudi Post)', 'Naqel Express', 'J&T Express', 'DHL Express'];
 /** The emails a customer gets about an order. */
 const ORDER_EMAIL_KINDS = ['confirmation', 'shipped', 'delivered', 'refunded'];
 
@@ -159,17 +158,33 @@ function customer_order(int $orderId, int $userId): ?array
 }
 
 /**
- * "Buy again": puts the books of one of the customer's orders back into the
- * cart, as many copies as were ordered, within the stock and the per-title
- * limit like any other addition. 'added' counts the books now in the cart;
- * 'unavailable' lists the titles that are sold out or no longer in the
- * catalog. Null when the order is not the customer's.
+ * True when the order's books can be bought again: the order was paid (and
+ * may have been refunded since). The books of an unpaid order (pending,
+ * canceled, expired or failed) are still in the cart, because only a
+ * confirmed payment takes them out, so buying them again would add them a
+ * second time.
+ *
+ * @param array<string, mixed> $order
+ */
+function order_can_be_bought_again(array $order): bool
+{
+    return in_array($order['status'] ?? null, ['paid', 'refunded'], true);
+}
+
+/**
+ * "Buy again": puts the books of one of the customer's paid (or refunded)
+ * orders back into the cart, as many copies as were ordered, within the
+ * stock and the per-title limit like any other addition. 'added' counts the
+ * books now in the cart; 'unavailable' lists the titles that are sold out or
+ * no longer in the catalog. Null when the order is not the customer's or
+ * was never paid (see order_can_be_bought_again()).
  *
  * @return array{added: int, unavailable: list<string>}|null
  */
 function buy_again(int $userId, int $orderId): ?array
 {
-    if (find_user_order($orderId, $userId) === null) {
+    $order = find_user_order($orderId, $userId);
+    if ($order === null || !order_can_be_bought_again($order)) {
         return null;
     }
     $added = 0;
@@ -263,6 +278,20 @@ function deliver_order(int $orderId): bool
 }
 
 /**
+ * True when refunding the order puts its copies back in stock: they are
+ * still in the store because the order has not been shipped (or its
+ * delivery is not tracked, as for orders placed before deliveries were).
+ * Shipped and delivered copies have left the store; staff add any that are
+ * returned on the book's edit page.
+ *
+ * @param array<string, mixed> $order
+ */
+function order_refund_restocks(array $order): bool
+{
+    return !in_array($order['fulfilment_status'] ?? null, ['shipped', 'delivered'], true);
+}
+
+/**
  * Account deletion (inside its transaction, before the account goes): the
  * delivery addresses of the customer's orders are deleted, except those of
  * orders still on their way (paid and not delivered yet), which are needed
@@ -307,8 +336,11 @@ function forget_anonymous_order_address(int $orderId): void
  * included only when the account's email address is confirmed: an
  * unconfirmed account may have been created with someone else's address,
  * and its text must not reach that person in an email from the store.
+ * While the payment simulator takes the payments, the refund email says that
+ * no money moved instead of promising money back on the customer's statement.
  * Returns true when the email was sent. The change it reports is already
- * committed, so a failure here is logged and never reaches the caller.
+ * committed, so a failure here is logged and never reaches the caller (the
+ * email is not tried again).
  */
 function send_order_email(int $orderId, string $kind): bool
 {
@@ -329,12 +361,13 @@ function send_order_email(int $orderId, string $kind): bool
         $items = order_items($orderId);
         $address = $confirmed ? order_address($orderId) : null;
         $link = absolute_url('order.php?id=' . $orderId);
+        $simulated = payment_simulator_enabled();
 
         $sent = send_localized_mail(
             $account['Eaddress'],
             $name,
             $account['locale'],
-            static fn (): array => order_email_content($kind, $order, $items, $address, $name, $link)
+            static fn (): array => order_email_content($kind, $order, $items, $address, $name, $link, $simulated)
         );
     } catch (Throwable $e) {
         app_log('error', 'Order email failed: ' . $e->getMessage(), ['order_id' => $orderId, 'kind' => $kind]);
@@ -348,13 +381,15 @@ function send_order_email(int $orderId, string $kind): bool
 
 /**
  * Subject, HTML and text of an order email in the active language.
+ * $simulated: the payment was taken by the payment simulator, so a refund
+ * returns no money.
  *
  * @param array<string, mixed> $order
  * @param list<array<string, mixed>> $items
  * @param array<string, mixed>|null $address Shown when not null
  * @return array{0: string, 1: string, 2: string}
  */
-function order_email_content(string $kind, array $order, array $items, ?array $address, string $name, string $link): array
+function order_email_content(string $kind, array $order, array $items, ?array $address, string $name, string $link, bool $simulated = false): array
 {
     $id = (int) $order['id'];
     $money = static fn (int $minor): string => format_money(minor_to_decimal($minor), (string) $order['currency']);
@@ -408,8 +443,13 @@ function order_email_content(string $kind, array $order, array $items, ?array $a
             break;
 
         default: // refunded
-            $blocks[] = t('shop.mail.refunded.body', ['id' => $id, 'amount' => $money($amounts['total'])]);
-            $blocks[] = t('shop.mail.refunded.timing');
+            if ($simulated) {
+                $blocks[] = t('shop.pay.refund_mail_body', ['id' => $id, 'amount' => $money($amounts['total'])]);
+                $blocks[] = t('shop.pay.refund_mail_note');
+            } else {
+                $blocks[] = t('shop.mail.refunded.body', ['id' => $id, 'amount' => $money($amounts['total'])]);
+                $blocks[] = t('shop.mail.refunded.timing');
+            }
             break;
     }
 

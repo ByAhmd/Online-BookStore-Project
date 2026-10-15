@@ -167,23 +167,58 @@ final class OrderLifecycleTest extends CheckoutTestCase
     public function testRefundsWorkAtEveryStageAndShowAsRefunded(): void
     {
         foreach (['processing', 'shipped', 'delivered'] as $stage) {
-            $paid = $this->paidOrder([self::BRIDGE => 1]);
+            $this->setStock(self::BRIDGE, 10);
+            $paid = $this->paidOrder([self::BRIDGE => 2]);
             $orderId = (int) $paid['order']['id'];
+            self::assertSame(8, $this->stockOf(self::BRIDGE), 'The paid copies leave the stock');
             if ($stage !== 'processing') {
                 self::assertTrue(ship_order($orderId, 'Aramex', 'AR1'));
             }
             if ($stage === 'delivered') {
                 self::assertTrue(deliver_order($orderId));
             }
+            self::assertSame(8, $this->stockOf(self::BRIDGE), 'Shipping and delivery do not change the stock');
 
             self::assertSame('refunded', refund_order($orderId), "Refund at $stage");
             $order = $this->reloadOrder($orderId);
             self::assertSame(['refunded', $stage], [$order['status'], $order['fulfilment_status']]);
             self::assertSame('refunded', order_display_status($order));
             self::assertSame('refunded', array_column(order_progress($order), 'step')[count(order_progress($order)) - 1]);
+            self::assertSame([], $this->salesForOrder($orderId), 'No longer counted as sold');
+            // Copies still in the store go back on the shelf; shipped copies have left it.
+            self::assertSame($stage === 'processing' ? 10 : 8, $this->stockOf(self::BRIDGE), "Stock after a refund at $stage");
             self::assertFalse(ship_order($orderId));
             self::assertFalse(deliver_order($orderId), 'A refunded order is no longer delivered');
+            self::assertSame($stage === 'processing' ? 10 : 8, $this->stockOf(self::BRIDGE), 'Refunded once');
         }
+
+        // An order whose delivery is not tracked (placed before migration 006) is restocked as before.
+        $this->setStock(self::BRIDGE, 10);
+        $user = $this->customerWithCart([self::BRIDGE => 2]);
+        [$sessionId, $order] = $this->checkout($user);
+        db_run('DELETE FROM order_addresses WHERE order_id = ?', [$order['id']]);
+        $this->stripe->pay($sessionId);
+        self::assertSame('paid', confirm_checkout_return((int) $user['id'], $sessionId)['state']);
+        self::assertSame(8, $this->stockOf(self::BRIDGE));
+        self::assertSame('refunded', refund_order((int) $order['id']));
+        self::assertSame(10, $this->stockOf(self::BRIDGE));
+    }
+
+    public function testOnlyCopiesStillInTheStoreAreRestocked(): void
+    {
+        self::assertTrue(order_refund_restocks(['fulfilment_status' => 'processing']));
+        self::assertTrue(order_refund_restocks(['fulfilment_status' => null]), 'Untracked orders');
+        self::assertFalse(order_refund_restocks(['fulfilment_status' => 'shipped']));
+        self::assertFalse(order_refund_restocks(['fulfilment_status' => 'delivered']));
+
+        // The charge.refunded webhook records the refund with the same rule.
+        $this->setStock(self::BRIDGE, 10);
+        $paid = $this->paidOrder([self::BRIDGE => 3]);
+        $orderId = (int) $paid['order']['id'];
+        self::assertTrue(ship_order($orderId));
+        $order = $this->reloadOrder($orderId);
+        self::assertTrue(apply_order_refund($orderId, 're_test_dashboard', (string) $order['stripe_payment_intent']));
+        self::assertSame(['refunded', 7], [$this->reloadOrder($orderId)['status'], $this->stockOf(self::BRIDGE)]);
     }
 
     public function testOrdersPaidWithoutAnAddressAreNotTracked(): void
@@ -396,5 +431,25 @@ final class OrderLifecycleTest extends CheckoutTestCase
 
         self::assertNull(buy_again((int) $this->createUser()['id'], $orderId), "Another customer's order");
         self::assertNull(buy_again($userId, 999999));
+
+        // A refunded order can be bought again too (its refund restocked The Danger Bridge).
+        self::assertSame('refunded', refund_order($orderId));
+        self::assertSame(['added' => 3, 'unavailable' => ['Short-lived Book']], buy_again($userId, $orderId));
+    }
+
+    public function testOnlyPaidOrdersCanBeBoughtAgain(): void
+    {
+        foreach (['paid' => true, 'refunded' => true, 'pending' => false, 'canceled' => false, 'expired' => false, 'failed' => false] as $status => $expected) {
+            self::assertSame($expected, order_can_be_bought_again(['status' => $status]), $status);
+        }
+
+        // The books of an unpaid order are still in the cart: buying them again would double them.
+        $user = $this->customerWithCart([self::BIOLOGY => 1]);
+        $userId = (int) $user['id'];
+        $pending = (int) $this->checkout($user)[1]['id'];
+        self::assertNull(buy_again($userId, $pending));
+        self::assertTrue(mark_order_status($pending, 'canceled'));
+        self::assertNull(buy_again($userId, $pending));
+        self::assertSame([self::BIOLOGY => 1], $this->cartQuantities($userId));
     }
 }
