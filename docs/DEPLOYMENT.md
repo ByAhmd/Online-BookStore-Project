@@ -8,7 +8,8 @@ This guide covers four setups:
 - **(d) Real store:** real Stripe payments and real email.
 
 Payments in (a), (b) and (c) go to the store's **built-in payment simulator**, which is described first.
-The guide ends with the [limits of the free demo](#limits-of-the-free-demo), [security notes](#security-notes), [troubleshooting](#troubleshooting) and the [facts that could not be confirmed](#facts-that-could-not-be-confirmed).
+Before them, [Local setup without Docker](#local-setup-without-docker) runs the store on your own PHP and database for development.
+The guide ends with the [limits of the free demo](#limits-of-the-free-demo), the [deployment checklist](#deployment-checklist), [security notes](#security-notes), [troubleshooting](#troubleshooting) and the [facts that could not be confirmed](#facts-that-could-not-be-confirmed).
 
 ## Contents
 
@@ -16,11 +17,13 @@ The guide ends with the [limits of the free demo](#limits-of-the-free-demo), [se
 - [The payment simulator](#the-payment-simulator)
 - [The showcase and the daily reset](#the-showcase-and-the-daily-reset)
 - [How the container works](#how-the-container-works)
+- [Local setup without Docker](#local-setup-without-docker)
 - [(a) Run it locally with Docker](#a-run-it-locally-with-docker)
 - [(b) Free public demo on alwaysdata](#b-free-public-demo-on-alwaysdata)
 - [(c) Present it from your own PC with Tailscale Funnel](#c-present-it-from-your-own-pc-with-tailscale-funnel)
 - [(d) A real store: Stripe payments and email](#d-a-real-store-stripe-payments-and-email)
 - [Limits of the free demo](#limits-of-the-free-demo)
+- [Deployment checklist](#deployment-checklist)
 - [Security notes](#security-notes)
 - [Container settings reference](#container-settings-reference)
 - [Checks and CI](#checks-and-ci)
@@ -49,6 +52,7 @@ The guide ends with the [limits of the free demo](#limits-of-the-free-demo), [se
 | `docker-compose.yml` | Local store: MySQL 8.4 LTS plus the app in demo mode. |
 | `.gitattributes` | Keeps shell scripts and the files under `docker/` on LF line endings, including in Windows checkouts. |
 | `tests/Docker/` | `smoke.sh` (end-to-end check of a running store), `entrypoint_test.sh` and PHPUnit tests for these files and for `bin/setup.php`. |
+| `.github/workflows/release.yml` | Publishes the image of each release to GitHub Container Registry ([below](#use-a-published-image)). |
 
 ## The payment simulator
 
@@ -130,7 +134,7 @@ On alwaysdata it runs every night as a scheduled task ([below](#schedule-the-dai
 - The document root is **`public/`**. The rest of the project (`src/`, `vendor/`, `storage/`, `bin/`, `database/`, `docker/`) is denied in the Apache configuration. The test suite is not in the image.
 - The rules of `public/.htaccess` and `public/uploads/.htaccess` apply (`AllowOverride All`). The virtual host repeats their essential rules: dotfiles are denied, PHP never runs under `/uploads/`, and directory listings are off.
 - Apache sends `Server: Apache` without a version (`ServerTokens Prod`). Static files also get `X-Content-Type-Options: nosniff`.
-- Static files get browser-cache headers: a year for the versioned URLs pages link (`?v=…`), an hour for uploads and a day for the rest. PHP pages are never cached. See [Images and browser caching](../README.md#images-and-browser-caching).
+- Static files get browser-cache headers: a year for the versioned URLs pages link (`?v=…`), an hour for uploads and a day for the rest. PHP pages are never cached. See [Images and browser caching](ARCHITECTURE.md#images-and-browser-caching).
 - The `HEALTHCHECK` runs `docker/healthcheck.php` every 30 seconds, after a 120-second start period. That script calls `/health.php` inside the container.
 
 ### Start-up
@@ -188,6 +192,109 @@ Other methods get `405`. The endpoint starts no session and sends `Cache-Control
 
 ---
 
+## Local setup without Docker
+
+For development, BookWise also runs on your own PHP and database, with PHP's built-in server or with Apache (for example XAMPP or Laragon).
+
+### 1. Prerequisites
+
+- PHP 8.3+ with the extensions listed in [ARCHITECTURE.md](ARCHITECTURE.md#technology-stack), and [Composer](https://getcomposer.org/). `php -v` shows the version of the `php` on your PATH.
+  XAMPP 8.2 bundles PHP 8.2, which cannot run BookWise; XAMPP can still provide the database.
+- MySQL 8.0.16+ or MariaDB 10.4+ (XAMPP, Laragon, DBngin, Docker, a system service and so on)
+- Optional: a free [Stripe](https://dashboard.stripe.com/register) account in **test mode**. Without one, checkout uses the built-in [payment simulator](#the-payment-simulator).
+
+### 2. Install dependencies
+
+```bash
+git clone https://github.com/ByAhmd/Online-BookStore-Project.git bookwise
+cd bookwise
+composer install
+```
+
+### 3. Create the database
+
+```sql
+CREATE DATABASE bookwise CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'bookwise'@'localhost' IDENTIFIED BY 'choose-a-password';
+GRANT SELECT, INSERT, UPDATE, DELETE ON bookwise.* TO 'bookwise'@'localhost';
+```
+
+### 4. Configure the environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`: set the `DB_*` values and `APP_URL`. [CONFIGURATION.md](CONFIGURATION.md) lists every setting.
+For payments, either set `PAYMENT_SIMULATOR=true` (or `APP_DEMO=true`, which also turns it on) to use the built-in payment simulator,
+or set your Stripe **test** keys ([CONFIGURATION.md](CONFIGURATION.md#stripe-test-mode)).
+For local development you can set `REQUIRE_EMAIL_VERIFICATION=false`, or open the verification links from `storage/logs/mail.log`.
+
+Then create the tables and, with `--seed`, the sample catalog:
+
+```bash
+php bin/install.php --seed
+```
+
+This needs a database account that may create tables (`CREATE, ALTER, INDEX, REFERENCES, DROP` on the database).
+Either run it once with an administrative account in the environment, for example `DB_USER=root DB_PASS=... php bin/install.php --seed`, or grant those rights to the application user.
+On an existing BookWise database the same command applies pending [migrations](ARCHITECTURE.md#database-and-migrations) instead.
+
+You can also import the SQL files by hand: `mysql -u root -p bookwise < database/schema.sql`, then `database/seed.sql`
+(on Windows PowerShell run them through `cmd /c "..."`, or use phpMyAdmin → *Import*, in that order).
+
+### 5. Create an administrator
+
+```bash
+php bin/create-admin.php admin@example.com "Store Admin"
+```
+
+You will be prompted for a password (minimum 8 characters). To script it, set
+`BOOKWISE_ADMIN_PASSWORD` in the environment instead.
+
+Running the command again for the same email resets that administrator's password.
+It also signs out the administrator's other sessions and clears any sign-in lockout.
+
+Add `--viewer` to create a read-only administrator instead, for example for a reviewer:
+`php bin/create-admin.php reviewer@example.com "Reviewer" --viewer`.
+Running the command again keeps the administrator's role, so resetting a viewer's password never gives it write access.
+Add `--owner` or `--viewer` to change the role; the command says when it changed.
+
+### 6. Run it
+
+**PHP built-in server (simplest):**
+
+```bash
+php -S localhost:8000 -t public
+```
+
+Open <http://localhost:8000>. With this option, set `APP_URL=http://localhost:8000`.
+With the payment simulator on, this one server is all you need to buy a book: checkout opens the simulated payment page `pay.php` on the same server.
+The `php` that starts the server must be PHP 8.3 or newer. With an older one, for example XAMPP 8.2's `C:\xampp\php\php.exe` first on the PATH, every page fails with Composer's "Composer detected issues in your platform" error.
+
+**XAMPP / Apache:** this needs a XAMPP whose bundled PHP is 8.3 or newer, because Apache runs BookWise with XAMPP's own PHP.
+With XAMPP 8.2, use XAMPP only for the database and start the store with `php -S` from a separate PHP 8.3+ installation, or use Laragon or [Docker](#a-run-it-locally-with-docker).
+Keep the project *outside* `htdocs` and expose only `public/` with an alias.
+Add this to `C:\xampp\apache\conf\extra\httpd-xampp.conf`, or to the end of `httpd.conf`, then restart Apache:
+
+```apache
+Alias /bookwise "C:/path/to/bookwise/public"
+<Directory "C:/path/to/bookwise/public">
+    AllowOverride All
+    Require all granted
+</Directory>
+```
+
+Open `http://localhost/bookwise/`. With this option, set `APP_URL=http://localhost/bookwise`.
+In production, point the virtual host's `DocumentRoot` at `public/`.
+
+> If you do copy the whole project into `htdocs`, Apache still serves only `public/`.
+> The project-root `.htaccess` denies everything else (`.env`, `storage/logs`, `vendor/`, `src/` and so on), and `public/.htaccess` re-allows the web root.
+> This relies on `AllowOverride All`, which is XAMPP's default.
+> Servers that ignore `.htaccess` files (nginx, `php -S`) must use `public/` as the document root.
+
+Customers register through the **Sign Up** button. Administrators log in on the same form.
+
 ## (a) Run it locally with Docker
 
 You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine with the Compose plugin (`docker compose`).
@@ -239,6 +346,25 @@ Notes:
   The upgrade is one-way: MySQL 8.0 cannot open the volume afterwards, so an older checkout of BookWise no longer starts on it.
   To keep a way back, export the database with the old checkout before you update: `docker compose exec -T db sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" bookwise' > bookwise.sql`.
 - **Windows:** `.gitattributes` keeps the scripts on LF line endings. The image also strips carriage returns from them, so a checkout made before `.gitattributes` existed still works.
+
+### Use a published image
+
+Every release also publishes the image to GitHub Container Registry once its tag has been pushed, so it does not have to be built: `ghcr.io/byahmd/online-bookstore-project`, tagged with the version (`1.0.0`), its minor and major lines (`1.0`, `1`) and `latest`.
+The images are built for `linux/amd64` by `.github/workflows/release.yml` from the release's tag ([CONTRIBUTING.md](../CONTRIBUTING.md#releasing-a-version)), from the same Dockerfile as above.
+
+```bash
+docker pull ghcr.io/byahmd/online-bookstore-project:1.0.0
+```
+
+To run it with the Compose setup of (a), give it the name the Compose file uses for its own build, then start Compose **without** `--build` (Compose builds `bookwise:local` only when it is missing):
+
+```bash
+docker tag ghcr.io/byahmd/online-bookstore-project:1.0.0 bookwise:local
+docker compose up -d
+```
+
+`docker compose up --build` replaces it with a local build again. The image needs the same database and settings as a local build ([Container settings reference](#container-settings-reference)); it contains no database of its own.
+Each image carries a provenance and an SBOM attestation from its build. `docker buildx imagetools inspect ghcr.io/byahmd/online-bookstore-project:1.0.0 --format '{{ json .Provenance }}'` shows the first, and `--format '{{ json .SBOM }}'` the second.
 
 ## (b) Free public demo on alwaysdata
 
@@ -514,7 +640,7 @@ Starting from the Docker setup, or from a server prepared with `bin/setup.php`, 
 3. **Email:**
    - Set `MAIL_DRIVER=smtp` and the `SMTP_*` settings of any email provider (for example Brevo or Mailjet, which have free plans): `SMTP_HOST`, `SMTP_PORT` (587, or 2525 where the host blocks 587), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_ENCRYPTION=tls` (`ssl` for port 465) and optionally `SMTP_TIMEOUT`.
      Set `MAIL_FROM_ADDRESS` to an address the provider lets you send from, and `MAIL_FROM_NAME`.
-     The host must allow outgoing connections to the SMTP port; see the README's [Email](../README.md#email) section.
+     The host must allow outgoing connections to the SMTP port; see [CONFIGURATION.md](CONFIGURATION.md#email).
    - Turn email verification back on with `REQUIRE_EMAIL_VERIFICATION=true`, or remove the variable (true is the default).
 4. **Address:** set `APP_URL` to the public HTTPS address. It is used in Stripe return URLs and email links.
 5. **Persistent uploads:** profile pictures and uploaded book covers are stored in `public/uploads/`. With Docker the `uploads` volume keeps them; on a classic host they stay in the folder.
@@ -551,6 +677,25 @@ The free alwaysdata plan cannot be used for a store that makes money.
 - Visitors' purchases never take a book below 3 copies, and `php bin/install.php` (or a container start) restocks the catalog.
 - Nothing is ever shipped: a visitor's order stays *processing* until an administrator marks it shipped and delivered on its order page, which only updates the order and sends its emails to the demo inbox.
 
+## Deployment checklist
+
+For any server, with Docker or without:
+
+- Serve **only** `public/` as the document root, over HTTPS.
+- Set `APP_ENV=production` and `APP_DEBUG=false`, and set `APP_URL` to the public HTTPS URL.
+- Use a dedicated database user with only `SELECT, INSERT, UPDATE, DELETE` on the application database.
+  Run `bin/install.php` / `bin/migrate.php` with an account that may also `CREATE, ALTER, INDEX, REFERENCES, DROP`.
+  (The Docker image runs `bin/install.php` at every start, so there the configured user needs those rights too.)
+- Make `storage/logs/`, `public/uploads/avatars/` and `public/uploads/covers/` writable by the web server, and keep them out of version control.
+  With the payment simulator on, `storage/` (or the folder of `PAYMENT_SIMULATOR_STORE`) must be writable too.
+- For a public demo on PHP hosting, `php bin/setup.php` does most of this list: it checks the folders, writes `.env` with safe demo values (readable by its owner only) and installs the database ([(b)](#b-free-public-demo-on-alwaysdata)).
+- Set `REQUIRE_EMAIL_VERIFICATION=true` only together with a working mail driver, or new customers cannot sign in.
+- On **nginx** or any server that ignores `.htaccess`, deny PHP execution under `/uploads/` in the server config, for example:
+  `location ^~ /uploads/ { location ~ \.php$ { deny all; } }`
+- Configure the Stripe webhook endpoint and secret. Use live keys only in production.
+- Configure email with `MAIL_DRIVER=smtp` and the `SMTP_*` settings of your provider, and set `MAIL_FROM_ADDRESS` to an address it lets you send from.
+- Rotate logs. `storage/logs/mail.log` contains reset links when `MAIL_DRIVER=log`, so never use that driver in production.
+
 ## Security notes
 
 - **The demo takes no real payments.** With the payment simulator on, the Stripe key is not even read and nothing leaves the server.
@@ -577,7 +722,7 @@ The free alwaysdata plan cannot be used for a store that makes money.
 
 ## Container settings reference
 
-These variables are specific to the container and `docker-compose.yml`. The application settings (`DB_*`, `STRIPE_*`, `PAYMENT_SIMULATOR`, `MAIL_*` and so on) are listed in the README's configuration reference.
+These variables are specific to the container and `docker-compose.yml`. The application settings (`DB_*`, `STRIPE_*`, `PAYMENT_SIMULATOR`, `MAIL_*` and so on) are listed in [CONFIGURATION.md](CONFIGURATION.md).
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -616,6 +761,8 @@ The **Docker image** job in `.github/workflows/ci.yml` runs next to the test mat
 
 The **Browser tests** job starts the same Compose store and drives it in Chromium with the Playwright tests of `e2e/` (journeys in English and Arabic, the demo inbox, the read-only administrator, keyboard use and axe-core accessibility checks).
 When a test fails, it keeps Playwright's HTML report as the `playwright-report` artifact and prints the container logs. [TESTING.md](TESTING.md) explains how to run these tests yourself, also against `docker compose up`.
+
+The **Release** workflow (`.github/workflows/release.yml`) runs only when a version tag such as `v1.0.0` is pushed. It builds the image from that tag and pushes it to GitHub Container Registry ([Use a published image](#use-a-published-image)), then creates the GitHub release with the version's notes from `CHANGELOG.md`.
 
 Locally, without Docker:
 

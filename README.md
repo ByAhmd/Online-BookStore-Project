@@ -3,713 +3,36 @@
 [![CI](https://github.com/ByAhmd/Online-BookStore-Project/actions/workflows/ci.yml/badge.svg)](https://github.com/ByAhmd/Online-BookStore-Project/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-BookWise is an online bookstore written in plain PHP with MySQL/MariaDB.
-Visitors browse a catalog, search and filter by genre without an account. Customers keep
-favorites, buy printed books through **Stripe Checkout** (or the built-in **payment simulator**)
-for delivery to a **Saudi National Address**, follow each order until it is delivered, and
-review the books they bought. Administrators manage the catalog, stock and covers, ship and
-deliver orders and refund them; read-only administrators can look at everything but change
-nothing. The whole interface is available in **English and Arabic** (right-to-left).
-
-It runs locally with PHP's built-in server or Docker, and can be published as a free
-**live demo** with simulated payments on ordinary PHP hosting such as alwaysdata
-(see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). A reviewer can try such a demo in one click:
-as a fresh demo customer, or as a read-only administrator. The demo starts with a showcase of
-fictional customers, orders and reviews, and a nightly reset puts it back.
-
-It started as a team project for the *Fundamentals of Web Programming* course at
-King Faisal University (see the in-app **About** page). It has since been audited
-and partly rewritten for security, correctness and maintainability. The plain-PHP
-page architecture is unchanged; there is no framework.
-
----
+BookWise is an online bookstore for printed books, written in plain procedural PHP with MySQL or MariaDB and no framework.
+Guests browse and search the catalog. Customers buy books for delivery to a Saudi National Address, pay through Stripe Checkout or the store's built-in payment simulator, and follow each order until it is delivered.
+Administrators manage the catalog, stock, deliveries and refunds; read-only administrators see every admin page but change nothing. The whole interface is in English and Arabic (right to left).
+It started as a team project for the *Fundamentals of Web Programming* course at King Faisal University and has since been audited, hardened and extended ([docs/AUDIT.md](docs/AUDIT.md)).
 
 ## Contents
 
-- [Features](#features)
-- [Technology stack](#technology-stack)
-- [Project structure](#project-structure)
-- [Getting started](#getting-started)
-- [Running with Docker and the live demo](#running-with-docker-and-the-live-demo)
-- [Configuration reference](#configuration-reference)
-- [Languages](#languages)
-- [Payments: the simulator and Stripe](#payments-the-simulator-and-stripe)
-- [Checkout, delivery and order emails](#checkout-delivery-and-order-emails)
-- [Email](#email)
-- [Database migrations](#database-migrations)
-- [Upgrading a database from the original project](#upgrading-a-database-from-the-original-project)
-- [Testing and quality checks](#testing-and-quality-checks)
-- [Security notes](#security-notes)
-- [Deployment checklist](#deployment-checklist)
-- [Known limitations](#known-limitations)
+- [Try it](#try-it)
 - [Screenshots](#screenshots)
-- [License](#license)
+- [Features](#features)
+- [Engineering highlights](#engineering-highlights)
+- [Architecture](#architecture)
+- [Quick start](#quick-start)
+- [Documentation](#documentation)
+- [License and credits](#license-and-credits)
 
----
+## Try it
 
-## Features
+<!-- LIVE DEMO: once the public demo runs (docs/DEPLOYMENT.md, (b)), replace this comment with: **Live demo:** https://<account>.alwaysdata.net -->
 
-**Customers**
-- Guests browse without an account: the Explore page (search, genres, Favorites tab), book pages and reviews.
-  Buying, favorites, reviews and reactions are links such as **Log in to buy** and **Log in to save favorites**; after signing in (or signing up), the visitor is back on the same page.
-  The Favorites tab asks guests to log in.
-- Sign up, log in and log out. Passwords are hashed with `password_hash()`, failed logins are throttled, and the session ID is regenerated on login.
-- Email verification: new accounts confirm their address through a link that expires after 24 hours (can be turned off with `REQUIRE_EMAIL_VERIFICATION=false`).
-  The link asks for the account's password before it confirms and signs in, so mail scanners that open links, or someone who registered another person's address, cannot use it.
-  Signing up with an address that is already registered sends a notice to that address instead of revealing the account on screen.
-- Password reset by email, using single-use links that expire after 60 minutes.
-- Home page with the real catalog size, genre shortcuts, recommended books (by rating) and best sellers (by sales).
-- Explore page:
-  - Search by title or author.
-  - Genre tabs generated from the catalog, plus **Favorites**.
-  - 24 books per page with page links.
-  - Works without JavaScript; with JavaScript, results update in place.
-- Book pages:
-  - Description, price, average rating, copies sold and stock ("Only 3 left", "Out of stock").
-  - Add to cart with a quantity, and add to or remove from favorites.
-  - Reviews with a 1–5 star rating, only for customers who bought the book and only once per book. Other readers can like or dislike a review.
-- Cart: change quantities (1–10 per title, never more than in stock), remove items, and see totals computed from catalog prices on the server.
-- Checkout page between the cart and the payment: the books, the totals (prices include 15% VAT, delivery is free) and the delivery address, chosen from the customer's saved addresses or typed in there and then.
-- Payment on Stripe's hosted payment page, or on the built-in payment simulator's page. An order is confirmed only after BookWise has verified the payment.
-- Order page for every order: its progress (paid, processing, shipped with carrier and tracking number, delivered, or refunded), the delivery address, a receipt that prints on its own, and, for paid orders, **Buy again**, which puts the books that are still available back into the cart.
-- Order emails in the customer's language, each sent once: confirmation, shipped (with the tracking number), delivered and refunded.
-- Profile:
-  - Name, favorite genre, date of birth and profile picture (JPEG/PNG/GIF/WebP, max 2 MB, re-encoded on upload).
-  - A payment-method *preference* (no card data is ever stored).
-  - Delivery addresses (Saudi National Address): up to five, one of them the default, to add, edit, delete and make the default.
-  - Order history with status, delivery stage and refunds, each order linking to its page.
-  - Interface language (English or Arabic), remembered on the account.
-  - Change password (signs out every other session) and delete the account (asks for the password; past orders are kept anonymously for the store's records, and their delivery addresses are deleted, except for orders still on their way, which keep theirs until they are delivered).
+Start the demo store with Docker ([Quick start](#quick-start)), open <http://localhost:8080> and choose on the sign-in page:
 
-**Administrators**
-- Add, edit and delete books, with server-side validation, stock levels and cover uploads (JPEG/PNG/GIF/WebP, max 5 MB, re-encoded).
-- Dashboard with catalog and sales totals, stock per book and the 20 most recent orders.
-- Orders page: filter by status and by delivery stage, search by order number or customer email, and open any order.
-  An order's page shows the delivery address and moves a paid order from *processing* to *shipped* (with an optional carrier and tracking number) and then to *delivered*; the customer is emailed at each step.
-  A paid order can be refunded in full through Stripe from its page, at any stage of its delivery; the copies go back into stock only if the order had not been shipped yet.
-  Refunds made in the Stripe Dashboard are picked up by the `charge.refunded` webhook.
-- Accounts are created from the command line (`bin/create-admin.php`, or `bin/install.php` in containers); there is no public admin sign-up.
-- Two roles: **owners** (the default) may change everything; **viewers** (`bin/create-admin.php --viewer`) open every admin page but change nothing.
-  For a viewer every form is switched off with a note that says why, every admin action that changes something answers 403, and customers' names and email addresses are shortened (`S…`, `s…@….com`), so orders are found by their number only (a search never matches inside the addresses).
-  Payment references are shortened too (`cs_test_…`): a checkout session id is the key to its payment page.
+- **Try as a customer**: a fresh demo customer, already signed in, with a few favorites and a made-up delivery address in Riyadh. Add a book to the cart and check out.
+- **Try as an administrator (read-only)**: every admin page, with every form switched off and customers' names, email addresses and payment references shortened.
 
-**Everywhere**
-- English and Arabic interface with a language switch in the header, Arabic plural forms, Arabic dates, amounts and genre names, and a mirrored right-to-left layout.
-- Optional demo mode (`APP_DEMO=true`) for a public showcase: a banner, a built-in payment simulator instead of Stripe, and optionally a demo inbox that shows the store's emails instead of sending them.
-  The simulator runs inside the application, so no Stripe account, second server or special web-server setup is needed.
-- One-click demo accounts (only with `APP_DEMO=true`), offered on the sign-in page and pointed to by the banner:
-  - **Try as a customer** creates a fresh account for that visitor ("Demo reader 4821", a random address at the reserved `demo.invalid` domain, a random password nobody knows, already confirmed, with a few favorites and a made-up delivery address in Riyadh) and signs it in, so the visitor can check out at once.
-    It can use the whole store (cart, simulated checkout, reviews of the books it bought, the demo inbox) and delete itself, but it has no password to change or reset.
-    One visitor (an IPv4 address, or an IPv6 /64 network) may create 10 per hour and all visitors together 60 per hour, and at most 200 exist at once (the oldest are deleted, with their data, to make room).
-    `php bin/demo-cleanup.php` deletes them after 24 hours, with their carts, favorites, reviews and abandoned checkouts; paid orders are kept, anonymised, as when customers delete their accounts.
-  - **Try as an administrator (read-only)** signs in to a shared viewer administrator, created on first use with a random password nobody knows.
-- A showcase for the demo (only with `APP_DEMO=true`): fictional customers in English and Arabic with their orders at every stage of delivery, reviews, likes and favorites, so that best sellers, ratings and the admin dashboard are not empty; and a nightly reset (`php bin/demo-reset.php --yes`) that deletes everything visitors did and puts the sample catalog and the showcase back.
-  See [The demo's showcase and daily reset](#the-demos-showcase-and-daily-reset).
+What to expect:
 
-## Technology stack
-
-| Layer | Technology |
-| --- | --- |
-| Language | PHP ≥ 8.3 (tested on 8.3 and 8.4; CI covers 8.3–8.5) |
-| Database | MySQL ≥ 8.0.16 or MariaDB ≥ 10.4 (InnoDB, utf8mb4), accessed with PDO prepared statements |
-| Payments | [Stripe Checkout](https://stripe.com/docs/payments/checkout) via `stripe/stripe-php` 22.x, or the built-in payment simulator |
-| Email | Any SMTP server through PHPMailer (`phpmailer/phpmailer` 7.x), a demo inbox stored in the database, or a local log file for development |
-| Frontend | Server-rendered HTML, plain CSS and vanilla JavaScript (no build step), Google Fonts (Quicksand) |
-| Tooling | Composer, PHPUnit 12, PHPStan 2 (level 8), GitHub Actions |
-
-Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
-`gd` is recommended (it re-encodes uploaded avatars, which strips metadata and embedded payloads).
-`openssl` is needed to send email over SMTP with TLS.
-
-## Project structure
-
-```
-.
-├── public/                 Web root: point your server's document root here
-│   ├── *.php               Pages and form handlers (index.php = login/sign-up, Home_Page.php, Explore_Page.php,
-│   │                       checkout.php = delivery and review, order.php = an order's page,
-│   │                       pay.php = the payment simulator's page, demo_login.php = the one-click demo accounts, …)
-│   ├── css/  js/           Stylesheets and scripts (common.css/common.js are shared)
-│   ├── imges/              Catalog covers and UI images (folder name kept: database rows reference it)
-│   └── uploads/            Uploaded avatars/ and covers/ (git-ignored, must be writable)
-├── src/                    Shared PHP code (autoloaded by Composer)
-│   ├── bootstrap.php       Loaded by every page: config, error handling, session, security headers, language
-│   ├── auth.php users.php password_reset.php csrf.php validation.php
-│   ├── books.php cart.php orders.php   Catalog, stock, cart, Stripe orders and refunds
-│   ├── addresses.php fulfilment.php    Delivery addresses; delivery of paid orders, order emails, order page data
-│   ├── payment_simulator.php           Built-in stand-in for the Stripe API (demo payments)
-│   ├── demo.php            The demo's showcase (fictional customers, orders, reviews) and its daily reset
-│   ├── i18n.php            Translations (t(), tn()), Arabic plurals, language switching
-│   ├── migrations.php      Schema migration runner
-│   ├── db.php env.php helpers.php mailer.php uploads.php
-│   └── views/              Shared header (navigation), footer, error page and delivery-address fields
-├── lang/en/  lang/ar/      Interface text, one file per area (common, auth, account, shop, admin, mail)
-├── database/
-│   ├── schema.sql          Latest database schema (fresh installs)
-│   ├── seed.sql            Sample catalog: 55 books with stock, no user data
-│   └── migrations/         Changes applied to existing databases, in order
-├── bin/
-│   ├── setup.php           Set up a demo on PHP hosting without Docker (.env, database, administrator)
-│   ├── install.php         Create the schema on an empty database, or migrate an existing one
-│   ├── migrate.php         Apply pending migrations
-│   ├── create-admin.php    Create an administrator (--viewer: read-only) or reset an administrator's password
-│   ├── demo-cleanup.php    Delete the one-click demo customers after 24 hours (a daily scheduled task)
-│   ├── demo-reset.php      Return the demo to its starting state: showcase, sample catalog, no visitors' data (a daily scheduled task)
-│   ├── demo-seed.php       Add the demo's showcase of fictional customers, orders and reviews (once)
-│   ├── upgrade-legacy-db.php  Upgrade a database created by the original project
-│   └── lint.php            `php -l` over the whole project
-├── docker/  Dockerfile  docker-compose.yml   Container image and local Compose setup
-├── docs/                   DEPLOYMENT.md (Docker, alwaysdata demo, Tailscale Funnel), TESTING.md (browser tests), AUDIT.md (audit record), screenshots/
-├── storage/                logs/ (app.log, php-error.log, mail.log) and the payment simulator's state (git-ignored)
-├── tests/                  PHPUnit suites (unit, integration, http, deploy) and an HTTP wrapper around the payment simulator
-├── e2e/  package.json  playwright.config.js   Browser tests (Playwright with axe-core) and the README screenshots (Node.js, tests only)
-├── .env.example            Configuration template
-└── .github/workflows/ci.yml
-```
-
-Only `public/` should be served to browsers; `.env`, `vendor/`, `src/` and the logs live outside it.
-This holds when the web server's document root (or alias) is `public/`, as described below.
-As a safety net for Apache setups that serve the whole folder, the root `.htaccess` denies everything except `public/`.
-
-## Getting started
-
-### 1. Prerequisites
-
-- PHP 8.3+ with the extensions listed above, and [Composer](https://getcomposer.org/). `php -v` shows the version of the `php` on your PATH.
-  XAMPP 8.2 bundles PHP 8.2, which cannot run BookWise; XAMPP can still provide the database.
-- MySQL 8.0.16+ or MariaDB 10.4+ (XAMPP, Laragon, DBngin, Docker, a system service and so on)
-- Optional: a free [Stripe](https://dashboard.stripe.com/register) account in **test mode**. Without one, checkout uses the built-in [payment simulator](#payments-the-simulator-and-stripe).
-
-### 2. Install dependencies
-
-```bash
-git clone https://github.com/ByAhmd/Online-BookStore-Project.git bookwise
-cd bookwise
-composer install
-```
-
-### 3. Create the database
-
-```sql
-CREATE DATABASE bookwise CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'bookwise'@'localhost' IDENTIFIED BY 'choose-a-password';
-GRANT SELECT, INSERT, UPDATE, DELETE ON bookwise.* TO 'bookwise'@'localhost';
-```
-
-### 4. Configure the environment
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env`: set the `DB_*` values and `APP_URL`. See the [configuration reference](#configuration-reference).
-For payments, either set `PAYMENT_SIMULATOR=true` (or `APP_DEMO=true`, which also turns it on) to use the built-in payment simulator,
-or set your Stripe **test** keys.
-For local development you can set `REQUIRE_EMAIL_VERIFICATION=false`, or open the verification links from `storage/logs/mail.log`.
-
-Then create the tables and, with `--seed`, the sample catalog:
-
-```bash
-php bin/install.php --seed
-```
-
-This needs a database account that may create tables (`CREATE, ALTER, INDEX, REFERENCES, DROP` on the database).
-Either run it once with an administrative account in the environment, for example `DB_USER=root DB_PASS=... php bin/install.php --seed`, or grant those rights to the application user.
-On an existing BookWise database the same command applies pending [migrations](#database-migrations) instead.
-
-You can also import the SQL files by hand: `mysql -u root -p bookwise < database/schema.sql`, then `database/seed.sql`
-(on Windows PowerShell run them through `cmd /c "..."`, or use phpMyAdmin → *Import*, in that order).
-
-### 5. Create an administrator
-
-```bash
-php bin/create-admin.php admin@example.com "Store Admin"
-```
-
-You will be prompted for a password (minimum 8 characters). To script it, set
-`BOOKWISE_ADMIN_PASSWORD` in the environment instead.
-
-Running the command again for the same email resets that administrator's password.
-It also signs out the administrator's other sessions and clears any sign-in lockout.
-
-Add `--viewer` to create a read-only administrator instead, for example for a reviewer:
-`php bin/create-admin.php reviewer@example.com "Reviewer" --viewer`.
-Running the command again keeps the administrator's role, so resetting a viewer's password never gives it write access.
-Add `--owner` or `--viewer` to change the role; the command says when it changed.
-
-### 6. Run it
-
-**PHP built-in server (simplest):**
-
-```bash
-php -S localhost:8000 -t public
-```
-
-Open <http://localhost:8000>. With this option, set `APP_URL=http://localhost:8000`.
-With the payment simulator on, this one server is all you need to buy a book: checkout opens the simulated payment page `pay.php` on the same server.
-The `php` that starts the server must be PHP 8.3 or newer. With an older one, for example XAMPP 8.2's `C:\xampp\php\php.exe` first on the PATH, every page fails with Composer's "Composer detected issues in your platform" error.
-
-**XAMPP / Apache:** this needs a XAMPP whose bundled PHP is 8.3 or newer, because Apache runs BookWise with XAMPP's own PHP.
-With XAMPP 8.2, use XAMPP only for the database and start the store with `php -S` from a separate PHP 8.3+ installation, or use Laragon or [Docker](#running-with-docker-and-the-live-demo).
-Keep the project *outside* `htdocs` and expose only `public/` with an alias.
-Add this to `C:\xampp\apache\conf\extra\httpd-xampp.conf`, or to the end of `httpd.conf`, then restart Apache:
-
-```apache
-Alias /bookwise "C:/path/to/bookwise/public"
-<Directory "C:/path/to/bookwise/public">
-    AllowOverride All
-    Require all granted
-</Directory>
-```
-
-Open `http://localhost/bookwise/`. With this option, set `APP_URL=http://localhost/bookwise`.
-In production, point the virtual host's `DocumentRoot` at `public/`.
-
-> If you do copy the whole project into `htdocs`, Apache still serves only `public/`.
-> The project-root `.htaccess` denies everything else (`.env`, `storage/logs`, `vendor/`, `src/` and so on), and `public/.htaccess` re-allows the web root.
-> This relies on `AllowOverride All`, which is XAMPP's default.
-> Servers that ignore `.htaccess` files (nginx, `php -S`) must use `public/` as the document root.
-
-Customers register through the **Sign Up** button. Administrators log in on the same form.
-
-## Running with Docker and the live demo
-
-The repository includes a production-style image (PHP 8.4 + Apache, serving only `public/`) and a Compose setup with MySQL 8.4:
-
-```bash
-docker compose up --build
-```
-
-Open <http://localhost:8080>. The container creates or migrates the database on start-up, loads the sample catalog and runs in demo mode, with payments simulated instead of sent to Stripe.
-In demo mode the stock is topped up at every start and simulated purchases never take a book below 3 copies, so visitors cannot sell the shared catalog out.
-
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) explains the image and:
-
-- how to publish a free public demo on **alwaysdata** (ordinary PHP hosting with MariaDB, no Docker), step by step, with the setup script `php bin/setup.php`;
-- how to present the Docker store from your own PC through **Tailscale Funnel**;
-- how to switch from demo mode to real Stripe payments and email.
-
-### The demo's showcase and daily reset
-
-A demo that starts empty has no best sellers, no ratings and nothing on the admin dashboard. In demo mode (`APP_DEMO=true`) BookWise therefore adds a **showcase** once (`src/demo.php`):
-
-- 12 clearly fictional customers, six with English and six with Arabic names. Their addresses are at the reserved `demo.invalid` domain (`showcase-maya@demo.invalid`, …) and their passwords are random and thrown away, so nobody can sign in to them; each has a made-up Saudi delivery address.
-- 31 orders over the last 60 days: paid ones at every stage of delivery (processing, shipped with a carrier and tracking number, delivered), one refunded before it was shipped and one abandoned checkout.
-  They follow the store's own rules: delivery-address copies, catalog prices with VAT, sales rows for paid orders, and copies taken out of stock (never below 3).
-- 32 reviews (3 to 5 stars, in the customer's language) by customers who received the book, with likes and dislikes by the others, and favorites.
-
-`php bin/install.php` adds it in demo mode when the store has none yet (so `php bin/setup.php` and the container do too; `--no-showcase` leaves it out), and `php bin/demo-seed.php` adds it by hand. Running either again adds nothing.
-
-`php bin/demo-reset.php --yes` returns a demo to that starting state. It deletes every customer with their data and orders (every other order too), the demo inbox, the one-click demo customers' records, the books administrators added and the uploaded pictures, puts the 55 sample books back as `database/seed.sql` has them, empties the payment simulator's state and adds the showcase again.
-Administrators are kept. The database part is one transaction, so visitors never see a half-reset store. Without `--yes` it changes nothing, and both commands refuse to run outside demo mode.
-With `--no-showcase` it leaves the showcase out, which empties a demo of every customer and order before it becomes a real store ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#d-a-real-store-stripe-payments-and-email), step 8).
-On alwaysdata it runs every night as a scheduled task, next to `php bin/demo-cleanup.php`. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-daily-reset-and-the-cleanup) has the exact task settings for 04:00 Riyadh time, and shows how to check the time zone of alwaysdata's scheduler first: alwaysdata does not document it, and the settings assume UTC.
-
-## Configuration reference
-
-All settings come from environment variables. `src/env.php` loads `.env` for
-convenience, and variables already set in the real environment take precedence.
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `APP_NAME` | `BookWise` | Name shown in page titles, the navigation bar and the footer |
-| `APP_ENV` | `production` | `local`, `testing` or `production`. Live Stripe keys are refused unless this is `production`, and with `production` the payment simulator needs `APP_DEMO=true`. |
-| `APP_DEBUG` | `false` | Show exception details in the browser. **Never enable in production.** |
-| `APP_URL` | `http://localhost:8000` | Public URL of `public/` without a trailing slash. Used for Stripe return URLs and password-reset links. |
-| `APP_TIMEZONE` | `Asia/Riyadh` | PHP and database-session timezone |
-| `APP_DEFAULT_LOCALE` | `en` | Interface language for visitors who have not chosen one: `en` or `ar` |
-| `APP_DEMO` | `false` | Public demo mode: shows a banner, offers the one-click demo accounts on the sign-in page (`demo_login.php` answers 404 without it), turns the payment simulator on (unless `PAYMENT_SIMULATOR=false`), keeps the sample catalog in stock and lets `bin/install.php` add the [showcase](#the-demos-showcase-and-daily-reset) ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
-| `REQUIRE_EMAIL_VERIFICATION` | `true` | New customers must confirm their email address before signing in. Needs working email in production. |
-| `LOG_DIR` | `storage/logs` | Directory for `app.log`, `php-error.log` and `mail.log` (relative paths start at the project root) |
-| `DB_HOST` / `DB_PORT` | `127.0.0.1` / `3306` | Database server |
-| `DB_NAME` | `bookwise` | Database name |
-| `DB_USER` / `DB_PASS` | `root` / *(empty)* | Database credentials |
-| `DB_SSL_CA` / `DB_SSL_CA_PEM` | — | TLS for hosted databases: path to the CA certificate, or the certificate text itself. The server certificate is then verified. |
-| `PAYMENT_SIMULATOR` | follows `APP_DEMO` | `true`: payments go to the built-in [payment simulator](#payments-the-simulator-and-stripe) instead of Stripe (refused on a real store: `APP_ENV=production` with `APP_DEMO=false`); `false`: always Stripe |
-| `PAYMENT_SIMULATOR_STORE` | `storage/payment-simulator.json` | The simulator's state file (relative paths start at the project root); its folder must be writable |
-| `STRIPE_SECRET_KEY` | — | Stripe secret key (`sk_test_…` for development). Not used while the simulator is on. |
-| `STRIPE_WEBHOOK_SECRET` | — | Signing secret of the webhook endpoint (`whsec_…`). Not needed while the simulator is on: the endpoint then answers 404. |
-| `STRIPE_CURRENCY` | `sar` | ISO code of a **two-decimal** currency that book prices are charged in, also by the simulator (zero- and three-decimal currencies such as JPY or KWD are refused) |
-| `STRIPE_API_BASE` | — | **Tests only:** points the Stripe SDK at the local mock in `tests/Support` (ignored while the simulator is on) |
-| `MAIL_DRIVER` | `log` | `log` (write to `mail.log`), `smtp` (send through `SMTP_*`), `database` (demo inbox; only with `APP_DEMO=true`) or `null` (discard). See [Email](#email). |
-| `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | `no-reply@example.com` / `BookWise` | Sender of outgoing email; your provider must allow this address |
-| `SMTP_HOST` / `SMTP_PORT` | — / `587` | SMTP server for `MAIL_DRIVER=smtp`. Use port `2525` where a host blocks 587 and the provider offers it. |
-| `SMTP_USERNAME` / `SMTP_PASSWORD` | — | SMTP sign-in; leave `SMTP_USERNAME` empty for a server without authentication. The password is never logged. |
-| `SMTP_ENCRYPTION` | `tls` | `tls` (STARTTLS, required before signing in), `ssl` (TLS from the start, usually port 465) or `none` (only for a test server on your own machine; signs in only to `localhost`) |
-| `SMTP_TIMEOUT` | `10` | Seconds to wait for the SMTP server before the email counts as failed |
-| `BOOKWISE_ADMIN_PASSWORD` | — | Optional; used by `bin/create-admin.php`, and with `BOOKWISE_ADMIN_EMAIL` by `bin/install.php` |
-
-The container adds a few settings of its own (`PORT`, `DB_WAIT_SECONDS`, `BOOKWISE_ADMIN_EMAIL` and others); they are listed in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#container-settings-reference).
-
-## Languages
-
-Every page, form message, email and error page is available in English and Arabic.
-
-- Visitors switch language with the link in the header (`?lang=ar` / `?lang=en`). The choice is kept in a cookie and, for signed-in customers, on the account, so emails arrive in the same language.
-- Arabic pages use `dir="rtl"`, the Tajawal font, Arabic plural forms (zero, one, two, few, many, other), Arabic month names and amounts written as `19.99 ر.س`.
-  The stylesheets use logical CSS properties (`margin-inline-start` and so on), so the layout mirrors without separate RTL files.
-- Catalog content (titles, authors, descriptions) is shown as entered. Common genre names are translated (`shop.genres` in `lang/<language>/shop.php`); other genres appear as stored.
-- Text lives in `lang/<language>/<area>.php` and is looked up with `t('shop.cart.title')`, or `tn('shop.book.sold_times', $count)` for plurals.
-  Placeholders such as `:title` are escaped when the text is printed.
-- To add a language, copy `lang/en/` to the new code, translate the files, and add the code to `SUPPORTED_LOCALES` in `src/i18n.php` (and to `RTL_LOCALES` if it is written right to left).
-  The unit tests check that every language defines the same keys and placeholders.
-
-## Payments: the simulator and Stripe
-
-BookWise takes payments with Stripe Checkout. For demos and local development it has a **built-in payment simulator** instead, so no Stripe account is needed and no money can ever move.
-
-### The payment simulator
-
-- Turn it on with `PAYMENT_SIMULATOR=true`. It is on by default in demo mode (`APP_DEMO=true`); `PAYMENT_SIMULATOR=false` turns it off there.
-  A real store (`APP_ENV=production` with `APP_DEMO=false`) refuses it and takes no payments until `PAYMENT_SIMULATOR=false` is set, so a forgotten setting cannot give books away.
-- It runs **inside the application** (`src/payment_simulator.php`): the Stripe library still makes every request, but they are answered in the same PHP process.
-  `php -S localhost:8000 -t public` is therefore enough to buy a book, and the same holds on any PHP host.
-- Checkout sends the customer to `pay.php`, the simulator's payment page in the store's own layout (English and Arabic). It shows the books and the total, never asks for card details, and offers four endings:
-  **Pay** (paid), **Decline** (a declined card: nothing is charged and the page stays open for another try), **Slow payment** (the payment is confirmed about 15 seconds later, like a delayed payment method) and **Cancel**.
-- Everything else works exactly as with Stripe: the store verifies the payment when the customer returns, expires abandoned sessions at the next checkout and refunds paid orders from the admin order page.
-  Open sessions expire after one hour. The simulator sends no webhooks, and `stripe_webhook.php` answers 404 while it is on.
-- Its state is a JSON file, `PAYMENT_SIMULATOR_STORE` (default `storage/payment-simulator.json`), saved in one step next to a `.lock` file; the web server must be able to write to its folder. It holds no card data and no email addresses.
-- While it is on, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_API_BASE` are not used; `STRIPE_CURRENCY` still sets the store's currency. A live Stripe key is never used in demo mode.
-
-More details are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#the-payment-simulator).
-
-### Stripe (test mode)
-
-1. In the [Stripe Dashboard](https://dashboard.stripe.com/test/apikeys) (test mode), copy the **Secret key** (`sk_test_…`) into `STRIPE_SECRET_KEY`, and keep the simulator off.
-2. Make sure `APP_URL` is the address you browse to; Stripe redirects back to `APP_URL/success_pay.php`.
-3. Pay with a [Stripe test card](https://docs.stripe.com/testing#cards) such as `4242 4242 4242 4242`, with any future expiry date and any CVC.
-
-How a payment becomes an order:
-
-1. `checkout.php` copies the cart into a **pending** order, using prices from the database and integer minor units, together with a copy of the delivery address the customer chose (see [Checkout, delivery and order emails](#checkout-delivery-and-order-emails)).
-   It then creates a Checkout Session for exactly that amount.
-   Checkouts are serialised per customer, so double clicks, two tabs or two devices cannot open two payable sessions.
-   Orders below the minimum charge (2.00 in the store currency) are refused before Stripe is called.
-2. After payment, `success_pay.php` **retrieves the session from Stripe** and checks that it belongs to the signed-in customer's order.
-   It also checks that the amount, currency and payment status all match.
-   Only then is the order marked **paid**, the sales recorded and the purchased items removed from the cart.
-   Opening the success URL without a real payment changes nothing.
-3. Starting a new checkout first resolves older pending sessions: it expires open ones, fulfils paid ones and marks expired ones.
-   A customer therefore can never have two payable sessions for one cart.
-
-**Webhooks (recommended).** These confirm payments even if the customer closes the browser before returning.
-Register `APP_URL/stripe_webhook.php` for these events:
-
-- `checkout.session.completed`
-- `checkout.session.async_payment_succeeded`
-- `checkout.session.async_payment_failed`
-- `checkout.session.expired`
-- `charge.refunded` (records full refunds made in the Stripe Dashboard)
-
-Put the endpoint's signing secret in `STRIPE_WEBHOOK_SECRET`. For local development, use the [Stripe CLI](https://docs.stripe.com/stripe-cli):
-
-```bash
-stripe listen --forward-to localhost:8000/stripe_webhook.php
-```
-
-`stripe listen` prints a `whsec_…` secret to use. Every webhook request's signature is verified, and unsigned requests are rejected.
-A webhook is treated only as a notification: BookWise re-fetches the Checkout Session (or the refunds) from the Stripe API and acts on that state.
-A leaked webhook secret alone therefore cannot mark an unpaid order as paid or a paid order as refunded, and out-of-order deliveries are harmless.
-
-**API version.** `stripe/stripe-php` 22 sends every request with Stripe API version `2026-09-30.endive`.
-Checkout therefore limits the payment methods to cards with `allowed_payment_method_types`; that version no longer has `payment_method_types`.
-When Stripe adds a notice to an answer (a `Stripe-Notice` header, for example in test mode), it is written to `app.log` as a `Stripe notice` warning and never interrupts a checkout or a refund.
-The store turns off stripe-php's client telemetry. Since version 21 it would keep a random ID in the configuration folder of the user that runs PHP (`~/.config/stripe` or `%APPDATA%\Stripe`), even with the simulator, and send that ID and the operating system's name to Stripe with each request.
-
-**Stock.** Adding to the cart and starting a checkout check the stock. The copies are taken out of stock when the payment is confirmed, and put back when an order is refunded before it is shipped.
-Once shipped, the copies have left the store, so a refund does not change the stock; staff add any returned copies on the book's edit page.
-Two customers can still pay for the last copy at the same moment; the second order is then recorded and logged as `OVERSOLD` in `app.log` so that staff can restock or refund it.
-
-## Checkout, delivery and order emails
-
-BookWise sells printed books delivered within Saudi Arabia. Delivery is free, and every price includes 15% VAT.
-
-**Delivery addresses.** Customers keep up to five addresses on the **Delivery Addresses** page of their profile, one of them the default. Each is a Saudi National Address:
-
-- the recipient's full name and a Saudi mobile number (typed as `05XXXXXXXX`, `+966 5X XXX XXXX`, `+966 05X XXX XXXX` and so on, stored as `+9665XXXXXXXX`);
-- the city, district and street;
-- the building number (4 digits), the postal code (5 digits) and, optionally, the additional number (4 digits) and the short address code (4 letters and 4 digits, such as `RRRD2929`).
-
-Digits may also be typed as Arabic-Indic digits (`٠١٢٣`). Every field is checked on the server, and a problem is explained next to its field in the visitor's language.
-
-**Checkout.** The cart's **Proceed to Checkout** button opens `checkout.php`:
-
-1. GET shows the books, the total with the VAT it contains, free delivery, and the delivery address: the saved addresses or **Deliver to a new address**, typed in on the same page. A customer without saved addresses only sees the address form.
-   The address chosen at the customer's last checkout in this session is selected again (for example after a payment that could not start because a book sold out, or that was canceled); otherwise the default address is.
-2. POST saves a new address in the customer's address book (their first address becomes the default), then starts the payment as before with `start_checkout()`: the stock is checked, the minimum total applies, one checkout runs at a time per customer, and earlier pending orders are settled first.
-   An address that is already saved (the same in every field once normalized) is used again rather than saved a second time, so retyping it or sending the form twice never fills the address book with copies.
-   The chosen address must be one of the customer's own. It is read under the checkout lock and copied into the order (`order_addresses`), so editing or deleting the saved address later never changes an order that was already placed.
-3. The customer pays on Stripe's page or on the payment simulator's page, as described above.
-
-**Delivery.** The delivery of an order is tracked separately from its payment status (`orders.fulfilment_status`):
-
-- When the payment is confirmed, the order is **processing**.
-- On `admin_order.php`, staff mark it **shipped**, optionally with the carrier (the field suggests carriers common in Saudi Arabia, in the admin's language; the name is stored as typed) and the tracking number, and later **delivered**. Each step happens once and only moves forward; a second click from a page that is out of date changes nothing.
-- The orders page filters paid orders by their delivery stage.
-- A refund works at any stage. The order then shows as **refunded**, and its delivery is no longer updated.
-  Its copies go back into stock only if it had not been shipped: shipped books have left the store, and staff add any that are returned on the book's edit page.
-- A second click on **Mark as delivered** from a page that is out of date says why nothing changed: the order was already delivered, was refunded, or has not been shipped yet.
-- Orders paid before delivery addresses existed (before migration `006_order_fulfilment`) have no delivery stage.
-
-**The order page.** `order.php?id=N` is open only to the customer who placed the order; anyone else gets 404. It shows the order's progress, the delivery address and a receipt: the books, the total before VAT, the VAT (total × 15/115), free delivery and the total.
-Printing the page (also with its **Print receipt** button) prints only the receipt and the delivery address. The receipt is not a tax invoice, because the store has no VAT registration number.
-**Buy again** (for paid and refunded orders) puts the order's books back into the cart, as many copies as were ordered within the stock, and names the books that are no longer available.
-It is not offered for unpaid orders, whose books are still in the cart: only a confirmed payment takes them out.
-The profile's order list, the payment confirmation page and every order email link to the order page.
-
-**Order emails.** The customer is emailed in the account's language:
-
-| Email | Sent when |
-| --- | --- |
-| Order confirmation: the books, the total with its VAT, the delivery address | the payment is confirmed (by the return page, a webhook, or the next checkout) |
-| Shipped, with the carrier and tracking number | staff mark the order shipped |
-| Delivered | staff mark the order delivered |
-| Refunded, with the amount | the order is refunded from its admin page or in the Stripe Dashboard |
-
-Each email is sent by the request that made the change, once that change is committed, and each change happens exactly once: the payment is recorded under a lock on the order row, and every delivery step only moves on from the step before.
-The confirmation is therefore sent once even when the return page and a webhook confirm the same payment at the same moment.
-As in the account emails, the customer's name and the delivery address appear only once the account's email address is confirmed. With the demo inbox (`MAIL_DRIVER=database`), order emails appear in the customer's inbox like every other email.
-While the payment simulator takes the payments, the refund email and the order page say that the payment was simulated and no money moved, instead of promising the money back on the customer's statement.
-An email that cannot be sent at that moment is logged (`Order email could not be sent` in `app.log`) and not tried again; see [Known limitations](#known-limitations).
-
-## Email
-
-The app sends, in the customer's language: the email-verification (or welcome) email, a notice when someone tries to sign up with an existing address, the password-reset email, a password-changed notice, an account-deleted confirmation and the [order emails](#checkout-delivery-and-order-emails) (confirmation, shipped, delivered, refunded).
-Every email has a plain-text and an HTML part. `MAIL_DRIVER` decides where it goes:
-
-- **`log`** (default) writes every email, including password-reset and verification links, to `storage/logs/mail.log`. Nothing is sent. For local development only.
-- **`smtp`** sends through any SMTP server, using [PHPMailer](https://github.com/PHPMailer/PHPMailer). Most email providers offer SMTP; copy the server, port and sign-in from their settings into `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME` and `SMTP_PASSWORD`, and set `MAIL_FROM_ADDRESS` to an address the provider lets you send from.
-  - `SMTP_ENCRYPTION=tls` (the default) requires STARTTLS: if the server does not offer it, the email fails before the password is sent.
-    `ssl` uses TLS from the start (usually port 465). `none` is only for a test server on your own machine, such as [Mailpit](https://mailpit.axllent.org/).
-    With `none`, BookWise signs in only to `localhost` or a loopback address; for any other `SMTP_HOST` with an `SMTP_USERNAME`, the email fails and an error is logged, because the password would cross the network unencrypted.
-  - Port 587 is the standard. Some hosts block it; many providers also accept port 2525.
-  - Messages are encoded as UTF-8, so Arabic subjects, names and text arrive intact.
-  - A server that does not answer makes the email fail after `SMTP_TIMEOUT` seconds (10 by default), so a page never hangs on it.
-    Failures are logged in `app.log` as `Email delivery failed` (never with the password); visitors see the usual answer.
-- **`database`** is the **demo inbox**, for a public demo without an email provider. It only works with `APP_DEMO=true`; otherwise every email fails and an error is logged.
-  Emails are stored in the `demo_mail` table instead of being sent, and shown on `inbox.php` (the **Inbox** link in the header).
-  After 48 hours they are hidden, and deleted the next time an email is stored or the inbox is opened.
-  - A browser sees only the emails of the account it is logged in to, and of the accounts it created by signing up in the same browser session.
-    Signing up with an address that already has an account, or asking for a password reset or a new confirmation link for it, never makes that account's emails readable.
-    Nobody can therefore read another person's confirmation or reset links. An administrator sees only the emails sent to their own address.
-  - A successful sign-up gives the browser a new session ID and CSRF token, as logging in does, so a session ID planted in the browser beforehand cannot read the new account's emails.
-    Access to an account created this way ends with the session (see [Known limitations](#known-limitations)).
-  - Deleting an account deletes its emails. Emails to an address without an account, such as the account-deleted notice, are not stored, because nobody could read them.
-    Emails left over for an address without an account are also removed before the address is registered again.
-  - Emails are shown as plain text, in their own language and text direction. Only links to the store (`APP_URL`) are clickable; the HTML part is stored but never displayed.
-  - The demo banner and the notes on the password reset and confirmation pages point to the inbox.
-- **`null`** discards every email. Use it with `REQUIRE_EMAIL_VERIFICATION=false`, or new customers can never confirm their address.
-
-The one-click demo customers have made-up addresses at the reserved `demo.invalid` domain: their emails appear in the demo inbox (or `mail.log`), and are never sent over SMTP.
-Nobody can sign up with, or ask for links to, an address at that domain.
-
-## Database migrations
-
-`database/schema.sql` always describes the latest schema. Changes for existing databases live in `database/migrations/` and are recorded in the `schema_migrations` table:
-
-```bash
-php bin/migrate.php        # apply pending migrations (safe to run repeatedly)
-php bin/install.php        # the same on an existing database; creates the schema on an empty one
-```
-
-Back up the database first (`mysqldump`), and run the command with an account that may alter tables.
-Databases created before migrations existed are recognised automatically and treated as being at version `001_initial`.
-
-## Upgrading a database from the original project
-
-The original project used a database named `signup` with MD5 passwords and fewer constraints.
-To keep its accounts, books, carts, favorites, reviews and sales:
-
-```bash
-mysqldump -u root -p signup > ../signup-backup.sql   # back up first, outside the project folder
-# point DB_NAME at that database in .env, then:
-php bin/upgrade-legacy-db.php --i-have-a-backup
-```
-
-Keep database dumps out of the repository; `*.sql` files other than `database/schema.sql` and `database/seed.sql` are git-ignored as a safety net.
-
-The script is idempotent: each step is skipped if it has already been applied. It:
-
-- Widens the password columns and drops the stored "confirm password" column.
-- Adds the `session_version` columns used to sign out other sessions after a password change.
-- Adds unique keys, merging duplicate cart lines, favorites, reviews and review reactions first.
-- Clamps legacy ratings to the range 1–5.
-- Deletes old plaintext reset tokens.
-- Clears free-text payment-method entries, which could contain card numbers.
-- Creates the `orders`, `order_items` and `login_attempts` tables.
-- Recreates all foreign keys with the documented `ON DELETE` rules.
-
-Existing MD5 passwords keep working and are re-hashed with bcrypt the next time each user logs in.
-
-## Testing and quality checks
-
-```bash
-composer lint          # php -l on every PHP file
-composer analyse       # PHPStan level 8 (src/, bin/, public/)
-composer test:unit     # unit tests, no database needed
-composer test          # all suites
-```
-
-The **integration** and **http** suites need a MySQL/MariaDB database whose name ends in `_test`.
-They drop and recreate every table in it, and refuse to run against any other database name.
-Defaults are in `phpunit.xml.dist`; override them with environment variables:
-
-```bash
-mysql -u root -p -e "CREATE DATABASE bookwise_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASS=secret composer test
-```
-
-If no database is reachable, the database-backed tests are skipped and say so.
-Set `BOOKWISE_REQUIRE_DB=1` to make that a failure instead; CI does this.
-
-The suites are:
-
-- **unit:** pure functions, plus the image tools (WebP copies, `bin/optimize-images.php`) on scratch files.
-- **integration:** domain code against a real database, including the demo's showcase (every rule of the store it must keep) and its daily reset.
-- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, guest browsing, cart and stock, the checkout page and delivery addresses, checkout (with Stripe and with every ending of the payment simulator), the order page, deliveries and order emails, refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, read-only administrators (every admin form is posted as a viewer, and nothing may change; no checkout session id is shown to them), the one-click demo accounts, the demo inbox, the demo's showcase on the home, book and admin pages, and the Arabic interface.
-  Every page check also loads the page's CSS, scripts and images, including each WebP copy in a `srcset`, and checks that all of the page is inside landmarks that can be told apart.
-- **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes, the demo's scheduled tasks and the links between the guides) and of the Apache cache rules. The image itself is built and smoke-tested by the CI's Docker job.
-
-Stripe is never contacted by the tests. Most of them talk to `tests/Support/stripe_mock_router.php`, a thin HTTP wrapper
-around the payment simulator that the suites start automatically, so they can record, fail and rewrite Stripe requests.
-The payment simulator's own tests run it in-process, as a demo does. You can also run the wrapper by hand
-(`php -S 127.0.0.1:12111 tests/Support/stripe_mock_router.php`, then `PAYMENT_SIMULATOR=false`, `STRIPE_SECRET_KEY=sk_test_anything`
-and `STRIPE_API_BASE=http://127.0.0.1:12111` in `.env`), but `PAYMENT_SIMULATOR=true` is simpler for clicking through checkout.
-
-No email leaves the machine either: the SMTP tests talk to a small local server, `tests/Support/fake_smtp_server.php`, which only records the conversation.
-
-GitHub Actions (`.github/workflows/ci.yml`) runs `composer validate`, `composer audit`, lint, PHPStan and all test suites.
-It runs on PHP 8.3, 8.4 and 8.5 against a MySQL 8.4 service, and once more on PHP 8.4 against MariaDB 11.4 (MySQL 8.0 reached its end of life in April 2026).
-PHP 8.3 is the oldest version BookWise supports: PHP 8.1 is past its end of life, and PHP 8.2 receives security fixes only until December 2026.
-A separate job builds the Docker image and smoke-tests the running container.
-The workflow's actions are pinned to commit SHAs. Dependabot (`.github/dependabot.yml`) proposes updates every week for the Composer packages, the actions, the Dockerfile's base images and `docker-compose.yml`: minor and patch updates of each come as one grouped pull request, major updates one by one.
-It does not propose PHP 8.5 for the image or MySQL versions after the 8.4 LTS line: those moves are made by hand (the file's comments say why), and a deploy test checks that every action stays pinned.
-
-### Browser tests
-
-The `e2e/` folder holds real-browser tests (Playwright and Chromium, with axe-core for accessibility) of the demo store: guest browsing, the language switch and the right-to-left layout, the one-click demo accounts, checkout with every ending of the payment simulator, the demo inbox, the read-only administrator, the profile with the keyboard alone, and axe-core on the main pages in English and Arabic.
-They need Node.js 20 or newer:
-
-```bash
-npm ci && npx playwright install chromium
-DB_PORT=3306 DB_USER=root DB_PASS=secret npx playwright test   # starts a local demo store on a scratch database (bookwise_e2e_test)
-BASE_URL=http://localhost:8080 npx playwright test             # or tests the Docker store
-```
-
-The CI's **Browser tests** job runs them against the Docker Compose store and keeps the HTML report when a test fails.
-[docs/TESTING.md](docs/TESTING.md) explains the setup, the accessibility checks and `npm run screenshots`, which takes the [screenshots](#screenshots) of this README.
-
-### Images and browser caching
-
-The catalog covers in `public/imges` are 380×605 PNG files of about 330 KB each. `bin/optimize-images.php` writes WebP copies next to every PNG, JPEG and GIF there:
-a full-size `.webp` (about a tenth of the size) and, for images wider than 190 pixels, a `-w190.webp` thumbnail for book cards, the cart and admin tables.
-Pages show covers with `cover_picture()`: a `<picture>` whose `<source>` offers the WebP copies (`srcset` with their widths, and the `sizes` the page displays them at), with the original as the `<img>` for browsers without WebP.
-`fetch_books.php` returns the same sources (`cover_image`, `cover_webp_srcset`), so the Explore page's script builds the same markup.
-Uploaded covers get their copies when they are uploaded (the larger copy at most 780 pixels wide, which also bounds the memory GD needs; a WebP upload is its own full-size copy, and one wider than that is offered as a `-w780.webp` copy), and the copies are deleted with the cover when it is replaced or its book is deleted.
-The copies are never a book's cover: the admin form refuses their paths and asks for the original image.
-
-```bash
-php bin/optimize-images.php                  # after adding or changing images in public/imges; commit the .webp files
-php bin/optimize-images.php uploads/covers   # once, for covers uploaded before WebP copies existed
-php bin/optimize-images.php --force          # rewrite every copy, e.g. after changing WEBP_QUALITY
-```
-
-The script needs `gd` with WebP support and skips copies that are at least as new as their image, so it can be run again at any time.
-A unit test fails when an image in `public/imges` has no copy, or a copy that no longer shows it: git does not keep file times, so the test compares both pictures reduced to 8×8 cells.
-
-Pages link their CSS, scripts and images with `asset()`, which adds `?v=<file modification time>`, so a changed file gets a new URL.
-`public/.htaccess` (and `docker/apache/site.conf` in the Docker image) therefore let browsers keep versioned URLs for a year (`Cache-Control: public, max-age=31536000, immutable`).
-Uploads are kept for an hour, and other static files, such as images referenced from CSS, for a day. HTML pages are never cached: PHP sends `Cache-Control: no-store`.
-These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every static file for an hour. Servers that ignore `.htaccess` (nginx, `php -S`) need the same headers in their own configuration.
-
-## Security notes
-
-- **SQL injection:** all queries use PDO prepared statements with native binding.
-- **XSS:** all output is escaped with `e()`. A Content-Security-Policy allows only same-origin scripts; there are no inline scripts or event-handler attributes.
-- **CSRF:** every state-changing request is a POST with a per-session CSRF token. The Stripe webhook is authenticated by its signature instead.
-- **Sessions:** HttpOnly, `SameSite=Lax` cookies (plus `Secure` when served over HTTPS), strict mode and ID regeneration on login.
-  Sessions expire after 2 hours of inactivity or 24 hours after sign-in, and a password change signs out every other session.
-- **Access control:** customer and admin checks are enforced on the server for every page and action.
-  Cart lines, delivery addresses, orders, order pages and payment returns are always scoped to the signed-in user; a checkout accepts only one of the customer's own addresses.
-  Guests may only read the catalog and book pages. Every admin request that changes something (book forms, cover uploads, deletions, refunds) requires an owner (`require_admin_write()`): read-only administrators get 403.
-- **Demo accounts:** only in demo mode, through POST forms with a CSRF token. Demo customers get random, unguessable addresses and passwords that nobody knows; they cannot set a password (no password change, no reset link), and their creation is limited per IPv4 address or IPv6 /64 network, for all visitors together, and in number.
-  The shared demo administrator is always a viewer, and sees customers' names, email addresses and payment references only shortened.
-  In particular it never sees a checkout session id, which would let anyone finish that customer's payment on the simulator's page (`pay.php` needs no sign-in, like Stripe's).
-- **Passwords:** bcrypt via `password_hash()`, with a transparent upgrade of legacy MD5 hashes.
-  Sign-in performs one hash verification per attempt, so response times don't reveal which accounts exist.
-  Login is throttled after 5 failures for one email from one IP address, 20 failures from one IP, or 100 failures for one email from anywhere, within 15 minutes.
-  Attackers elsewhere therefore cannot lock the real owner out.
-  `bin/create-admin.php` clears an administrator's lockout.
-- **Password-reset and email-verification tokens:** 256-bit random, stored only as SHA-256 hashes, single use, expiring after 60 minutes (reset) or 24 hours (verification).
-  Opening a link only shows a form; the token is used when the form is submitted (with the new password, or the account's password for a confirmation).
-  Reset requests, sign-ups, verification resends and sign-in attempts on unconfirmed accounts do not reveal whether an account exists.
-  Emails greet the customer by name only once the address is confirmed, because the name of an unconfirmed account may have been typed by someone else.
-- **Account changes:** changing the password or deleting the account requires the current password, and both sign out every other session.
-- **Uploads:**
-  - The type is detected from the file contents, and only images up to 2 MB (avatars) or 5 MB (covers) and 4000×4000 pixels are accepted.
-  - Files get random names and are re-encoded with GD, so only decoded pixels are stored.
-  - `public/uploads/.htaccess` prevents script execution on Apache.
-- **Input encoding:** text that is not valid UTF-8 is rejected as empty input rather than reaching the database.
-- **Demo inbox:** a browser reads only the emails of the account it is logged in to and of the accounts it created by signing up; typing an address into a form never shows its emails (see [Email](#email)).
-  Signing up renews the session ID, as logging in does. Messages are escaped, link only to the store, and are sent with `Cache-Control: no-store`.
-- **Secrets:** read only from the environment. `.env` is git-ignored, and `.env.example` contains placeholders only.
-- **Headers:** `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` and HSTS when served over HTTPS.
-
-> **Credential rotation:** the original project's source files contained a hard-coded Stripe test secret key and a SendGrid API key.
-> Neither key is in this repository or its history, and the owner can no longer revoke them.
-> Stripe and SendGrid both receive GitHub's secret-scanning reports and usually disable keys that leak that way.
-> Keep the original project files private. BookWise itself uses neither key: Stripe keys come from the environment, and email goes through SMTP.
-
-## Deployment checklist
-
-- Serve **only** `public/` as the document root, over HTTPS.
-- Set `APP_ENV=production` and `APP_DEBUG=false`, and set `APP_URL` to the public HTTPS URL.
-- Use a dedicated database user with only `SELECT, INSERT, UPDATE, DELETE` on the application database.
-  Run `bin/install.php` / `bin/migrate.php` with an account that may also `CREATE, ALTER, INDEX, REFERENCES, DROP`.
-  (The Docker image runs `bin/install.php` at every start, so there the configured user needs those rights too.)
-- Make `storage/logs/`, `public/uploads/avatars/` and `public/uploads/covers/` writable by the web server, and keep them out of version control.
-  With the payment simulator on, `storage/` (or the folder of `PAYMENT_SIMULATOR_STORE`) must be writable too.
-- For a public demo on PHP hosting, `php bin/setup.php` does most of this list: it checks the folders, writes `.env` with safe demo values (readable by its owner only) and installs the database.
-- Set `REQUIRE_EMAIL_VERIFICATION=true` only together with a working mail driver, or new customers cannot sign in.
-- On **nginx** or any server that ignores `.htaccess`, deny PHP execution under `/uploads/` in the server config, for example:
-  `location ^~ /uploads/ { location ~ \.php$ { deny all; } }`
-- Configure the Stripe webhook endpoint and secret. Use live keys only in production.
-- Configure email with `MAIL_DRIVER=smtp` and the `SMTP_*` settings of your provider, and set `MAIL_FROM_ADDRESS` to an address it lets you send from.
-- Rotate logs. `storage/logs/mail.log` contains reset links when `MAIL_DRIVER=log`, so never use that driver in production.
-
-## Known limitations
-
-- **Stock is not reserved during checkout:** it is taken when the payment is confirmed, so two simultaneous payments for the last copy can oversell it (logged as `OVERSOLD`).
-- **Single currency:** prices are stored without a currency and charged in `STRIPE_CURRENCY` (SAR by default).
-- **Delivery only within Saudi Arabia, always free:** there is no shipping-cost calculation, no delivery zones or dates, and an order is always one parcel.
-- **Addresses are checked for their format only:** they are not looked up in Saudi Post's National Address register. The carrier and tracking number are plain text: there is no link to the carrier's tracking page and no automatic status update; staff mark orders shipped and delivered by hand.
-- **Order emails are not retried:** each is sent once, by the request that made the change. If the mail server fails at that moment, the failure is logged and that email is never sent; the order page always shows the current state.
-- **Receipts, not tax invoices:** prices include 15% VAT, but the store has no VAT registration number, so it issues receipts rather than tax invoices.
-- **Orders cannot be changed or canceled by customers** once they are paid; staff refund them instead.
-- **Limited account self-service:** customers cannot change their email address or export their data. Administrators cannot manage customers from the UI.
-- **Refunds are full refunds only.** Partial refunds and disputes are handled in the Stripe Dashboard and are not reflected in orders.
-  A payment that does not match its order is marked `failed` and logged as `MANUAL REVIEW REQUIRED` in `app.log`.
-- **Login throttling** counts attempts per IP address. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server.
-  The Docker image takes the address from `X-Forwarded-For` on connections from private addresses; on alwaysdata this was not confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#step-9-check-the-visitors-addresses) for a check).
-- **No sign-up rate limit:** only verification and sign-up notice emails are limited, to one per account every few minutes.
-- **Demo accounts:**
-  - Demo customers are limited per visitor (10 per hour for an IPv4 address or an IPv6 /64 network), with the same caveat as login throttling behind a proxy: if every visitor shares the proxy's address, they share the limit too.
-  - Someone with many addresses can still use up the limit for all visitors (60 per hour). Nobody can then start a demo customer until the hour is over, but existing demo customers are not pushed out faster than that.
-  - At most 200 demo customers exist at once. On a busy demo the oldest are deleted to make room, so a visitor's demo account can disappear before its 24 hours are over.
-  - They are deleted by the nightly reset, or after 24 hours when `php bin/demo-cleanup.php` runs (both daily scheduled tasks, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-daily-reset-and-the-cleanup)); for the cleanup, a checkout still being confirmed delays it to the next run.
-  - Every visitor who presses **Try as an administrator** shares the same read-only account, and sees every order of the demo (with shortened customer details and payment references).
-- **The demo inbox reveals registered addresses:** after signing up, a confirmation email appears in the browser's inbox only when the address was new.
-  The sign-up page itself still gives the same answer either way. This only applies to a demo with `MAIL_DRIVER=database`, which holds no real accounts.
-- **Demo inbox access to a new account ends with the browser session:** without logging in, an account's emails can only be read in the browser session that created it.
-  Once that session ends (logging out, closing the browser or 2 hours of inactivity), a forgotten password cannot be reset from the demo.
-  An account that was never confirmed cannot be confirmed any more, and its address stays taken until the next nightly reset.
-  This follows from the rule that nobody may read another person's emails.
-- **The demo's showcase is fixed:** its customers, orders and reviews are the same every day (only their dates move), and the nightly reset deletes everything visitors and administrators did, books added by administrators included. Its scheduled time depends on the time zone of alwaysdata's scheduler, which has to be checked (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-daily-reset-and-the-cleanup)).
-- **The free live demo** on alwaysdata has 1 GB of disk space, shows its emails in the demo inbox instead of sending them, and its first request after 30 idle minutes is slower. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#limits-of-the-free-demo).
-- **The original database could not be fully recovered:** the original repository shipped raw MariaDB data files instead of an SQL export.
-  The table definitions and the 55-book catalog were recovered from them and form `schema.sql`/`seed.sql`.
-  The original foreign-key definitions could not be recovered (they lived in the missing InnoDB system tablespace).
-  They were re-specified from how the application uses the data.
+- **Payments are simulated.** Checkout opens the store's own payment page, which asks for no card details and offers four endings: **Pay**, **Decline**, **Slow payment** and **Cancel**. No money moves, and no Stripe account is needed.
+- **Emails go to the demo inbox** instead of being sent: the **Inbox** link in the header shows the emails of the account signed in in that browser, such as the order confirmation and the shipping notice.
+- **The store is not empty.** A showcase of fictional customers, orders and reviews fills the best sellers, the ratings and the admin pages. On a public demo, a nightly reset puts the store back to that state.
 
 ## Screenshots
 
@@ -729,8 +52,105 @@ Taken with `npm run screenshots` ([docs/TESTING.md](docs/TESTING.md#readme-scree
 | <a href="docs/screenshots/payment-simulator.jpg"><img src="docs/screenshots/payment-simulator.jpg" alt="The payment simulator's page" width="180"></a> | <a href="docs/screenshots/inbox.jpg"><img src="docs/screenshots/inbox.jpg" alt="The demo inbox" width="180"></a> | <a href="docs/screenshots/admin-dashboard.jpg"><img src="docs/screenshots/admin-dashboard.jpg" alt="The admin dashboard" width="180"></a> | <a href="docs/screenshots/admin-orders.jpg"><img src="docs/screenshots/admin-orders.jpg" alt="The admin orders page" width="180"></a> |
 | **Payment simulator**: four endings, no card details | **Demo inbox**: the store's emails | **Admin dashboard**: totals, catalog, stock | **Admin orders**: filters, delivery stages |
 
-## License
+## Features
+
+**Customers**
+
+- Browse without an account: the home page with recommended books and best sellers, the Explore page (search by title or author, genre tabs, 24 books per page, with or without JavaScript) and book pages with stock, ratings and reviews.
+- Sign up with email verification, reset a forgotten password by email, change the password and delete the account.
+- A cart with totals computed on the server, and a checkout page with the delivery address (saved or typed in there and then). Prices include 15% VAT; delivery within Saudi Arabia is free.
+- Payment on Stripe's page or the payment simulator's page; an order is confirmed only after the store has verified the payment.
+- An order page with the order's progress (paid, processing, shipped with carrier and tracking number, delivered, or refunded), the delivery address, a receipt that prints on its own and **Buy again**.
+- Order emails in the account's language: confirmation, shipped, delivered and refunded.
+- Favorites, and reviews (1 to 5 stars) of the books the customer bought, which other readers can like or dislike.
+- A profile with a picture, the favorite genre, up to five delivery addresses, the order history and the interface language.
+
+**Administrators**
+
+- Add, edit and delete books, with stock levels and cover uploads.
+- A dashboard with catalog and sales totals, stock and recent orders; an orders page with filters by status and delivery stage and a search.
+- Ship an order (with an optional carrier and tracking number), mark it delivered and refund it in full, at any stage of its delivery. The customer is emailed at each step.
+- Two roles: **owners** change everything; **viewers** open every admin page but change nothing, and see customers' details and payment references only shortened. Administrators are created on the command line; there is no public admin sign-up.
+
+**Demo mode** (`APP_DEMO=true`)
+
+- A banner, the payment simulator and, with `MAIL_DRIVER=database`, the demo inbox.
+- The one-click demo accounts: demo customers (limited per visitor and in number, deleted after 24 hours) and one shared read-only administrator.
+- The showcase of fictional customers, orders and reviews, and a nightly reset (`php bin/demo-reset.php --yes`) that deletes everything visitors did and puts the sample catalog and the showcase back.
+- A catalog that visitors cannot sell out: simulated purchases never take a book below 3 copies.
+
+## Engineering highlights
+
+- **Security model.** PDO prepared statements, output escaping and a Content-Security-Policy without inline scripts; CSRF tokens on every state-changing POST; access checks on the server for every page and action; bcrypt passwords with throttled sign-in; reset and confirmation tokens stored only as hashes; uploads re-encoded with GD.
+  An order is paid only after the payment has been retrieved from Stripe (or the simulator) and matches the order; webhooks are signed and treated only as notifications. See [the security model](docs/ARCHITECTURE.md#security-model) and [SECURITY.md](SECURITY.md).
+- **Tests and CI.** Four PHPUnit suites: unit tests, integration tests against a real database, end-to-end HTTP tests that drive the real pages through `php -S`, and checks of the deployment files and the documentation. Browser tests in Chromium with Playwright cover the main journeys.
+  GitHub Actions runs them on PHP 8.3, 8.4 and 8.5 with MySQL 8.4 and MariaDB 11.4, with PHPStan level 8 and `composer audit`, builds and smoke-tests the Docker image, and runs the browser tests against it. Every action is pinned to a commit, and Dependabot proposes updates. See [TESTING.md](docs/TESTING.md).
+- **English and Arabic.** Every page, message, email and error page in both languages, with a mirrored right-to-left layout from logical CSS properties, Arabic plural forms, dates and amounts. Unit tests check that both languages have the same keys and placeholders, and that every key the code uses exists.
+- **Accessibility checks.** axe-core runs on the main pages in both languages in the browser tests and fails on serious or critical problems; the profile is tested with the keyboard alone; and the HTTP tests check that every page keeps all of its content inside landmarks that can be told apart.
+- **Migrations.** `database/schema.sql` installs the latest schema, and numbered migrations (`database/migrations/`) bring existing databases up to date; each checks the schema before it changes it, so it can run again. Tests compare a migrated database with a fresh install.
+- **Payment simulator.** The Stripe library's HTTP client is replaced by one that answers inside the same PHP request (`src/payment_simulator.php`), so checkout, payment verification, expiry and refunds run the same code as with Stripe, without a network call, card details or a second server. A real store refuses it.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    browser["Browser"] --> pages["Apache or php -S<br/>pages in public/"]
+    pages --> modules["Modules in src/<br/>auth, books, cart, addresses,<br/>orders, fulfilment, demo"]
+    modules --> db[("MySQL or MariaDB")]
+    modules --> stripephp["stripe-php"]
+    stripephp -->|"simulator on (demo)"| sim["Payment simulator<br/>in the same request"]
+    stripephp -->|"simulator off"| stripe["Stripe API"]
+    modules --> mail{"MAIL_DRIVER"}
+    mail -->|smtp| smtp["SMTP server (PHPMailer)"]
+    mail -->|database| inbox["Demo inbox (inbox.php)"]
+    mail -->|"log or null"| maillog["mail.log, or discarded"]
+```
+
+Each page in `public/` loads `src/bootstrap.php` (settings, error handling, session, security headers, language), checks who may see it and calls functions of the modules in `src/`. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes the request lifecycle, the modules, checkout and payments step by step, deliveries, emails, languages, migrations and demo mode.
+
+## Quick start
+
+**With Docker** (Docker Desktop, or Docker Engine with the Compose plugin):
+
+```bash
+git clone https://github.com/ByAhmd/Online-BookStore-Project.git bookwise
+cd bookwise
+docker compose up --build
+```
+
+Open <http://localhost:8080>. The store runs in demo mode with MySQL 8.4, the sample catalog and the showcase. The local owner administrator is `admin@bookwise.test` with the password `local-admin-password`, which is for local use only.
+Every release also publishes the image to GitHub Container Registry ([DEPLOYMENT.md](docs/DEPLOYMENT.md#use-a-published-image)).
+
+**With PHP 8.3 or newer** (with `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo` and preferably `gd`), [Composer](https://getcomposer.org/) and MySQL 8.0.16+ or MariaDB 10.4+:
+
+```bash
+composer install
+cp .env.example .env                 # set DB_*, APP_URL=http://localhost:8000 and PAYMENT_SIMULATOR=true
+php bin/install.php --seed           # creates the tables and the sample catalog; needs a user that may create tables
+php bin/create-admin.php admin@example.com "Store Admin"
+php -S localhost:8000 -t public
+```
+
+Open <http://localhost:8000>. With `MAIL_DRIVER=log`, the default, the emails (and their confirmation links) are written to `storage/logs/mail.log`.
+XAMPP 8.2 bundles PHP 8.2, which cannot run BookWise; XAMPP can still provide the database. [DEPLOYMENT.md](docs/DEPLOYMENT.md#local-setup-without-docker) explains every step, Apache and XAMPP, and the public demo on alwaysdata.
+
+## Documentation
+
+| Guide | Contents |
+| --- | --- |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every setting (`.env`), payments with the simulator or Stripe, email |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Project structure, request lifecycle, modules, checkout and payments, delivery, emails, languages, migrations, demo mode, security model, known limitations |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Local setup, Docker, the free public demo on alwaysdata, Tailscale Funnel, a real store, the deployment checklist |
+| [docs/TESTING.md](docs/TESTING.md) | Quality checks, the PHPUnit suites, the browser tests, CI and the screenshots |
+| [docs/AUDIT.md](docs/AUDIT.md) | The audit of the original project, the changes and how they were checked |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, conventions, commits and releases |
+| [SECURITY.md](SECURITY.md) | Reporting a vulnerability |
+| [CHANGELOG.md](CHANGELOG.md) | The changes of each version |
+
+## License and credits
 
 The source code is released under the [MIT License](LICENSE).
+
+BookWise started as a team project for the *Fundamentals of Web Programming* course at King Faisal University (see the in-app **About** page).
 
 The book cover artwork in `public/imges/` comes from third parties. It is included only to illustrate this student demo project and is **not** covered by the MIT License; its copyright remains with the respective owners.

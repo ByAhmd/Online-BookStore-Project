@@ -1,0 +1,74 @@
+# Publishes a release when a version tag such as v1.2.3 is pushed
+# (CONTRIBUTING.md, "Releasing a version"):
+#   - the Docker image goes to GitHub Container Registry as
+#     ghcr.io/byahmd/online-bookstore-project, tagged 1.2.3, 1.2, 1 and latest,
+#     with provenance and SBOM attestations;
+#   - the GitHub release of the tag gets the version's section of CHANGELOG.md
+#     as its notes (bin/release-notes.php).
+# A tag whose version has no section in CHANGELOG.md publishes nothing.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write # create the GitHub release
+  packages: write # push the image to ghcr.io
+
+jobs:
+  release:
+    name: Image and GitHub release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # Actions are pinned to the commit of a release (named in the comment);
+      # Dependabot proposes updates (.github/dependabot.yml).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: none
+
+      # First, so that a tag without notes stops before anything is published.
+      - name: Release notes from CHANGELOG.md
+        run: php bin/release-notes.php "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/byahmd/online-bookstore-project
+          # 1.2.3, 1.2 and 1; "latest" is added for these by default.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      # A BuildKit builder that can attach the provenance and SBOM attestations.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          provenance: mode=max
+          sbom: true
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "BookWise ${GITHUB_REF_NAME#v}" --notes-file "$RUNNER_TEMP/release-notes.md"

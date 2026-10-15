@@ -63,7 +63,9 @@ final class DeploymentFilesTest extends TestCase
         self::assertStringContainsString("version_compare(PHP_VERSION, '$floor.0', '<')", $setup);
         self::assertStringContainsString("BookWise needs PHP $floor or newer", $setup);
         self::assertStringContainsString("`BookWise needs PHP $floor or newer`", self::read('docs/DEPLOYMENT.md'), 'The troubleshooting table quotes the message');
-        self::assertStringContainsString("| Language | PHP ≥ $floor ", self::read('README.md'));
+        self::assertStringContainsString("| Language | PHP ≥ $floor ", self::read('docs/ARCHITECTURE.md'));
+        self::assertStringContainsString("**With PHP $floor or newer**", self::read('README.md'), 'The quick start');
+        self::assertStringContainsString("- PHP $floor+ with the extensions", self::read('docs/DEPLOYMENT.md'), 'The local setup');
 
         self::assertSame(1, preg_match('/^\s+php: \[(.*)\]\R/m', self::read('.github/workflows/ci.yml'), $matrix), 'The CI test matrix lists its PHP versions');
         $versions = array_map(static fn (string $version): string => trim($version, " '"), explode(',', $matrix[1]));
@@ -214,7 +216,8 @@ final class DeploymentFilesTest extends TestCase
     public function testRenderIsGone(): void
     {
         self::assertFileDoesNotExist(dirname(__DIR__, 2) . '/render.yaml');
-        foreach (['README.md', 'docs/DEPLOYMENT.md', 'SECURITY.md', '.env.example', '.gitattributes', 'docker-compose.yml', 'Dockerfile', 'docker/entrypoint.sh', 'docker/apache/server.conf', 'docker/apache/ports.conf'] as $file) {
+        // CHANGELOG.md and docs/AUDIT.md record the move away from Render.
+        foreach (['README.md', 'docs/DEPLOYMENT.md', 'docs/CONFIGURATION.md', 'docs/ARCHITECTURE.md', 'docs/TESTING.md', 'CONTRIBUTING.md', 'SECURITY.md', '.env.example', '.gitattributes', 'docker-compose.yml', 'Dockerfile', 'docker/entrypoint.sh', 'docker/apache/server.conf', 'docker/apache/ports.conf'] as $file) {
             self::assertDoesNotMatchRegularExpression('/\bRender\b|onrender|Aiven|RENDER_/', self::read($file), "$file still refers to Render or Aiven");
         }
     }

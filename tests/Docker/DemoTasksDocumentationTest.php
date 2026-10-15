@@ -7,10 +7,10 @@ namespace BookWise\Tests\Docker;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The guides' instructions for the public demo's scheduled tasks
- * (docs/DEPLOYMENT.md, README.md): the commands they give are the ones the
- * scripts expect and bin/setup.php names, and the links between the
- * sections of both guides lead to a heading.
+ * The guide's instructions for the public demo's scheduled tasks
+ * (docs/DEPLOYMENT.md): the commands it gives are the ones the scripts
+ * expect and bin/setup.php names, and the sections that other guides link
+ * to for them exist. DocumentationTest checks every link between the guides.
  */
 final class DemoTasksDocumentationTest extends TestCase
 {
@@ -63,24 +63,16 @@ final class DemoTasksDocumentationTest extends TestCase
         return $anchors;
     }
 
-    public function testLinksBetweenTheGuidesLeadToAHeading(): void
+    public function testTheOtherGuidesLeadToTheScheduledTasks(): void
     {
-        $files = ['README.md' => ['README.md' => '', 'docs/DEPLOYMENT.md' => 'docs/DEPLOYMENT.md'], 'docs/DEPLOYMENT.md' => ['docs/DEPLOYMENT.md' => '', 'README.md' => '../README.md']];
-        $anchors = [];
-        foreach (array_keys($files) as $file) {
-            $anchors[$file] = self::anchors(self::read($file));
-        }
-        foreach ($files as $file => $targets) {
-            $text = self::read($file);
-            foreach ($targets as $target => $prefix) {
-                preg_match_all('/\]\(' . preg_quote($prefix, '/') . '#([^)\s]+)\)/u', $text, $links);
-                foreach (array_unique($links[1]) as $anchor) {
-                    self::assertArrayHasKey($anchor, $anchors[$target], "$file links to $target#$anchor, which is not a heading");
-                }
-            }
-        }
-        self::assertArrayHasKey('schedule-the-daily-reset-and-the-cleanup', $anchors['docs/DEPLOYMENT.md']);
-        self::assertArrayHasKey('the-showcase-and-the-daily-reset', $anchors['docs/DEPLOYMENT.md']);
-        self::assertArrayHasKey('the-demos-showcase-and-daily-reset', $anchors['README.md']);
+        $deployment = self::anchors(self::read('docs/DEPLOYMENT.md'));
+        self::assertArrayHasKey('schedule-the-daily-reset-and-the-cleanup', $deployment);
+        self::assertArrayHasKey('the-showcase-and-the-daily-reset', $deployment);
+
+        $architecture = self::read('docs/ARCHITECTURE.md');
+        self::assertArrayHasKey('the-showcase-and-the-daily-reset', self::anchors($architecture));
+        // Demo mode points to the task settings and to the reset's details.
+        self::assertStringContainsString('(DEPLOYMENT.md#schedule-the-daily-reset-and-the-cleanup)', $architecture);
+        self::assertStringContainsString('(DEPLOYMENT.md#the-showcase-and-the-daily-reset)', $architecture);
     }
 }

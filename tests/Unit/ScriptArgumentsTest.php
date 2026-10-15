@@ -24,4 +24,14 @@ final class ScriptArgumentsTest extends TestCase
             self::assertSame(0, $reads, basename($file) . " reads \$argv; use \$GLOBALS['argv'] instead");
         }
     }
+
+    public function testScriptsAnswer404ThroughAWebServer(): void
+    {
+        $files = glob(BASE_PATH . '/bin/*.php') ?: [];
+        self::assertNotSame([], $files);
+        foreach ($files as $file) {
+            $code = (string) file_get_contents($file);
+            self::assertMatchesRegularExpression("/if \(PHP_SAPI !== 'cli'\) \{\R\s+http_response_code\(404\);\R\s+exit;\R\}/", $code, basename($file) . ' runs only on the command line');
+        }
+    }
 }
