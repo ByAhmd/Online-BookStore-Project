@@ -29,8 +29,9 @@ if (PHP_SAPI !== 'cli') {
 require __DIR__ . '/../src/bootstrap.php';
 
 $usage = "Usage: php bin/create-admin.php <email> [\"Display Name\"] [--viewer | --owner]\n";
-$options = array_values(array_filter(array_slice($argv, 1), static fn (string $argument): bool => str_starts_with($argument, '--')));
-$arguments = array_values(array_filter(array_slice($argv, 1), static fn (string $argument): bool => !str_starts_with($argument, '--')));
+$commandLine = array_map('strval', array_slice((array) ($GLOBALS['argv'] ?? []), 1));
+$options = array_values(array_filter($commandLine, static fn (string $argument): bool => str_starts_with($argument, '--')));
+$arguments = array_values(array_filter($commandLine, static fn (string $argument): bool => !str_starts_with($argument, '--')));
 $unknown = array_diff($options, ['--viewer', '--owner']);
 if ($unknown !== []) {
     fwrite(STDERR, $usage . 'Unknown option: ' . implode(', ', $unknown) . PHP_EOL);
