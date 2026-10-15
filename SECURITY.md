@@ -2,9 +2,12 @@
 
 ## Reporting a vulnerability
 
-Please **do not open a public issue** for security problems.
+Please **do not describe security problems in public issues**.
 
-Report them privately through GitHub's **"Report a vulnerability"** button (Security → Advisories) on this repository, or contact the maintainers directly. Include:
+Report them privately through GitHub's private vulnerability reporting: the **Report a vulnerability** button under **Security** → **Advisories** on this repository.
+If the button is not there (private reporting is turned off), open an issue that only asks the maintainers for a private way to send a report, without any details of the problem, and send the report once they have answered.
+
+A report should include:
 
 - the affected page or file,
 - steps to reproduce (requests, inputs, expected vs. actual behaviour),

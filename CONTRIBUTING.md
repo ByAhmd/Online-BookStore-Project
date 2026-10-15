@@ -92,7 +92,7 @@ Match the code around your change. In particular:
 
 ## Reporting security issues
 
-Do not open a public issue for a security problem. [SECURITY.md](SECURITY.md) explains how to report it privately and what is in scope.
+Do not describe a security problem in a public issue. [SECURITY.md](SECURITY.md) explains how to report it privately and what is in scope.
 
 ## Releasing a version
 
