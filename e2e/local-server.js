@@ -12,8 +12,9 @@
 // which is emptied when the store starts and deleted when it stops (on
 // Windows, Playwright ends the store without letting it clean up, so the
 // folder stays until the next start). DB_HOST, DB_PORT, DB_USER and DB_PASS
-// are read from the environment (defaults: 127.0.0.1, 3306, root, empty);
-// PHP_BINARY names another PHP executable than "php". Stops with Ctrl+C.
+// come from the environment, or else from the project's .env file (defaults:
+// 127.0.0.1, 3306, root, empty); PHP_BINARY names another PHP executable than
+// "php". Stops with Ctrl+C.
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import { connect } from 'node:net';
@@ -54,8 +55,11 @@ const sessionDirectory = join(runDirectory, 'sessions');
 rmSync(runDirectory, { recursive: true, force: true });
 mkdirSync(sessionDirectory, { recursive: true });
 
-// Every application setting is given explicitly, so a .env file in the
-// project can only fill settings that are empty here (see src/env.php).
+// The demo's settings are given explicitly, so a .env file in the project
+// cannot change them. The database connection (DB_HOST, DB_PORT, DB_USER,
+// DB_PASS) is left to the shell: load_env() in src/env.php never fills a
+// variable the process already has, even an empty one, so a default set here
+// would hide the .env file's values, such as a password kept there.
 const environment = {
     ...process.env,
     APP_NAME: 'BookWise',
@@ -71,11 +75,7 @@ const environment = {
     MAIL_DRIVER: 'database',
     LOG_DIR: join(runDirectory, 'logs'),
     STRIPE_CURRENCY: 'sar',
-    DB_HOST: process.env.DB_HOST || '127.0.0.1',
-    DB_PORT: process.env.DB_PORT || '3306',
     DB_NAME: databaseName,
-    DB_USER: process.env.DB_USER || 'root',
-    DB_PASS: process.env.DB_PASS || '',
 };
 
 const run = (args) => {

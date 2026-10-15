@@ -65,9 +65,10 @@ Without `BASE_URL`, Playwright first starts `e2e/local-server.js` (also availabl
    | `APP_ENV` / `APP_DEMO` / `APP_URL` | `local` / `true` / `http://127.0.0.1:8181` |
    | `MAIL_DRIVER` / `REQUIRE_EMAIL_VERIFICATION` | `database` (the demo inbox) / `false` (`true` in your shell shows the confirmation emails, but the tests that sign customers up need `false`) |
    | `PAYMENT_SIMULATOR_STORE`, `LOG_DIR`, sessions | the folder `bookwise-e2e-8181` in the system's temporary folder, emptied when the store starts and deleted when it stops (on Windows, Playwright ends the store without letting it clean up, so the folder stays until the next start) |
-   | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASS` | from your shell; defaults `127.0.0.1` / `3306` / `bookwise_e2e_test` / `root` / empty |
+   | `DB_NAME` | from your shell (never from `.env`); default `bookwise_e2e_test` |
+   | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASS` | from your shell, or else from the project's `.env` file; defaults `127.0.0.1` / `3306` / `root` / empty |
 
-   `PHP_BINARY` chooses another PHP than the `php` on your `PATH`. A `.env` file in the project only fills settings that are empty here, such as `DB_PASS`.
+   A `.env` file in the project cannot change the other settings of this table. `PHP_BINARY` chooses another PHP than the `php` on your `PATH`.
 
 You can also start the store by hand, without the script (Bash, on an empty database):
 
