@@ -8,11 +8,15 @@
 //
 // It first drops every table of DB_NAME, which must end in "_test", then runs
 // "php bin/install.php --seed". Logs, sessions and the payment simulator's
-// state go to a new temporary folder. DB_HOST, DB_PORT, DB_USER and DB_PASS
+// state go to the folder bookwise-e2e-8181 in the system's temporary folder,
+// which is emptied when the store starts and deleted when it stops (on
+// Windows, Playwright ends the store without letting it clean up, so the
+// folder stays until the next start). DB_HOST, DB_PORT, DB_USER and DB_PASS
 // are read from the environment (defaults: 127.0.0.1, 3306, root, empty);
 // PHP_BINARY names another PHP executable than "php". Stops with Ctrl+C.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
+import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,9 +32,27 @@ if (!databaseName.endsWith('_test')) {
     process.exit(1);
 }
 
-const runDirectory = mkdtempSync(join(tmpdir(), 'bookwise-e2e-'));
+// A store that already runs on the port keeps its database and its files:
+// nothing is reset while it may still be using them.
+const portInUse = await new Promise((resolve) => {
+    const socket = connect({ host, port: Number(port) });
+    socket.once('connect', () => {
+        socket.destroy();
+        resolve(true);
+    });
+    socket.once('error', () => resolve(false));
+});
+if (portInUse) {
+    console.error(`Something already answers on http://${host}:${port}. Stop it first; this script would reset the database it may be using.`);
+    process.exit(1);
+}
+
+// One folder for the port, so runs that end without cleaning up (see above)
+// leave at most one folder behind.
+const runDirectory = join(tmpdir(), `bookwise-e2e-${port}`);
 const sessionDirectory = join(runDirectory, 'sessions');
-mkdirSync(sessionDirectory);
+rmSync(runDirectory, { recursive: true, force: true });
+mkdirSync(sessionDirectory, { recursive: true });
 
 // Every application setting is given explicitly, so a .env file in the
 // project can only fill settings that are empty here (see src/env.php).

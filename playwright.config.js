@@ -51,6 +51,9 @@ export default defineConfig({
             url: `${localUrl}/health.php`,
             reuseExistingServer: !ci,
             timeout: 120_000,
+            // Lets e2e/local-server.js stop PHP and delete its run folder
+            // (Linux and macOS; on Windows Playwright always ends it at once).
+            gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },
             stdout: 'ignore',
             stderr: 'pipe',
         },

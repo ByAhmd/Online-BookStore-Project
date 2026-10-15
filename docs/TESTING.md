@@ -57,14 +57,14 @@ DB_PORT=3306 DB_USER=root DB_PASS=secret npx playwright test
 
 Without `BASE_URL`, Playwright first starts `e2e/local-server.js` (also available as `npm run serve:e2e`) and stops it after the run. That script:
 
-1. drops every table of `DB_NAME` (default `bookwise_e2e_test`; it refuses any name that does not end in `_test`) and runs `php bin/install.php --seed`, so every run starts from the sample catalog and nothing else;
+1. stops if something already answers on port 8181 (it never resets the database of a store that is still running), then drops every table of `DB_NAME` (default `bookwise_e2e_test`; it refuses any name that does not end in `_test`) and runs `php bin/install.php --seed`, so every run starts from the sample catalog and nothing else;
 2. serves `public/` with PHP's built-in server, `php -S 127.0.0.1:8181 -t public`, with the settings of a demo:
 
    | Setting | Value |
    | --- | --- |
    | `APP_ENV` / `APP_DEMO` / `APP_URL` | `local` / `true` / `http://127.0.0.1:8181` |
    | `MAIL_DRIVER` / `REQUIRE_EMAIL_VERIFICATION` | `database` (the demo inbox) / `false` (`true` in your shell shows the confirmation emails, but the tests that sign customers up need `false`) |
-   | `PAYMENT_SIMULATOR_STORE`, `LOG_DIR`, sessions | a new temporary folder, deleted when the server stops |
+   | `PAYMENT_SIMULATOR_STORE`, `LOG_DIR`, sessions | the folder `bookwise-e2e-8181` in the system's temporary folder, emptied when the store starts and deleted when it stops (on Windows, Playwright ends the store without letting it clean up, so the folder stays until the next start) |
    | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASS` | from your shell; defaults `127.0.0.1` / `3306` / `bookwise_e2e_test` / `root` / empty |
 
    `PHP_BINARY` chooses another PHP than the `php` on your `PATH`. A `.env` file in the project only fills settings that are empty here, such as `DB_PASS`.
