@@ -236,6 +236,8 @@ Notes:
   The `uploads` volume keeps the `public/uploads/.htaccess` file it was created with. The virtual host enforces the same rules either way.
   The payment simulator's state lives in the container's `storage/`; it is lost when the container is recreated, which only matters for refunds (see [the payment simulator](#the-payment-simulator)).
 - **MySQL 8.4:** the database runs on MySQL 8.4 LTS. A `db-data` volume created by the earlier `mysql:8.0` image is upgraded by MySQL when 8.4 first starts it; `docker compose down -v` starts afresh instead.
+  The upgrade is one-way: MySQL 8.0 cannot open the volume afterwards, so an older checkout of BookWise no longer starts on it.
+  To keep a way back, export the database with the old checkout before you update: `docker compose exec -T db sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" bookwise' > bookwise.sql`.
 - **Windows:** `.gitattributes` keeps the scripts on LF line endings. The image also strips carriage returns from them, so a checkout made before `.gitattributes` existed still works.
 
 ## (b) Free public demo on alwaysdata
@@ -663,7 +665,7 @@ These points come from alwaysdata's, Tailscale's and MySQL's documentation as it
   alwaysdata's PHP documentation shows `memory_limit`, `post_max_size` and `upload_max_filesize` of 256M in an example `php.ini`; BookWise's own limits (2 MB for pictures, 5 MB for covers) are far lower either way.
 - **git on alwaysdata:** alwaysdata's own guides use git on their servers, but the documentation has no current version list. Check with `git --version`; without git, upload the project with SFTP instead.
 - **Scheduled tasks on alwaysdata:** the documentation says that command tasks use the default language versions of the **Environment** menu and that a run is skipped while the previous one is still running, but not which time zone the schedule uses, nor which shell or working directory a command gets (it warns that Bash-only commands do not work). The tasks above therefore change to the project folder themselves, and [the time zone](#schedule-the-daily-reset-and-the-cleanup) has to be checked with `date`.
-- **An old `db-data` volume:** MySQL's manual supports upgrading a MySQL 8.0 data directory in place to 8.4, but starting this Compose file on a volume made by `mysql:8.0` was not tried.
+- **An old `db-data` volume:** MySQL's manual supports upgrading a MySQL 8.0 data directory in place to 8.4, and going back from 8.4 to 8.0 only by a dump and reload. Starting this Compose file on a volume made by `mysql:8.0` was not tried.
 - **Environment variables on alwaysdata:** sites have an environment-variables setting (`FOO=bar` pairs), but whether PHP sites receive them was not confirmed. BookWise does not need it: `bin/setup.php` writes `.env`.
 - **Tailscale Funnel:** which forwarding headers Funnel adds is not documented. Tailscale's source code sets `X-Forwarded-For` to the visitor's address and replaces any value the visitor sent; [(c)](#check-the-visitors-addresses-through-funnel) shows how to confirm it on your own setup.
   Tailscale's documentation and its announcement of version 1.52 confirm that the current commands need Tailscale 1.52 or newer, that a foreground `tailscale funnel` ends with Ctrl+C, and that `--bg` survives reboots until `tailscale funnel reset`; they do not show the exact output of `tailscale funnel status`. Funnel on Windows was not tried.

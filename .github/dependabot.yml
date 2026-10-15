@@ -34,10 +34,11 @@ updates:
         update-types: [minor, patch]
     ignore:
       # The image runs the PHP version of the public demo (8.4, see
-      # docs/DEPLOYMENT.md). PHP 8.5 builds OPcache into PHP itself, so
-      # "docker-php-ext-install opcache" fails on php:8.5-apache: moving the
-      # image to 8.5 is a change of its own (Dockerfile, guide, tests), made by
-      # hand. CI already tests the code on PHP 8.5.
+      # docs/DEPLOYMENT.md). PHP 8.5 builds OPcache into PHP itself, so the
+      # Dockerfile's "docker-php-ext-install ... opcache" step has to change
+      # first (an 8.5 image has not been built yet): moving the image to 8.5 is
+      # a change of its own (Dockerfile, guide, tests), made by hand. CI already
+      # tests the code on PHP 8.5.
       - dependency-name: php
         versions: ['>= 8.5']
 
