@@ -138,7 +138,7 @@ final class DemoInboxTest extends HttpTestCase
         $inbox = $this->inbox($guest);
         self::assertSame('Demo inbox', $inbox->text('//h1'));
         self::assertSame('page', $inbox->first('//nav//a[@href="inbox.php"]')?->getAttribute('aria-current'));
-        self::assertStringContainsString('are deleted after 48 hours', $inbox->text());
+        self::assertStringContainsString('are deleted after 48 hours, or earlier when the demo is reset.', $inbox->text());
         self::assertStringContainsString("to the accounts you created in this browser session. Once the session ends, for example when you log out, an account's emails can only be read by logging in to it.", $inbox->text());
         self::assertSame(self::GUEST_TEXT, $inbox->text('//div[' . HtmlDocument::hasClass('inbox-guest') . ']/p[1]'));
         self::assertSame([], self::listed($inbox));
@@ -355,7 +355,7 @@ final class DemoInboxTest extends HttpTestCase
         self::assertSame(['ar', 'rtl'], [$inbox->first('/html')?->getAttribute('lang'), $inbox->first('/html')?->getAttribute('dir')]);
         self::assertSame('صندوق البريد التجريبي', $inbox->text('//h1'));
         self::assertSame('رسالتان', $inbox->text('//p[' . HtmlDocument::hasClass('inbox-summary') . ']'));
-        self::assertStringContainsString('وتُحذف بعد 48 ساعة', $inbox->text());
+        self::assertStringContainsString('وتُحذف بعد 48 ساعة، أو قبل ذلك إذا أُعيد المتجر التجريبي إلى حالته الأولى.', $inbox->text());
         $link = $inbox->first('//nav//a[@href="inbox.php"]');
         self::assertSame(['صندوق البريد', 'صندوق البريد التجريبي'], [HtmlDocument::normalize((string) $link?->textContent), $link?->getAttribute('aria-label')]);
         self::assertSame('ltr', $inbox->first('//*[' . HtmlDocument::hasClass('inbox-item-subject') . '][@lang="en"]')?->getAttribute('dir'));

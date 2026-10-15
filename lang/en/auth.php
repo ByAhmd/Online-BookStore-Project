@@ -137,8 +137,8 @@ return [
         'intro' => 'No sign-up needed. Payments are simulated, so nothing you do here costs anything.',
         'customer_button' => 'Try as a customer',
         'customer_hint' => [
-            'one' => 'A fresh account of your own, with a few favorites: shop, pay on the simulated payment page and review what you bought. It is deleted after :count hour.',
-            'other' => 'A fresh account of your own, with a few favorites: shop, pay on the simulated payment page and review what you bought. It is deleted after :count hours.',
+            'one' => 'A fresh account of your own, with a few favorites: shop, pay on the simulated payment page and review what you bought. It is deleted after :count hour, or earlier when the demo is reset.',
+            'other' => 'A fresh account of your own, with a few favorites: shop, pay on the simulated payment page and review what you bought. It is deleted after :count hours, or earlier when the demo is reset.',
         ],
         'admin_button' => 'Try as an administrator (read-only)',
         'admin_hint' => 'Look around the dashboard, the books and the orders. Every form is switched off, so nothing can be changed.',
@@ -152,8 +152,8 @@ return [
         ],
         'admin_name' => 'Demo administrator',
         'customer_welcome' => [
-            'one' => 'Welcome, :name! This demo account is yours to try the store with. It is deleted after :count hour.',
-            'other' => 'Welcome, :name! This demo account is yours to try the store with. It is deleted after :count hours.',
+            'one' => 'Welcome, :name! This demo account is yours to try the store with. It is deleted after :count hour, or earlier when the demo is reset.',
+            'other' => 'Welcome, :name! This demo account is yours to try the store with. It is deleted after :count hours, or earlier when the demo is reset.',
         ],
         'admin_welcome' => 'You are signed in as a read-only demo administrator. Look around as you like: nothing can be changed.',
         'throttled' => 'Too many demo accounts were started from your network in the last hour. Please try again later, or sign up for an account of your own.',

@@ -20,7 +20,7 @@ final class DemoLoginTest extends HttpTestCase
 {
     use AccountHelpers;
 
-    private const CUSTOMER_WELCOME = '/^Welcome, Demo reader \d{4}! This demo account is yours to try the store with\. It is deleted after 24 hours\.$/D';
+    private const CUSTOMER_WELCOME = '/^Welcome, Demo reader \d{4}! This demo account is yours to try the store with\. It is deleted after 24 hours, or earlier when the demo is reset\.$/D';
     private const ADMIN_WELCOME = 'You are signed in as a read-only demo administrator. Look around as you like: nothing can be changed.';
 
     private function enableDemo(array $settings = []): void
@@ -78,6 +78,8 @@ final class DemoLoginTest extends HttpTestCase
             self::assertNotNull($hint, "The $as button is described by its hint");
         }
         $this->assertPageText('A fresh account of your own, with a few favorites', $page);
+        // Deleted by bin/demo-cleanup.php after 24 hours, or by the demo's reset (bin/demo-reset.php) before.
+        $this->assertPageText('It is deleted after 24 hours, or earlier when the demo is reset.', $page);
         $this->assertPageText('Every form is switched off, so nothing can be changed.', $page);
 
         // The banner points guests to the buttons.
@@ -89,6 +91,7 @@ final class DemoLoginTest extends HttpTestCase
         $this->assertHtmlPage($arabic);
         $this->assertPageText('جرّب بصفتك مشرفًا (للقراءة فقط)', $arabic);
         $this->assertPageText('زائر جديد؟ جرّب المتجر بنقرة واحدة بصفتك عميلًا أو مشرفًا للقراءة فقط.', $arabic);
+        $this->assertPageText('ويُحذف الحساب بعد 24 ساعة، أو قبل ذلك إذا أُعيد المتجر التجريبي إلى حالته الأولى.', $arabic);
     }
 
     public function testTheButtonsAreFormsWithACsrfToken(): void
