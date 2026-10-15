@@ -40,7 +40,17 @@ final class CacheHeadersTest extends TestCase
         self::assertSame([self::DEFAULT, self::VERSIONED, $uploadsRule], $lines, "$file: cache rules");
     }
 
-    #[DataProvider('configurations')]
+    /**
+     * PHPUnit warns about data sets with more values than the test takes.
+     *
+     * @return array<string, array{0: string, 1: string}> file, IfModule name
+     */
+    public static function cacheBlocks(): array
+    {
+        return array_map(static fn (array $configuration): array => [$configuration[0], $configuration[1]], self::configurations());
+    }
+
+    #[DataProvider('cacheBlocks')]
     public function testOnlyStaticFilesAreCached(string $file, string $module): void
     {
         self::assertSame(1, preg_match('/<FilesMatch "([^"]+)">/', self::cacheBlock($file, $module), $match), $file);

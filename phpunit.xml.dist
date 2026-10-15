@@ -13,6 +13,12 @@
     every table in it is dropped and recreated. Values below are defaults:
     real environment variables win (force="false"). The project's .env file
     is never read by the tests.
+
+    PHPUnit 12: metadata only as attributes (PHPUnit\Framework\Attributes),
+    data providers public and static, and no data set with more values than
+    its test method takes (a PHPUnit warning, which fails the run). PHPUnit's
+    own deprecations and notices fail the run too, so the suite keeps working
+    with the next major version.
 -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
@@ -21,6 +27,10 @@
          colors="true"
          failOnWarning="true"
          failOnRisky="true"
+         failOnPhpunitDeprecation="true"
+         failOnPhpunitNotice="true"
+         displayDetailsOnPhpunitDeprecations="true"
+         displayDetailsOnPhpunitNotices="true"
          beStrictAboutOutputDuringTests="true"
          displayDetailsOnIncompleteTests="true"
          displayDetailsOnSkippedTests="true"

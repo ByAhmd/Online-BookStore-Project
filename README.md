@@ -115,7 +115,7 @@ page architecture is unchanged; there is no framework.
 | Payments | [Stripe Checkout](https://stripe.com/docs/payments/checkout) via `stripe/stripe-php` 16.x, or the built-in payment simulator |
 | Email | Any SMTP server through PHPMailer (`phpmailer/phpmailer` 7.x), a demo inbox stored in the database, or a local log file for development |
 | Frontend | Server-rendered HTML, plain CSS and vanilla JavaScript (no build step), Google Fonts (Quicksand) |
-| Tooling | Composer, PHPUnit 10, PHPStan 2 (level 8), GitHub Actions |
+| Tooling | Composer, PHPUnit 12, PHPStan 2 (level 8), GitHub Actions |
 
 Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 `gd` is recommended (it re-encodes uploaded avatars, which strips metadata and embedded payloads).
