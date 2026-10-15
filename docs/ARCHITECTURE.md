@@ -563,7 +563,7 @@ On alwaysdata it runs every night as a scheduled task, next to `php bin/demo-cle
 - **Account changes:** changing the password or deleting the account requires the current password, and both sign out every other session.
 - **Uploads:**
   - The type is detected from the file contents, and only images up to 2 MB (avatars) or 5 MB (covers) and 4000×4000 pixels are accepted.
-  - Files get random names and are re-encoded with GD, so only decoded pixels are stored.
+  - Files get random names and are re-encoded with GD, so only decoded pixels are stored. Profile pictures are scaled down to at most 512×512 pixels on the way (they are shown at most 160 pixels wide), so a stored one stays small whatever was uploaded.
   - `public/uploads/.htaccess` prevents script execution on Apache.
 - **Input encoding:** text that is not valid UTF-8 is rejected as empty input rather than reaching the database.
 - **Demo inbox:** a browser reads only the emails of the account it is logged in to and of the accounts it created by signing up; typing an address into a form never shows its emails (see [The demo inbox](#the-demo-inbox)).

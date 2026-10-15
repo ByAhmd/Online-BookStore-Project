@@ -675,6 +675,7 @@ The free alwaysdata plan cannot be used for a store that makes money.
 **alwaysdata (free plan):**
 
 - 1 GB of disk space for files, databases and mail together; 256 MB of RAM and a quarter of a CPU. A demo with a few hundred orders stays far below that.
+  Profile pictures are stored at most 512×512 pixels (at most about 1 MB each, far less for a typical photo), and the nightly reset deletes them.
 - Not for profit, and only at `https://<account>.alwaysdata.net`.
 - After 30 minutes without visits (the default) the site's PHP processes stop; the next visit starts them again and is a little slower.
 - Backups are kept for 3 days.

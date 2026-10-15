@@ -104,6 +104,73 @@ final class UploadsTest extends TestCase
         self::assertSame($path, avatar_url($path), 'A stored avatar is served from its own path');
     }
 
+    /**
+     * @return iterable<string, array{0: string, 1: int, 2: int, 3: int, 4: int}>
+     */
+    public static function largeProfilePictures(): iterable
+    {
+        yield 'landscape JPEG' => ['jpeg', 2000, 1500, AVATAR_MAX_DIMENSION, 384];
+        yield 'portrait PNG' => ['png', 600, 1200, 256, AVATAR_MAX_DIMENSION];
+        yield 'square GIF' => ['gif', 4000, 4000, AVATAR_MAX_DIMENSION, AVATAR_MAX_DIMENSION];
+        if (function_exists('imagewebp')) {
+            yield 'WebP, rounded' => ['webp', 1024, 513, AVATAR_MAX_DIMENSION, 257];
+        }
+    }
+
+    #[DataProvider('largeProfilePictures')]
+    public function testLargeProfilePicturesAreScaledDownInProportion(string $type, int $width, int $height, int $storedWidth, int $storedHeight): void
+    {
+        $path = $this->store($this->upload($this->image($type, $width, $height)));
+
+        self::assertSame([$storedWidth, $storedHeight], array_slice(self::dimensions(BASE_PATH . '/public/' . $path), 0, 2));
+    }
+
+    public function testProfilePicturesNoLargerThanTheLimitKeepTheirSize(): void
+    {
+        $path = $this->store($this->upload($this->image('png', AVATAR_MAX_DIMENSION, 300)));
+
+        self::assertSame([AVATAR_MAX_DIMENSION, 300, 'image/png'], self::dimensions(BASE_PATH . '/public/' . $path));
+    }
+
+    public function testAScaledDownProfilePictureKeepsItsTransparency(): void
+    {
+        $image = imagecreatetruecolor(1000, 1000);
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+        imagefill($image, 0, 0, (int) imagecolorallocatealpha($image, 0, 0, 0, 127));
+        imagefilledellipse($image, 500, 500, 600, 600, (int) imagecolorallocatealpha($image, 200, 30, 30, 0));
+        ob_start();
+        imagepng($image);
+        $path = $this->store($this->upload((string) ob_get_clean()));
+
+        $stored = imagecreatefrompng(BASE_PATH . '/public/' . $path);
+        self::assertNotFalse($stored);
+        self::assertSame(127, (imagecolorat($stored, 2, 2) >> 24) & 0x7F, 'The corner stays transparent');
+        self::assertSame(0, (imagecolorat($stored, 256, 256) >> 24) & 0x7F, 'The middle stays opaque');
+    }
+
+    public function testAPhotoAtTheUploadLimitTakesLittleDiskSpace(): void
+    {
+        // Noise compresses badly: a 1600×1600 photo of it is close to the 2 MB upload limit,
+        // and GD's re-encoding at full size would be larger than the upload.
+        mt_srand(20261015);
+        $image = imagecreatetruecolor(1600, 1600);
+        for ($y = 0; $y < 1600; $y += 2) {
+            for ($x = 0; $x < 1600; $x += 2) {
+                imagefilledrectangle($image, $x, $y, $x + 1, $y + 1, mt_rand(0, 0xFFFFFF));
+            }
+        }
+        ob_start();
+        imagejpeg($image, null, 75);
+        $photo = (string) ob_get_clean();
+        self::assertLessThan(AVATAR_MAX_BYTES, strlen($photo));
+        self::assertGreaterThan(AVATAR_MAX_BYTES / 2, strlen($photo));
+
+        $path = $this->store($this->upload($photo, 'photo.jpg', 'image/jpeg'));
+
+        self::assertLessThan(strlen($photo) / 4, (int) filesize(BASE_PATH . '/public/' . $path));
+    }
+
     public function testEveryUploadGetsADifferentName(): void
     {
         $png = $this->image('png');

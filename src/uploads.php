@@ -3,6 +3,13 @@
 declare(strict_types=1);
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+/**
+ * Largest width and height of a stored profile picture, in pixels. Pictures
+ * are shown at most 160 pixels wide, so this is sharp on 3x screens. Larger
+ * uploads are scaled down when they are re-encoded: GD's re-encoding of a
+ * 2 MB, 4000×4000 photo would otherwise take about 6 MB of disk.
+ */
+const AVATAR_MAX_DIMENSION = 512;
 const AVATAR_DIR = 'uploads/avatars';
 const DEFAULT_AVATAR = 'imges/profileImage2.png';
 const COVER_MAX_BYTES = 5 * 1024 * 1024;
@@ -26,14 +33,15 @@ final class UploadException extends RuntimeException
 
 /**
  * Validates an uploaded profile picture and stores it under
- * public/uploads/avatars with a random name (see store_image_upload()).
+ * public/uploads/avatars with a random name (see store_image_upload()),
+ * scaled down to at most AVATAR_MAX_DIMENSION pixels wide and high.
  *
  * @param array<string, mixed> $file An entry from $_FILES
  * @return string Path relative to public/, e.g. "uploads/avatars/ab12....png"
  */
 function store_avatar_upload(array $file): string
 {
-    return store_image_upload($file, AVATAR_DIR, AVATAR_MAX_BYTES, 'shop.upload');
+    return store_image_upload($file, AVATAR_DIR, AVATAR_MAX_BYTES, 'shop.upload', AVATAR_MAX_DIMENSION);
 }
 
 /**
@@ -78,11 +86,13 @@ function has_uploaded_file(array $files, string $field): bool
  *
  * $messages is a translation prefix with the keys too_large, failed, empty,
  * type, dimensions and invalid (e.g. "shop.upload" for profile pictures).
+ * With $maxSide, GD's re-encoding scales a larger image down to fit
+ * $maxSide×$maxSide pixels, keeping its proportions.
  *
  * @param array<string, mixed> $file An entry from $_FILES
  * @return string Path relative to public/
  */
-function store_image_upload(array $file, string $dir, int $maxBytes, string $messages): string
+function store_image_upload(array $file, string $dir, int $maxBytes, string $messages, ?int $maxSide = null): string
 {
     $error = $file['error'] ?? UPLOAD_ERR_NO_FILE;
     if ($error === UPLOAD_ERR_INI_SIZE || $error === UPLOAD_ERR_FORM_SIZE) {
@@ -131,7 +141,7 @@ function store_image_upload(array $file, string $dir, int $maxBytes, string $mes
 
     if (extension_loaded('gd')) {
         // Only re-encoded pixels are stored; anything GD cannot decode is not a usable image.
-        if (!reencode_image($tmp, $target, $mime)) {
+        if (!reencode_image($tmp, $target, $mime, $maxSide)) {
             @unlink($target);
             throw upload_failure($messages, 'invalid');
         }
@@ -157,9 +167,11 @@ function upload_failure(string $messages, string $key, array $replace = []): Upl
 }
 
 /**
- * Re-encodes an image with GD. Returns false when GD cannot handle the type.
+ * Re-encodes an image with GD, scaled down to fit $maxSide×$maxSide pixels
+ * when it is larger and $maxSide is given. Returns false when GD cannot
+ * handle the type.
  */
-function reencode_image(string $source, string $target, string $mime): bool
+function reencode_image(string $source, string $target, string $mime, ?int $maxSide = null): bool
 {
     if (!extension_loaded('gd')) {
         return false;
@@ -167,6 +179,16 @@ function reencode_image(string $source, string $target, string $mime): bool
     $image = decode_image($source, $mime);
     if ($image === false) {
         return false;
+    }
+    $width = imagesx($image);
+    $height = imagesy($image);
+    if ($maxSide !== null && max($width, $height) > $maxSide) {
+        // resize_image() needs true colour; transparency is kept.
+        imagepalettetotruecolor($image);
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+        $scale = $maxSide / max($width, $height);
+        $image = resize_image($image, max(1, (int) round($width * $scale)), max(1, (int) round($height * $scale)));
     }
     if ($mime === 'image/png' || $mime === 'image/webp') {
         imagealphablending($image, false);
