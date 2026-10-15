@@ -8,6 +8,7 @@ use BookWise\Tests\Docker\RunsProjectScripts;
 use BookWise\Tests\Support\DatabaseTestCase;
 use BookWise\Tests\Support\DemoShowcaseChecks;
 use DemoStoreException;
+use PDO;
 use PDOException;
 
 /**
@@ -157,6 +158,44 @@ final class DemoShowcaseTest extends DatabaseTestCase
         }
         self::assertSame($before, self::snapshot(), 'Everything written before the failure was rolled back');
         self::assertFalse(demo_showcase_present());
+    }
+
+    public function testOnlyThisStoresRunsShareItsLock(): void
+    {
+        self::assertSame('bookwise-demo-showcase:' . config('db.name'), demo_showcase_lock_name());
+
+        // Another session on the same server, without this database (another BookWise demo, or
+        // another account of a shared host), holds the lock of another store and the bare name.
+        $other = new PDO(
+            sprintf('mysql:host=%s;port=%d;charset=utf8mb4', config('db.host'), config('db.port')),
+            (string) config('db.user'),
+            (string) config('db.pass'),
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+        $value = static function (string $sql, string $lock) use ($other): int {
+            $statement = $other->prepare($sql);
+            $statement->execute([$lock]);
+            return (int) $statement->fetchColumn();
+        };
+        foreach ([DEMO_SHOWCASE_LOCK, DEMO_SHOWCASE_LOCK . ':another_store_test'] as $lock) {
+            self::assertSame(1, $value('SELECT GET_LOCK(?, 0)', $lock));
+        }
+
+        $started = microtime(true);
+        self::assertSame('seeded', seed_demo_showcase()['status']);
+        self::assertLessThan(10.0, microtime(true) - $started, 'Not held up by the other session (it would wait 30 seconds)');
+
+        // This store's own seeds and resets still wait for each other.
+        self::assertSame(0, with_demo_showcase_lock(static fn (): int => $value('SELECT IS_FREE_LOCK(?)', demo_showcase_lock_name())));
+        self::assertSame(1, $value('SELECT IS_FREE_LOCK(?)', demo_showcase_lock_name()), 'Released afterwards');
+        foreach ([DEMO_SHOWCASE_LOCK, DEMO_SHOWCASE_LOCK . ':another_store_test'] as $lock) {
+            self::assertSame(1, $value('SELECT RELEASE_LOCK(?)', $lock));
+        }
+
+        // MySQL accepts lock names of at most 64 characters.
+        $this->setEnv('DB_NAME', str_repeat('bookwise_', 6) . 'demo_test');
+        self::assertSame(DEMO_SHOWCASE_LOCK . ':' . md5(str_repeat('bookwise_', 6) . 'demo_test'), demo_showcase_lock_name());
+        self::assertLessThanOrEqual(64, strlen(demo_showcase_lock_name()));
     }
 
     public function testBooksNoLongerInTheCatalogAreLeftOut(): void

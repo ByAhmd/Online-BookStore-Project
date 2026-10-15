@@ -52,7 +52,7 @@ const DEMO_SHOWCASE_REFUND_HOURS = 5;
 /** Percentages of the other showcase customers who like, and who dislike, a showcase review. */
 const DEMO_SHOWCASE_LIKE_PERCENT = 25;
 const DEMO_SHOWCASE_DISLIKE_PERCENT = 4;
-/** Named lock that lets one showcase seed or demo reset run at a time. */
+/** Named lock that lets one showcase seed or demo reset run at a time (demo_showcase_lock_name() adds the database). */
 const DEMO_SHOWCASE_LOCK = 'bookwise-demo-showcase';
 
 /** A demo operation that cannot run right now; its message is safe to print. */
@@ -101,8 +101,24 @@ function demo_showcase_present(): bool
 }
 
 /**
- * Runs $callback while holding DEMO_SHOWCASE_LOCK, so that two seeds (or a
- * seed and a reset) never run at the same time.
+ * The name of this store's showcase lock: DEMO_SHOWCASE_LOCK and the
+ * database's name. Named locks belong to the whole database server, which
+ * other databases share (another BookWise demo, or other accounts on a
+ * shared host), so without the database in it any of them could hold up
+ * this store's nightly reset. MySQL accepts names of at most 64 characters:
+ * a longer one uses the hash of the database's name.
+ */
+function demo_showcase_lock_name(): string
+{
+    $database = (string) config('db.name');
+    $name = DEMO_SHOWCASE_LOCK . ':' . $database;
+    return strlen($name) <= 64 ? $name : DEMO_SHOWCASE_LOCK . ':' . md5($database);
+}
+
+/**
+ * Runs $callback while holding this store's showcase lock
+ * (demo_showcase_lock_name()), so that two seeds (or a seed and a reset)
+ * never run at the same time.
  *
  * @template T
  * @param callable(): T $callback
@@ -110,13 +126,14 @@ function demo_showcase_present(): bool
  */
 function with_demo_showcase_lock(callable $callback): mixed
 {
-    if ((int) db_value('SELECT GET_LOCK(?, 30)', [DEMO_SHOWCASE_LOCK]) !== 1) {
+    $lock = demo_showcase_lock_name();
+    if ((int) db_value('SELECT GET_LOCK(?, 30)', [$lock]) !== 1) {
         throw new DemoStoreException('Another showcase seed or demo reset is running. Try again in a minute.');
     }
     try {
         return $callback();
     } finally {
-        db_value('SELECT RELEASE_LOCK(?)', [DEMO_SHOWCASE_LOCK]);
+        db_value('SELECT RELEASE_LOCK(?)', [$lock]);
     }
 }
 
@@ -172,7 +189,7 @@ function demo_showcase_report(array $result): string
 
 /**
  * Writes the showcase and returns what it added. The caller holds a
- * transaction (and DEMO_SHOWCASE_LOCK), and has made sure that the showcase
+ * transaction (and the showcase lock), and has made sure that the showcase
  * is not there yet. Order lines, favorites and reviews of books that are no
  * longer in the catalog are left out, like orders that are left without a
  * line. Every time is relative to the database's NOW(), and the orders are
