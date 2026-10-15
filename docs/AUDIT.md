@@ -189,3 +189,56 @@ Verification after the fixes:
 | `tests/Docker/entrypoint_test.sh` against a scratch database | 71 checks OK |
 | Legacy upgrade of a first-release database, run twice | all 14 foreign keys, migrations 002 and 003 applied, idempotent |
 | Docker image build and container smoke test | run by the CI's Docker job (Docker was not available locally) |
+
+## 6. Second round (October 2026)
+
+The project was then extended a second time, up to its first release, 1.0.0 (15 October 2026, see `CHANGELOG.md`).
+The sections above are kept as they were written. Since this round, the README is a short landing page: the README sections they refer to are now in other files.
+The credential rotation note is in `SECURITY.md`, the known limitations are in `docs/ARCHITECTURE.md`, and the nginx `uploads/` rule is in the deployment checklist of `docs/DEPLOYMENT.md`.
+
+### What was added
+
+- **Email without SendGrid:** email goes through any SMTP server with PHPMailer, and refuses to sign in to a remote server without encryption. A demo inbox (`MAIL_DRIVER=database`) shows a public demo's emails on `inbox.php` instead of sending them; a browser sees only the emails of the accounts it signed in to or created.
+- **Payment simulator and hosting:** the payment simulator now runs inside the application, so a demo needs no second server, and saves its state atomically. A real store refuses it. The free public demo moved from Render + Aiven to alwaysdata's free plan (classic PHP hosting with MariaDB), set up with `bin/setup.php`.
+- **Performance, CI and dependencies:** WebP copies of the covers with the original as fallback, versioned asset URLs that browsers keep for a year, PHPStan raised to level 8, a CI matrix of PHP versions with MySQL 8.4 and MariaDB 11.4, every action pinned to a commit, and Dependabot.
+- **Checkout and delivery:** saved delivery addresses (Saudi National Address), a checkout page with the address and the VAT, delivery stages (processing, shipped with carrier and tracking number, delivered), an order page with a printable receipt and **Buy again**, and order emails.
+- **A demo ready for reviewers:** guest browsing of the catalog and book pages, one-click demo customers, and read-only administrators (role `viewer`), with a shared read-only demo administrator.
+- **Showcase and daily reset:** fictional customers, orders and reviews in demo mode (`src/demo.php`), and a nightly reset to that state (`bin/demo-reset.php`).
+- **Browser tests:** Playwright and axe-core tests of the main journeys in English and Arabic, a CI job that runs them against the Docker Compose store, and a script that takes the README screenshots.
+- **Platform:** PHP 8.3 as the oldest supported version, PHPUnit 12, `stripe/stripe-php` 22 (Stripe API version `2026-09-30.endive`, with the client's telemetry turned off), a Docker image on PHP 8.4, and MySQL 8.4 for the local Compose store.
+
+### How it was checked
+
+Each part was implemented in an isolated branch, reviewed adversarially and fixed before it was merged.
+The findings per area, as the reviews reported them:
+
+| Area | High | Medium | Low |
+| --- | --- | --- | --- |
+| Email (SMTP and the demo inbox) | 0 | 0 | 5 |
+| Payment simulator and hosting | 0 | 2 | 8 |
+| Performance and CI | 0 | 1 | 3 |
+| Checkout and delivery | 0 | 2 | 4 |
+| A demo ready for reviewers | 1 | 0 | 4 |
+| Showcase and daily reset | 0 | 1 | 5 |
+| Browser tests | 0 | 1 | 6 |
+| Platform | 0 | 0 | 2 |
+| **Total** | **1** | **7** | **37** |
+
+The one high finding: the shared read-only administrator, which every demo visitor can use, could see the customers' checkout session ids. A session id opens that customer's payment page (`pay.php` needs no sign-in, like Stripe's page), so anyone could have finished another visitor's payment.
+Read-only administrators now see payment references only shortened (`cs_test_…`), and the HTTP tests check that no checkout session id reaches them.
+
+CI found three more problems after the reviews:
+
+- Apache (`mod_php`) turned the non-standard status 419 (*Page Expired*, a missing or wrong CSRF token) into 500 in the Docker image. `send_status()` now sends the full status line, `HTTP/1.1 419 Page Expired`.
+- PHPStan on PHP 8.5 treats a bare `$argv` as possibly undefined in the scripts of `bin/`. They read `$GLOBALS['argv']`, and `tests/Unit/ScriptArgumentsTest.php` fails if one reads `$argv` again.
+- A flaky test: the profile test looked for four-digit runs of card numbers, which random CSRF tokens and asset versions contain by chance, about once in a thousand runs. It now looks for the full card numbers.
+
+Verification of the release, on the final tree, against isolated sandbox databases only:
+
+| Check | Result |
+| --- | --- |
+| `php bin/lint.php` | 194 PHP files, no syntax errors |
+| PHPStan level 8 (`src/`, `bin/`, `public/`) | no errors |
+| PHPUnit (unit, integration, http, deploy) on PHP 8.4 + MariaDB 10.4 | **OK, 1172 tests** (PHP 8.4.23, MariaDB 10.4.32) |
+| Browser tests (Playwright with axe-core, Chromium) against a local demo store on PHP 8.4 + MariaDB 10.4 | **25 passed** |
+| CI: PHP 8.3, 8.4 and 8.5 with MySQL 8.4, PHP 8.4 with MariaDB 11.4, the Docker image job and the browser-test job | run by GitHub Actions on every push and pull request |
