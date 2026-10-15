@@ -336,7 +336,7 @@ final class OrderLifecycleTest extends CheckoutTestCase
         self::assertSame('تم تأكيد طلبك رقم ' . $orderId . ' من BookWise', $mails[0]['subject']);
         self::assertSame('', $mails[0]['name']);
         self::assertStringStartsWith("مرحبًا،\n\nشكرًا لطلبك رقم " . $orderId . '.', $mails[0]['body']);
-        self::assertStringContainsString("كتبك\n2 × «Esabella»: 39.98 ر.س\n1 × «Biology»: 5.50 ر.س", $mails[0]['body']);
+        self::assertStringContainsString("كتبك\n2 × «\u{2068}Esabella\u{2069}»: 39.98 ر.س\n1 × «\u{2068}Biology\u{2069}»: 5.50 ر.س", $mails[0]['body']);
         self::assertStringContainsString('الإجمالي: 45.48 ر.س', $mails[0]['body']);
         self::assertStringContainsString('يشمل ضريبة القيمة المضافة (15%): 5.93 ر.س', $mails[0]['body']);
         self::assertStringNotContainsString('King Fahd Road', $mails[0]['body']);

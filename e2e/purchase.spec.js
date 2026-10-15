@@ -21,6 +21,13 @@ const confirmationSubject = {
 };
 /** The city of the demo customer's made-up address (lang/<language>/auth.php) and of sampleAddress. */
 const city = { en: 'Riyadh', ar: 'الرياض' };
+/**
+ * The book the demo customers buy: the third of the Explore page, which is
+ * sorted by title ("A Minor Fall" in the sample catalog). Its title is in
+ * Latin letters, which an Arabic email must not draw out of order; the first
+ * book, "1984", has none.
+ */
+const latinTitleBook = 2;
 
 /** The order page of a paid order: paid, now processing, not shipped yet. */
 async function expectProcessingOrder(page, locale, id, title) {
@@ -35,14 +42,59 @@ async function expectProcessingOrder(page, locale, id, title) {
     await expect(page.locator('.receipt-table')).toContainText(title);
 }
 
-/** The demo inbox lists the order's confirmation email, which names the book. */
+/**
+ * Where the book's line of the email draws its title and its price: the
+ * box of the title's last letter and of the price's first digit.
+ */
+async function titleAndPriceBoxes(page, title) {
+    return page.locator('.inbox-message-body').evaluate((body, title) => {
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const text = node.nodeValue;
+            const start = text.indexOf(title);
+            if (start === -1) {
+                continue;
+            }
+            const end = start + title.length;
+            const digit = text.slice(end).search(/[0-9]/) + end;
+            const box = (from) => {
+                const range = document.createRange();
+                range.setStart(node, from);
+                range.setEnd(node, from + 1);
+                const { left, right, top } = range.getBoundingClientRect();
+                return { left, right, top };
+            };
+            return { title: box(end - 1), price: box(digit) };
+        }
+        return null;
+    }, title);
+}
+
+/**
+ * The demo inbox lists the order's confirmation email, which names the book,
+ * and the book's price reads after its title: to its right in English, to
+ * its left in Arabic (or on a later line). The title is in Latin letters, so
+ * in Arabic this checks that the title does not pull the price into its
+ * left-to-right run.
+ */
 async function expectConfirmationEmail(page, locale, id, title) {
+    expect(title, 'the book has a title in Latin letters').toMatch(/[A-Za-z]/);
     await page.getByRole('link', { name: labels[locale].inbox, exact: true }).click();
     await expect(page).toHaveURL(/inbox\.php$/);
     const subject = confirmationSubject[locale](id);
     await page.getByRole('link', { name: subject }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(subject);
     await expect(page.locator('.inbox-message-body')).toContainText(title);
+
+    const boxes = await titleAndPriceBoxes(page, title);
+    expect(boxes, 'the email names the book').not.toBeNull();
+    if (Math.abs(boxes.price.top - boxes.title.top) > 2) {
+        expect(boxes.price.top, 'a price on another line comes after the title').toBeGreaterThan(boxes.title.top);
+    } else if (locale === 'ar') {
+        expect(boxes.price.right, 'right to left, the price is left of the title').toBeLessThanOrEqual(boxes.title.left + 1);
+    } else {
+        expect(boxes.price.left, 'left to right, the price is right of the title').toBeGreaterThanOrEqual(boxes.title.right - 1);
+    }
 }
 
 for (const locale of ['en', 'ar']) {
@@ -59,7 +111,7 @@ for (const locale of ['en', 'ar']) {
         };
 
         await startDemoCustomer(page, locale);
-        const title = await addBookToCart(page, locale);
+        const title = await addBookToCart(page, locale, latinTitleBook);
         await fits('cart');
 
         await page.getByRole('link', { name: labels[locale].proceedToCheckout }).click();

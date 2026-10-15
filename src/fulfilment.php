@@ -404,7 +404,8 @@ function order_email_content(string $kind, array $order, array $items, ?array $a
             foreach ($items as $item) {
                 $lines[] = t('shop.mail.item', [
                     'quantity' => (int) $item['quantity'],
-                    'title' => (string) $item['title'],
+                    // A title in the other script must not reorder the line around it.
+                    'title' => bidi_isolate((string) $item['title']),
                     'amount' => $money(money_to_minor((string) $item['unit_price']) * (int) $item['quantity']),
                 ]);
             }

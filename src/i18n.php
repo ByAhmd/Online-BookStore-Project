@@ -272,3 +272,16 @@ function translation_replace(string $text, array $replace): string
     }
     return $text;
 }
+
+/**
+ * $text in a first-strong isolate (U+2068 FSI … U+2069 PDI), for plain
+ * text such as emails (pages use <bdi>). Inside a sentence of either
+ * direction it takes its own direction from its first letter, and it no
+ * longer pulls its neighbours along: without it, the price after a Latin
+ * book title in an Arabic line ("1 × «A Minor Fall»: 11.00 ر.س") would join
+ * the title's left-to-right run and be drawn on the wrong side of it.
+ */
+function bidi_isolate(string $text): string
+{
+    return "\u{2068}" . $text . "\u{2069}";
+}

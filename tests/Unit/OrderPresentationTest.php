@@ -122,7 +122,7 @@ final class OrderPresentationTest extends TestCase
         self::assertSame(
             "Hello Sara,\n\n"
             . "Thank you for your order #12. We have received your payment and are preparing your books for delivery.\n\n"
-            . "Your books\n2 × Esabella: SAR 39.98\n1 × Biology: SAR 5.50\n\n"
+            . "Your books\n2 × \u{2068}Esabella\u{2069}: SAR 39.98\n1 × \u{2068}Biology\u{2069}: SAR 5.50\n\n"
             . "Delivery: free\nTotal: SAR 45.48\nIncludes VAT (15%): SAR 5.93\n\n"
             . "Delivery address\nSara Ahmed\n1234 King Fahd Road\nAl Olaya\nRiyadh 12345-6789\n\u{2066}+966 51 234 5678\u{2069}\n\n"
             . "We will email you again when your books are on their way.\n\n"
@@ -131,7 +131,7 @@ final class OrderPresentationTest extends TestCase
             $text
         );
         self::assertStringStartsWith('<div lang="en" dir="ltr"><p>Hello Sara,</p>', $html);
-        self::assertStringContainsString('<p><strong>Your books</strong><br>2 × Esabella: SAR 39.98<br>1 × Biology: SAR 5.50</p>', $html);
+        self::assertStringContainsString("<p><strong>Your books</strong><br>2 × \u{2068}Esabella\u{2069}: SAR 39.98<br>1 × \u{2068}Biology\u{2069}: SAR 5.50</p>", $html);
         self::assertStringContainsString('<a href="http://shop.test/order.php?id=12">View your order</a>', $html);
     }
 
@@ -148,7 +148,9 @@ final class OrderPresentationTest extends TestCase
 
         [$subject, , $text] = order_email_content('confirmation', self::order(), self::items(), null, '', 'http://shop.test/order.php?id=12');
         self::assertSame('تم تأكيد طلبك رقم 12 من BookWise', $subject);
-        self::assertStringContainsString('2 × «Esabella»: 39.98 ر.س', $text);
+        // The Latin title is isolated (FSI … PDI): without that, its left-to-right run
+        // would take the price along, and the line would read in the wrong order.
+        self::assertStringContainsString("2 × «\u{2068}Esabella\u{2069}»: 39.98 ر.س", $text);
         self::assertStringContainsString('يشمل ضريبة القيمة المضافة (15%): 5.93 ر.س', $text);
 
         $delivered = self::order(['fulfilment_status' => 'delivered', 'delivered_at' => '2026-10-16 12:00:00']);
