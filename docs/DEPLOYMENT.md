@@ -109,7 +109,8 @@ All three add nothing outside demo mode; `bin/demo-seed.php` and `bin/demo-reset
 - it adds the showcase again, unless `--no-showcase` is given: the demo then has no customers and no orders at all.
 
 Administrators are kept, the read-only demo administrator too. The database part is one transaction: visitors never see a half-reset store, and a failure changes nothing. Customers who are signed in at that moment are signed out, as their account is gone.
-Without `--yes` the command explains what it would do and changes nothing; outside demo mode it refuses. It prints two lines and writes the same counts to `storage/logs/app.log` (`Demo reset`):
+Without `--yes` the command explains what it would do and changes nothing; outside demo mode it refuses. It prints two lines and writes the same counts to `storage/logs/app.log` (`Demo reset`).
+Its exit status is 0 after a reset and 1 when nothing was reset. It is 2 when the reset was done but the payment simulator's state could not be emptied (a full disk, for example): payment pages opened before the reset can then still be paid, so the command prints a warning, and a scheduled task reports the run as failed.
 
 ```
 [2026-10-16 04:00:01] Demo reset: deleted 27 customer(s), 45 order(s), 39 review(s), 18 demo inbox email(s) and 2 uploaded picture(s); removed 1 book(s) added by administrators and put back the 55 sample books.
@@ -388,7 +389,7 @@ Both are safe to run at any time. In **Advanced > Scheduled tasks**, add one tas
 - **The PHP version:** `php` in a scheduled task is the account's default version, the one chosen in **Environment > PHP** in [step 2](#step-2-choose-the-php-version): alwaysdata runs command tasks with the default versions of the **Environment** menu, like the `php` command over SSH. If you change the default version later, the tasks follow it.
 - **The time zone:** the schedules above assume that alwaysdata's scheduler keeps UTC; Riyadh is UTC+3 all year. alwaysdata does not document the time zone of scheduled tasks, so check it over SSH: `date` shows the server's time and `TZ=Asia/Riyadh date` the time in Riyadh. Schedule the reset at 4 minus their difference in hours.
   On a server that keeps Paris time, for example, that is `0 2 * * *`, and the reset then runs at 03:00 in Riyadh while Paris has summer time.
-- **Output:** each run's output goes to `/home/myaccount/admin/logs/jobs/`; the reset also writes its counts to `~/bookwise/storage/logs/app.log`. Put your address in the task's email field to be told when a run fails (an exit status other than 0, for example when the database cannot be reached).
+- **Output:** each run's output goes to `/home/myaccount/admin/logs/jobs/`; the reset also writes its counts to `~/bookwise/storage/logs/app.log`. Put your address in the task's email field to be told when a run fails (an exit status other than 0: 1 when nothing was reset, for example when the database cannot be reached; 2 when the reset was done but the payment simulator's state could not be emptied).
 - **Overlaps:** alwaysdata skips a run while the previous one of the same task is still running. A reset takes a few seconds; a second reset or showcase command started meanwhile waits for it, and gives up with `Another showcase seed or demo reset is running` after 30 seconds.
 
 ### After the first deploy
@@ -638,6 +639,7 @@ Locally, without Docker:
 | `Administrator not created: …` | `BOOKWISE_ADMIN_EMAIL` is not a valid address, or `BOOKWISE_ADMIN_PASSWORD` is shorter than 8 characters. Fix or remove both. |
 | The first page after a quiet period is slow | alwaysdata restarts the site's PHP processes after the idle time (30 minutes by default). |
 | `Refusing to reset: only a public demo (APP_DEMO=true) is reset` or `Refusing to add the showcase` | The store is not in demo mode. Both commands are only for a public demo; check `APP_DEMO` in `.env`. |
+| `Warning: the payment simulator's state could not be cleared` (the reset task reports exit status 2) | The reset was done, but the folder of `PAYMENT_SIMULATOR_STORE` is not writable or the disk is full, so payment pages opened before the reset can still be paid. Make the folder writable or free some space, then run `php bin/demo-reset.php --yes` again. |
 | `Another showcase seed or demo reset is running` | A reset (or `bin/demo-seed.php`) was still running after 30 seconds. Run the command again later; the scheduled reset tries again the next night. |
 | `The database "…" is not up to date. Run: php bin/install.php` (reset or showcase) | The code was updated without its migrations. Run `php bin/install.php`, then the command again. |
 | `PORT must be a TCP port number` / Apache cannot bind | `PORT` must be a number from 1024 to 65535 (the container does not run as root). |

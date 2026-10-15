@@ -337,6 +337,32 @@ final class DemoResetTest extends DatabaseTestCase
         self::assertSame(self::SEED_BOOK_COUNT, $this->countRows('books'));
     }
 
+    public function testTheCommandFailsWhenThePaymentSimulatorCannotBeEmptied(): void
+    {
+        $store = $this->directory . DIRECTORY_SEPARATOR . 'payment-simulator.json';
+        payment_simulator_transaction(static function (array &$state): void {
+            $state['sessions']['cs_test_left_open'] = ['id' => 'cs_test_left_open', 'status' => 'open', 'payment_status' => 'unpaid', 'expires_at' => time() + 3600];
+        });
+        // The simulator cannot take its lock, as when its folder is not writable.
+        unlink($store . '.lock');
+        mkdir($store . '.lock');
+        try {
+            $run = self::runProjectScript('bin/demo-reset.php', [], ['--yes']);
+        } finally {
+            rmdir($store . '.lock');
+        }
+
+        // The demo was reset, but a scheduled task must report the payment page that can still be paid.
+        self::assertSame(2, $run['status'], $run['stdout'] . $run['stderr']);
+        self::assertMatchesRegularExpression('/^\[[0-9: -]+\] Demo reset: deleted 0 customer\(s\).*\R\[[0-9: -]+\] Demo showcase: added 12 customer\(s\).*\R$/D', $run['stdout']);
+        self::assertMatchesRegularExpression('/^\[[0-9: -]+\] Warning: the payment simulator\'s state could not be cleared \(see app\.log\)\./', $run['stderr']);
+        self::assertTrue(demo_showcase_present());
+        self::assertNotNull(payment_simulator_session('cs_test_left_open'));
+        $log = (string) file_get_contents($this->directory . DIRECTORY_SEPARATOR . 'app.log');
+        self::assertStringContainsString('WARNING: Demo reset: the payment simulator state could not be cleared: The payment simulator cannot open ', $log);
+        self::assertStringContainsString('"payment_simulator":"failed"', $log);
+    }
+
     public function testTheShowcaseNamesACommandThatBringsBackAMissingCatalog(): void
     {
         db_run('DELETE FROM books');

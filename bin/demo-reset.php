@@ -22,8 +22,10 @@ declare(strict_types=1);
  *
  * It runs only in demo mode (APP_DEMO=true) and changes nothing without
  * --yes. Meant for a daily scheduled task (docs/DEPLOYMENT.md): it prints a
- * short summary, also written to app.log; the exit status is 0, or 1 when
- * nothing was reset (not a demo, no --yes, or the database cannot be used).
+ * short summary, also written to app.log. The exit status is 0; 1 when
+ * nothing was reset (not a demo, no --yes, or the database cannot be used);
+ * 2 when the demo was reset but the payment simulator's state could not be
+ * emptied (logged in app.log), so that a scheduled task reports it.
  *
  * Usage: php bin/demo-reset.php --yes [--no-showcase]
  */
@@ -79,9 +81,11 @@ echo $time . sprintf(
     $summary['books_removed'],
     $summary['books']
 ) . PHP_EOL;
-if ($summary['payment_simulator'] === 'failed') {
-    fwrite(STDERR, $time . 'Warning: the payment simulator\'s state could not be cleared (see app.log).' . PHP_EOL);
-}
 echo $time . ($summary['showcase'] !== null
     ? demo_showcase_report(['status' => 'seeded'] + $summary['showcase'])
     : 'Demo showcase: left out (--no-showcase); the demo has no customers and no orders.') . PHP_EOL;
+if ($summary['payment_simulator'] === 'failed') {
+    // The reset itself is done, but payment pages opened before it can still be paid.
+    fwrite(STDERR, $time . 'Warning: the payment simulator\'s state could not be cleared (see app.log). Free some space or fix the folder of PAYMENT_SIMULATOR_STORE, then reset again.' . PHP_EOL);
+    exit(2);
+}
