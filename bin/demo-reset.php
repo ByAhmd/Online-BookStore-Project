@@ -13,7 +13,9 @@ declare(strict_types=1);
  *    books back as database/seed.sql has them (text, prices, covers, stock);
  *  - deletes the uploaded profile pictures and book covers of those rows,
  *    and the payment simulator's checkout sessions and refunds;
- *  - adds the showcase again (bin/demo-seed.php).
+ *  - adds the showcase again (bin/demo-seed.php), unless --no-showcase is
+ *    given: that leaves no customer and no order, as a demo should be
+ *    before it becomes a real store (docs/DEPLOYMENT.md, (d)).
  * Administrators are kept, the read-only demo administrator too. The
  * database part is one transaction: visitors never see a store that is half
  * reset, and a failure changes nothing.
@@ -23,7 +25,7 @@ declare(strict_types=1);
  * short summary, also written to app.log; the exit status is 0, or 1 when
  * nothing was reset (not a demo, no --yes, or the database cannot be used).
  *
- * Usage: php bin/demo-reset.php --yes
+ * Usage: php bin/demo-reset.php --yes [--no-showcase]
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -33,13 +35,14 @@ if (PHP_SAPI !== 'cli') {
 
 require __DIR__ . '/../src/bootstrap.php';
 
-$usage = 'Usage: php bin/demo-reset.php --yes' . PHP_EOL;
+$usage = 'Usage: php bin/demo-reset.php --yes [--no-showcase]' . PHP_EOL;
 $arguments = array_map('strval', array_slice((array) ($GLOBALS['argv'] ?? []), 1));
-$unknown = array_diff($arguments, ['--yes']);
+$unknown = array_diff($arguments, ['--yes', '--no-showcase']);
 if ($unknown !== []) {
     fwrite(STDERR, $usage . 'Unknown argument: ' . implode(', ', $unknown) . PHP_EOL);
     exit(1);
 }
+$withShowcase = !in_array('--no-showcase', $arguments, true);
 
 if (!config('app.demo')) {
     fwrite(STDERR, 'Refusing to reset: only a public demo (APP_DEMO=true) is reset, and this store is not one. Nothing was changed.' . PHP_EOL);
@@ -47,7 +50,7 @@ if (!config('app.demo')) {
 }
 if (!in_array('--yes', $arguments, true)) {
     fwrite(STDERR, $usage . 'This deletes every customer, order and review of the demo "' . config('db.name') . '", the books administrators added and the uploaded pictures,'
-        . ' puts the sample catalog back and adds the showcase again. Administrators are kept. Run it with --yes to reset the demo.' . PHP_EOL);
+        . ' puts the sample catalog back and adds the showcase again (not with --no-showcase). Administrators are kept. Run it with --yes to reset the demo.' . PHP_EOL);
     exit(1);
 }
 if (!demo_database_ready()) {
@@ -56,7 +59,7 @@ if (!demo_database_ready()) {
 }
 
 try {
-    $summary = reset_demo_store();
+    $summary = reset_demo_store($withShowcase);
 } catch (DemoStoreException $e) {
     fwrite(STDERR, $e->getMessage() . PHP_EOL);
     exit(1);
@@ -79,4 +82,6 @@ echo $time . sprintf(
 if ($summary['payment_simulator'] === 'failed') {
     fwrite(STDERR, $time . 'Warning: the payment simulator\'s state could not be cleared (see app.log).' . PHP_EOL);
 }
-echo $time . demo_showcase_report(['status' => 'seeded'] + $summary['showcase']) . PHP_EOL;
+echo $time . ($summary['showcase'] !== null
+    ? demo_showcase_report(['status' => 'seeded'] + $summary['showcase'])
+    : 'Demo showcase: left out (--no-showcase); the demo has no customers and no orders.') . PHP_EOL;

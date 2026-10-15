@@ -37,7 +37,8 @@ declare(strict_types=1);
  * reset_demo_store() (bin/demo-reset.php, a daily scheduled task) returns a
  * demo to that starting state: every customer goes with their data and
  * every order, the catalog is put back to the 55 sample books, and the
- * showcase is added again. Administrators are kept.
+ * showcase is added again (or left out, to empty a demo before it becomes
+ * a real store). Administrators are kept.
  */
 
 /** Showcase customers' email addresses: this prefix, a name, "@" and DEMO_EMAIL_DOMAIN. */
@@ -685,7 +686,9 @@ function demo_showcase_customers(): array
  *    administrators added are deleted, and the 55 sample books come back
  *    with their text, prices, covers and stock (also those an administrator
  *    deleted or changed);
- *  - the showcase is added again (insert_demo_showcase()).
+ *  - the showcase is added again (insert_demo_showcase()), unless
+ *    $withShowcase is false: that leaves a demo without any customer or
+ *    order, for example before it becomes a real store.
  * Administrators are kept. Once that is committed, the uploaded profile
  * pictures and book covers that the deleted rows referred to are deleted,
  * and the payment simulator forgets every checkout session and refund. Rows
@@ -693,17 +696,17 @@ function demo_showcase_customers(): array
  * that still remembers a deleted account (the demo inbox) can never point at
  * a new one. Only in demo mode.
  *
- * @return array{customers: int, orders: int, reviews: int, mail: int, pictures: int, books_removed: int, books_restored: int, books: int, payment_simulator: 'cleared'|'none'|'failed', showcase: array{customers: int, orders: int, reviews: int, reactions: int, favorites: int}}
+ * @return array{customers: int, orders: int, reviews: int, mail: int, pictures: int, books_removed: int, books_restored: int, books: int, payment_simulator: 'cleared'|'none'|'failed', showcase: array{customers: int, orders: int, reviews: int, reactions: int, favorites: int}|null}
  * @throws DemoStoreException outside demo mode, or while another seed or reset runs
  */
-function reset_demo_store(): array
+function reset_demo_store(bool $withShowcase = true): array
 {
     require_demo_mode('The demo reset');
-    return with_demo_showcase_lock(static function (): array {
+    return with_demo_showcase_lock(static function () use ($withShowcase): array {
         $avatars = array_map('strval', db_run("SELECT profile_image FROM users WHERE profile_image LIKE 'uploads/%'")->fetchAll(PDO::FETCH_COLUMN));
         $covers = array_map('strval', db_run("SELECT DISTINCT cover_image FROM books WHERE cover_image LIKE 'uploads/%'")->fetchAll(PDO::FETCH_COLUMN));
 
-        $summary = db_transaction(static function (): array {
+        $summary = db_transaction(static function () use ($withShowcase): array {
             $booksBefore = array_map('intval', db_run('SELECT id FROM books')->fetchAll(PDO::FETCH_COLUMN));
             // Order items and delivery address copies go with the orders; sales, carts,
             // favorites, reactions, addresses and verification links with the customers.
@@ -730,7 +733,7 @@ function reset_demo_store(): array
                 'books_restored' => count(array_diff($booksAfter, $booksBefore)),
                 'books' => count($booksAfter),
                 'payment_simulator' => 'none',
-                'showcase' => insert_demo_showcase(),
+                'showcase' => $withShowcase ? insert_demo_showcase() : null,
             ];
         });
 

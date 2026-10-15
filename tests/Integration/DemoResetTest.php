@@ -289,6 +289,54 @@ final class DemoResetTest extends DatabaseTestCase
         );
     }
 
+    public function testWithoutTheShowcaseTheDemoHasNoCustomersAndNoOrders(): void
+    {
+        $catalog = self::catalogText();
+        $stock = self::stockByBook();
+        $day = $this->aDayOfVisitors();
+
+        $summary = reset_demo_store(false);
+
+        self::assertNull($summary['showcase']);
+        self::assertSame([14, 33], [$summary['customers'], $summary['orders']], 'The showcase went with the visitors');
+        foreach (['users', 'addresses', 'favorites', 'cart', 'orders', 'order_items', 'order_addresses', 'sales', 'comments', 'comment_interactions', 'demo_mail'] as $table) {
+            self::assertSame(0, $this->countRows($table), "$table is empty");
+        }
+        self::assertFalse(demo_showcase_present());
+        self::assertSame([$day['owner'], DEMO_VIEWER_ADMIN_EMAIL], array_column(db_all('SELECT Eaddress FROM admins ORDER BY Eaddress = ?, Eaddress', [DEMO_VIEWER_ADMIN_EMAIL]), 'Eaddress'), 'The administrators stay');
+        self::assertSame($catalog, self::catalogText());
+        self::assertSame($stock, self::stockByBook(), 'The sample stock: no order took any copies');
+        self::assertSame(['cleared', 2], [$summary['payment_simulator'], $summary['pictures']]);
+    }
+
+    public function testADemoCanBeEmptiedBeforeItBecomesARealStore(): void
+    {
+        // docs/DEPLOYMENT.md, (d): reset without the showcase while the store is still a demo, then leave demo mode.
+        $this->aDayOfVisitors();
+
+        $run = self::runProjectScript('bin/demo-reset.php', [], ['--yes', '--no-showcase']);
+
+        self::assertSame(0, $run['status'], $run['stdout'] . $run['stderr']);
+        self::assertSame('', $run['stderr']);
+        self::assertMatchesRegularExpression(
+            '/^\[[0-9: -]+\] Demo reset: deleted 14 customer\(s\), 33 order\(s\), 33 review\(s\), 2 demo inbox email\(s\) and 2 uploaded picture\(s\); '
+            . 'removed 1 book\(s\) added by administrators and put back the 55 sample books\.\R'
+            . '\[[0-9: -]+\] Demo showcase: left out \(--no-showcase\); the demo has no customers and no orders\.\R$/D',
+            $run['stdout']
+        );
+        self::assertStringContainsString('"payment_simulator":"cleared","showcase":null}', (string) file_get_contents($this->directory . DIRECTORY_SEPARATOR . 'app.log'));
+        self::assertSame(0, $this->countRows('users') + $this->countRows('orders') + $this->countRows('comments'));
+
+        // As a real store, the installer adds nothing back, and the nightly reset refuses to run (its task must go).
+        $real = self::runProjectScript('bin/install.php', ['APP_DEMO' => 'false', 'PAYMENT_SIMULATOR' => 'false']);
+        self::assertSame(0, $real['status'], $real['stdout'] . $real['stderr']);
+        self::assertStringNotContainsString('Demo', $real['stdout']);
+        $nightly = self::runProjectScript('bin/demo-reset.php', ['APP_DEMO' => 'false', 'PAYMENT_SIMULATOR' => 'false'], ['--yes']);
+        self::assertSame(1, $nightly['status']);
+        self::assertSame(0, $this->countRows('users') + $this->countRows('orders') + $this->countRows('comments'));
+        self::assertSame(self::SEED_BOOK_COUNT, $this->countRows('books'));
+    }
+
     public function testTheShowcaseNamesACommandThatBringsBackAMissingCatalog(): void
     {
         db_run('DELETE FROM books');

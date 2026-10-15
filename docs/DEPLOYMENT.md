@@ -97,7 +97,7 @@ An owner can ship, deliver and refund them like any order; a refund is recorded 
 | --- | --- |
 | `php bin/install.php` (so also `php bin/setup.php` and every container start) | In demo mode, when the store has none yet. `--no-showcase` leaves it out. |
 | `php bin/demo-seed.php` | When the store has none yet; otherwise it says `Demo showcase: already there, nothing added.` |
-| `php bin/demo-reset.php --yes` | After every reset |
+| `php bin/demo-reset.php --yes` | After every reset. `--no-showcase` leaves it out, for a demo that is about to become a real store ([(d)](#d-a-real-store-stripe-payments-and-email)). |
 
 All three add nothing outside demo mode; `bin/demo-seed.php` and `bin/demo-reset.php` refuse to run there. The showcase is written in one transaction: a failure adds nothing.
 
@@ -106,7 +106,7 @@ All three add nothing outside demo mode; `bin/demo-seed.php` and `bin/demo-reset
 - it deletes every customer (sign-ups, one-click demo customers and the showcase's customers) with their carts, favorites, addresses, reviews and orders, every other order, the demo inbox, the one-click demo customers' rate-limit records, password-reset links and failed sign-ins;
 - it deletes the books that administrators added and puts the 55 sample books back as `database/seed.sql` has them (text, prices, covers and stock), also those that were changed or deleted;
 - it deletes the uploaded profile pictures and book covers of the deleted rows, and empties the payment simulator's state, so a payment page left open can no longer be paid;
-- it adds the showcase again.
+- it adds the showcase again, unless `--no-showcase` is given: the demo then has no customers and no orders at all.
 
 Administrators are kept, the read-only demo administrator too. The database part is one transaction: visitors never see a half-reset store, and a failure changes nothing. Customers who are signed in at that moment are signed out, as their account is gone.
 Without `--yes` the command explains what it would do and changes nothing; outside demo mode it refuses. It prints two lines and writes the same counts to `storage/logs/app.log` (`Demo reset`):
@@ -497,7 +497,7 @@ Notes:
 
 Starting from the Docker setup, or from a server prepared with `bin/setup.php`, change the following (in the container's environment or in `.env`).
 
-1. **Leave demo mode:** set `APP_DEMO=false` **and** `PAYMENT_SIMULATOR=false`. The banner disappears and `pay.php` answers 404.
+1. **Leave demo mode:** if you keep the demo's database, empty it first as step 8 describes; that only works in demo mode. Then set `APP_DEMO=false` **and** `PAYMENT_SIMULATOR=false`. The banner disappears and `pay.php` answers 404.
    `bin/setup.php` writes `PAYMENT_SIMULATOR=true` into `.env`, so on a server set up with it both lines must change (the Docker setup does not set `PAYMENT_SIMULATOR`, but `false` does no harm there).
    If `PAYMENT_SIMULATOR=true` is left in place, the store takes no payments at all: checkout says "Online payments are not available in this environment.", `app.log` says `Refusing the payment simulator on a real store …`, and the container does not start.
 2. **Stripe:**
@@ -518,7 +518,11 @@ Starting from the Docker setup, or from a server prepared with `bin/setup.php`, 
    - The container creates and migrates the schema at start-up. The configured user therefore needs schema privileges (`CREATE`, `ALTER`, `INDEX`, `REFERENCES`) as well as `SELECT, INSERT, UPDATE, DELETE`.
 7. **Administrator:** create it once with `BOOKWISE_ADMIN_EMAIL` and `BOOKWISE_ADMIN_PASSWORD`, then remove both variables so the password is not reset at every start.
    Alternatively, use `php bin/create-admin.php` in a shell on the server.
-8. **Catalog:** outside demo mode the sample books are not loaded into a new database. If you started from the demo database, delete the sample books in the admin dashboard (or start with an empty database).
+8. **Catalog and demo data:** outside demo mode neither the sample books nor the [showcase](#the-showcase-and-the-daily-reset) are added to a new database.
+   A database that served as a demo holds the showcase's fictional customers with their paid orders (some still waiting to be shipped, all counted in the dashboard's revenue) and whatever visitors did. Start the real store with a new, empty database, or empty the demo's database before step 1, while it is still a demo:
+   - On alwaysdata, first delete both [scheduled tasks](#schedule-the-daily-reset-and-the-cleanup): a reset during the switch would add the showcase again, and outside demo mode the reset refuses to run and would report a failure every night.
+   - Run `php bin/demo-reset.php --yes --no-showcase` (with Docker: `docker compose exec app php bin/demo-reset.php --yes --no-showcase`). It deletes every customer and every order, the showcase's too, and keeps the administrators and the 55 sample books.
+   - Delete the sample books in the admin dashboard if you do not sell them.
 
 The free alwaysdata plan cannot be used for a store that makes money.
 
