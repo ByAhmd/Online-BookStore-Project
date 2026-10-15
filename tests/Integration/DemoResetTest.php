@@ -108,7 +108,7 @@ final class DemoResetTest extends DatabaseTestCase
      * emails, a payment page left open, and administrators who added a book
      * with an uploaded cover, changed one sample book and deleted another.
      *
-     * @return array{avatar: string, cover: string, owner: string, last_user: int}
+     * @return array{owner: string, last_user: int} The owner's address and the newest customer id
      */
     private function aDayOfVisitors(): array
     {
@@ -149,7 +149,7 @@ final class DemoResetTest extends DatabaseTestCase
             $state['sessions']['cs_test_left_open'] = ['id' => 'cs_test_left_open', 'status' => 'open', 'payment_status' => 'unpaid', 'expires_at' => time() + 3600];
         });
 
-        return ['avatar' => $avatar, 'cover' => $cover, 'owner' => $owner['Eaddress'], 'last_user' => (int) db_value('SELECT MAX(id) FROM users')];
+        return ['owner' => $owner['Eaddress'], 'last_user' => (int) db_value('SELECT MAX(id) FROM users')];
     }
 
     public function testTheResetReturnsTheDemoToItsStartingState(): void

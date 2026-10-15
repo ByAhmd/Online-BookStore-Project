@@ -537,10 +537,10 @@ The free alwaysdata plan cannot be used for a store that makes money.
 
 - Anyone can register. Do not enter real personal data (delivery addresses included: any made-up Saudi address in the right format works). Everything visitors do is deleted by the nightly reset (`php bin/demo-reset.php --yes`, 04:00 in Riyadh), and until then the administrators can see it.
 - One-click demo customers are limited to 10 per visitor address (for IPv6, per /64 network) and hour, 60 per hour for all visitors together, and 200 at once (the oldest are deleted first). The nightly reset deletes them, and `php bin/demo-cleanup.php` deletes any that are more than 24 hours old.
-- The showcase's customers, orders and reviews are fictional and the same every day; only their dates move with the reset. Its orders never reached anybody, and its customers cannot sign in.
   Everybody who tries the read-only administrator shares one account, which shows every order of the demo with shortened customer names, addresses and payment references (a full checkout session id would open that customer's payment page).
+- The showcase's customers, orders and reviews are fictional and the same every day; only their dates move with the reset. Its orders never reached anybody, and its customers cannot sign in.
 - Visitors' purchases never take a book below 3 copies, and `php bin/install.php` (or a container start) restocks the catalog.
-- Nothing is ever shipped: a demo order stays *processing* until an administrator marks it shipped and delivered on its order page, which only updates the order and sends its emails to the demo inbox.
+- Nothing is ever shipped: a visitor's order stays *processing* until an administrator marks it shipped and delivered on its order page, which only updates the order and sends its emails to the demo inbox.
 
 ## Security notes
 
