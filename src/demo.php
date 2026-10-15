@@ -183,7 +183,9 @@ function demo_showcase_report(array $result): string
             $result['favorites']
         ),
         'present' => 'Demo showcase: already there, nothing added.',
-        'no_catalog' => 'Demo showcase: the sample catalog is not loaded (php bin/install.php --seed), nothing added.',
+        // bin/install.php loads database/seed.sql only into an empty database; the reset loads it into any.
+        'no_catalog' => 'Demo showcase: nothing added, as the sample books are not in the catalog. '
+            . 'php bin/demo-reset.php --yes puts them back and adds the showcase (it also deletes every customer and order).',
     };
 }
 

@@ -288,4 +288,28 @@ final class DemoResetTest extends DatabaseTestCase
             (string) file_get_contents($this->directory . DIRECTORY_SEPARATOR . 'app.log')
         );
     }
+
+    public function testTheShowcaseNamesACommandThatBringsBackAMissingCatalog(): void
+    {
+        db_run('DELETE FROM books');
+
+        $seed = self::runProjectScript('bin/demo-seed.php');
+
+        self::assertSame(0, $seed['status'], $seed['stdout'] . $seed['stderr']);
+        self::assertStringContainsString(
+            'Demo showcase: nothing added, as the sample books are not in the catalog. php bin/demo-reset.php --yes puts them back and adds the showcase',
+            $seed['stdout']
+        );
+        self::assertSame(0, $this->countRows('users'));
+
+        // The advice works on a database that exists (bin/install.php --seed only fills an empty one).
+        $install = self::runProjectScript('bin/install.php', [], ['--seed']);
+        self::assertSame(0, $install['status'], $install['stdout'] . $install['stderr']);
+        self::assertStringContainsString('php bin/demo-reset.php --yes puts them back', $install['stdout']);
+        self::assertSame(0, $this->countRows('books'));
+        $reset = self::runProjectScript('bin/demo-reset.php', [], ['--yes']);
+        self::assertSame(0, $reset['status'], $reset['stdout'] . $reset['stderr']);
+        self::assertSame(self::SEED_BOOK_COUNT, $this->countRows('books'));
+        self::assertTrue(demo_showcase_present());
+    }
 }
