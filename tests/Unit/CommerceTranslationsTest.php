@@ -185,6 +185,44 @@ final class CommerceTranslationsTest extends TestCase
         }
     }
 
+    /**
+     * In right-to-left text, the punctuation at the end of a Latin path or
+     * URL is drawn on its other side ("https://" shows as "//:https",
+     * "public/" as "/public"). Arabic translations therefore wrap such
+     * tokens in a left-to-right isolate (U+2066 … U+2069).
+     */
+    #[DataProvider('namespaces')]
+    public function testArabicTextKeepsLatinPathsAndUrlsLeftToRight(string $namespace): void
+    {
+        foreach (self::leaves(self::load('ar', $namespace)) as $key => $value) {
+            foreach (is_array($value) ? $value : [$value] as $text) {
+                if (!is_string($text)) {
+                    continue;
+                }
+                $outside = (string) preg_replace('/\x{2066}[^\x{2066}\x{2069}]*\x{2069}/u', '', $text);
+                // A word of two or more Latin letters before a slash ("public/"), or a URL scheme.
+                // Single letters are left alone: "d/m/Y" is a date format, not text.
+                self::assertDoesNotMatchRegularExpression('~[A-Za-z_][A-Za-z0-9_.-]+/|://~', $outside, "$namespace.$key: wrap the path or URL in \\u{2066}…\\u{2069}");
+                self::assertSame(substr_count($text, "\u{2066}"), substr_count($text, "\u{2069}"), "$namespace.$key: every isolate is closed");
+            }
+        }
+    }
+
+    public function testTheCoverHintReadsCorrectlyInArabic(): void
+    {
+        use_locale('ar');
+        try {
+            self::assertSame(
+                "مسار داخل \u{2066}public/\u{2069}، مثل \u{2066}imges/All_section/biology.png\u{2069}، أو رابط يبدأ بـ \u{2066}https://\u{2069}",
+                t('admin.form.cover_hint')
+            );
+            self::assertStringContainsString("\u{2066}https://\u{2069}", t('admin.validation.cover_url'));
+            self::assertStringContainsString("«\u{2066}imges/All_section/book.png\u{2069}»", t('admin.validation.cover_path'));
+        } finally {
+            use_locale(null);
+        }
+    }
+
     public function testDatesAreWrittenInTheVisitorsLanguage(): void
     {
         $date = new \DateTimeImmutable('2026-10-04 09:05:00');

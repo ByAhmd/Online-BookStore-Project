@@ -15,6 +15,36 @@ async function expectFormsSwitchedOff(page, name) {
     await expect(page.locator('.read-only-note')).toBeVisible();
 }
 
+/**
+ * The characters of `token` in the element's text are drawn from left to
+ * right (each one right of the one before it on the same line), as a Latin
+ * path or URL must read inside Arabic text too.
+ */
+async function expectDrawnLeftToRight(locator, token) {
+    const boxes = await locator.evaluate((element, token) => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const start = node.nodeValue.indexOf(token);
+            if (start !== -1) {
+                return Array.from(token, (character, i) => {
+                    const range = document.createRange();
+                    range.setStart(node, start + i);
+                    range.setEnd(node, start + i + 1);
+                    const { left, top } = range.getBoundingClientRect();
+                    return { left, top };
+                });
+            }
+        }
+        return null;
+    }, token);
+    expect(boxes, `"${token}" is shown`).not.toBeNull();
+    const sameLine = boxes.slice(1).map((box, i) => [boxes[i], box]).filter(([a, b]) => Math.abs(a.top - b.top) < 2);
+    expect(sameLine.length, `"${token}" is mostly on one line`).toBeGreaterThan(token.length / 2);
+    for (const [before, after] of sameLine) {
+        expect(after.left, `"${token}" reads left to right`).toBeGreaterThan(before.left);
+    }
+}
+
 /** The orders page's search, as in lang/en/admin.php and lang/ar/admin.php. */
 const orderSearch = {
     en: { label: 'Order number', button: 'Show orders' },
@@ -64,4 +94,8 @@ test('a read-only administrator can look at everything and change nothing', asyn
     await expectFormsSwitchedOff(page, 'Arabic order page');
     await openIn(page, 'admin_dashboard.php', 'ar');
     await expectFormsSwitchedOff(page, 'Arabic dashboard');
+    // The cover hint's examples stay readable in the right-to-left text ("https://", not "//:https").
+    for (const token of ['public/', 'imges/All_section/biology.png', 'https://']) {
+        await expectDrawnLeftToRight(page.locator('#book-cover-hint'), token);
+    }
 });
