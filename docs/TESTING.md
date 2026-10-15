@@ -25,7 +25,7 @@ Each test is independent: it creates its own customer, either a one-click demo c
 | `e2e/purchase.spec.js` | **Try as a customer**, a book in the cart, the checkout page with the demo customer's saved address chosen, **Pay** on the simulated payment page, the confirmation, the order page and the confirmation email in the demo inbox (English in a desktop window, Arabic in a 375-pixel one). **Decline** keeps the payment page open for another try, **Cancel** charges nothing and keeps the cart, and **Slow payment** is confirmed after about 15 seconds. |
 | `e2e/signup.spec.js` | Signing up through the form shows the welcome email (or, with `REQUIRE_EMAIL_VERIFICATION=true`, the confirmation email) in the demo inbox, in English and Arabic. |
 | `e2e/admin-viewer.spec.js` | **Try as an administrator (read-only)**: the dashboard, the orders page (its search still works) and an order's page, in English and Arabic, with every control of every form that would change something switched off, and customers' details shortened. |
-| `e2e/keyboard.spec.js` | The profile page with the keyboard alone: the skip link, the section menu in tab order, Enter opens a section and moves the focus to its heading, Tab reaches the main controls of every section, the focus is always visible, and a form is sent with Enter. |
+| `e2e/keyboard.spec.js` | The profile page with the keyboard alone: the skip link, the section menu in tab order, Enter opens a section and moves the focus to its heading, Tab reaches the main controls of every section, the focus is always visible, and a form is sent with Enter. The demo banner's link keeps a dark focus ring on its yellow inside the dark header. |
 | `e2e/accessibility.spec.js` | axe-core on the main pages in English and Arabic (see [below](#accessibility-checks)). |
 
 Shared steps (the demo buttons, signing up, buying a book, the axe check) are in `e2e/support/store.js`.
@@ -116,3 +116,10 @@ Two things to know:
 
 - **Arabic text:** axe skips the contrast check of text drawn with an icon font's ligatures, and it recognises them by comparing a word with its letters drawn one by one. Arabic letters join, so axe takes every Arabic word for an icon and would check the contrast of no Arabic text at all. `e2e/support/store.js` removes that heuristic for Arabic text before axe runs (it fails loudly if a new axe-core version changes the code it patches).
 - **Text on photos:** axe cannot measure text on a background image, such as the home page's heading on its bookshelf photo. That contrast was measured on screenshots of the darkened photo: at least 4.45:1 behind the heading (large text, which needs 3:1) and 4.8:1 behind the line below it (which needs 4.5:1).
+
+What the checks found, and how it was fixed:
+
+- The demo banner was outside every landmark, so screen-reader users who move between landmarks could miss it. It is now part of the page header (`src/views/header.php`).
+- The scrolling tables of the admin pages had the same name as the section around them, so the two regions could not be told apart. They are now named "Table: …" (`admin.table_region`).
+
+The HTTP suite checks both rules on every page it opens (`HtmlDocument::contentOutsideLandmarks()` and `duplicateLandmarks()` in `tests/Support`, used by `assertHtmlPage()`), and `tests/Http/AccessibilityMarkupTest.php` checks the two fixes.

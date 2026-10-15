@@ -230,4 +230,8 @@ return [
         'note' => "You are signed in as a read-only demo administrator. You can open every page, but the forms are switched off and nothing can be changed. Customers' names and email addresses, and payment references, are shortened.",
         'view' => 'View',
     ],
+
+    // Name of a table's scrolling area (it scrolls sideways on narrow screens);
+    // :title is the heading of the section that holds the table.
+    'table_region' => 'Table: :title',
 ];

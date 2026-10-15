@@ -112,7 +112,7 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
             <div class="order-detail-layout">
                 <section class="admin-content" aria-labelledby="order-items-title">
                     <h2 id="order-items-title"><?= e(t('admin.order.items')) ?></h2>
-                    <div class="table-scroll" role="region" aria-labelledby="order-items-title" tabindex="0">
+                    <div class="table-scroll" role="region" aria-label="<?= e(t('admin.table_region', ['title' => t('admin.order.items')])) ?>" tabindex="0">
                         <table class="admin-table order-items-table">
                             <thead>
                                 <tr>

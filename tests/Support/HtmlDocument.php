@@ -258,6 +258,94 @@ final class HtmlDocument
     }
 
     /**
+     * Elements of <body> outside the page's landmarks (header, main, footer
+     * and so on). Screen-reader users move between landmarks, so content
+     * outside them is easily missed; only the skip link and scripts may be.
+     *
+     * @return list<string> Each such element, as "tag.class"
+     */
+    public function contentOutsideLandmarks(): array
+    {
+        $outside = [];
+        foreach ($this->elements('//body/*') as $element) {
+            $tag = strtolower($element->nodeName);
+            if ($tag === 'script' || ($tag === 'a' && str_contains(' ' . $element->getAttribute('class') . ' ', ' skip-link '))) {
+                continue;
+            }
+            if ($this->landmarkRole($element) === null) {
+                $outside[] = $tag . ($element->getAttribute('class') !== '' ? '.' . str_replace(' ', '.', trim($element->getAttribute('class'))) : '');
+            }
+        }
+        return $outside;
+    }
+
+    /**
+     * Landmarks that share both their role and their accessible name with
+     * another landmark of the page: screen readers list landmarks by role
+     * and name, so such landmarks cannot be told apart.
+     *
+     * @return list<string> Each duplicated "role: name"
+     */
+    public function duplicateLandmarks(): array
+    {
+        $seen = [];
+        foreach ($this->elements('//body//*') as $element) {
+            $role = $this->landmarkRole($element);
+            if ($role !== null) {
+                $key = $role . ': ' . $this->accessibleName($element);
+                $seen[$key] = ($seen[$key] ?? 0) + 1;
+            }
+        }
+        return array_keys(array_filter($seen, static fn (int $count): bool => $count > 1));
+    }
+
+    /**
+     * The landmark role of an element (its role attribute, or the implicit
+     * role of its tag), or null when it is no landmark. As in HTML-AAM, a
+     * <section> or <form> is one only when it has an accessible name, and a
+     * <header> or <footer> only outside sectioning content and <main>.
+     */
+    private function landmarkRole(DOMElement $element): ?string
+    {
+        $named = $this->accessibleName($element) !== '';
+        $role = strtolower(trim($element->getAttribute('role')));
+        if ($role !== '') {
+            return match ($role) {
+                'banner', 'complementary', 'contentinfo', 'main', 'navigation', 'search' => $role,
+                'form', 'region' => $named ? $role : null,
+                default => null,
+            };
+        }
+        $scoped = $this->first('ancestor::article | ancestor::aside | ancestor::main | ancestor::nav | ancestor::section', $element) !== null;
+        return match (strtolower($element->nodeName)) {
+            'header' => $scoped ? null : 'banner',
+            'footer' => $scoped ? null : 'contentinfo',
+            'main' => 'main',
+            'nav' => 'navigation',
+            'aside' => 'complementary',
+            'section' => $named ? 'region' : null,
+            'form' => $named ? 'form' : null,
+            default => null,
+        };
+    }
+
+    /**
+     * The name aria-labelledby, aria-label or title gives an element.
+     */
+    private function accessibleName(DOMElement $element): string
+    {
+        $labelledBy = trim($element->getAttribute('aria-labelledby'));
+        if ($labelledBy !== '') {
+            $texts = [];
+            foreach (preg_split('/\s+/', $labelledBy) ?: [] as $id) {
+                $texts[] = $this->text('//*[@id="' . $id . '"]');
+            }
+            return self::normalize(implode(' ', $texts));
+        }
+        return self::normalize($element->getAttribute('aria-label') ?: $element->getAttribute('title'));
+    }
+
+    /**
      * Same-origin scripts, stylesheets and images referenced by the page,
      * including every candidate of srcset attributes (<picture> sources).
      *

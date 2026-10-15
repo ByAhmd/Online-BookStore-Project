@@ -266,7 +266,8 @@ abstract class HttpTestCase extends DatabaseTestCase
     /**
      * The generic page contract: expected status, HTML, exactly one <h1>, no
      * inline scripts, event-handler attributes or javascript: URLs (the CSP
-     * forbids them), no PHP error output, and every local asset loads.
+     * forbids them), no PHP error output, all content inside landmarks that
+     * can be told apart, and every local asset loads.
      */
     protected function assertHtmlPage(HttpResponse $response, int $status = 200): HtmlDocument
     {
@@ -288,6 +289,9 @@ abstract class HttpTestCase extends DatabaseTestCase
             "$where contains PHP error output"
         );
         self::assertStringContainsString('<title>', $response->body, "$where has no <title>");
+        // Landmarks, as axe checks them in the browser tests (e2e/accessibility.spec.js).
+        self::assertSame([], $document->contentOutsideLandmarks(), "$where has content outside its landmarks (header, main, footer)");
+        self::assertSame([], $document->duplicateLandmarks(), "$where has landmarks that share their role and name");
 
         $client = new HttpClient(self::server()->baseUrl);
         foreach ($document->localAssets() as $asset) {

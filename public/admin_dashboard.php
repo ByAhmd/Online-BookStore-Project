@@ -235,7 +235,7 @@ page_header(t('admin.dashboard.title'), ['Admin_dashboard.css']);
                     'from' => $booksPagination['offset'] + 1,
                     'to' => $booksPagination['offset'] + count($books),
                 ])) ?></p>
-                <div class="table-scroll" role="region" aria-labelledby="manage-books-title" tabindex="0">
+                <div class="table-scroll" role="region" aria-label="<?= e(t('admin.table_region', ['title' => t('admin.dashboard.manage_title')])) ?>" tabindex="0">
                     <table class="admin-table books-table">
                         <thead>
                             <tr>
@@ -292,7 +292,7 @@ page_header(t('admin.dashboard.title'), ['Admin_dashboard.css']);
                     <p><?= e(t('admin.dashboard.no_orders')) ?></p>
                 </div>
 <?php else: ?>
-                <div class="table-scroll" role="region" aria-labelledby="recent-orders-title" tabindex="0">
+                <div class="table-scroll" role="region" aria-label="<?= e(t('admin.table_region', ['title' => t('admin.dashboard.recent_title')])) ?>" tabindex="0">
                     <table class="admin-table orders-table">
                         <thead>
                             <tr>

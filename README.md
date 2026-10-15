@@ -558,7 +558,7 @@ The suites are:
 - **unit:** pure functions, plus the image tools (WebP copies, `bin/optimize-images.php`) on scratch files.
 - **integration:** domain code against a real database, including the demo's showcase (every rule of the store it must keep) and its daily reset.
 - **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, guest browsing, cart and stock, the checkout page and delivery addresses, checkout (with Stripe and with every ending of the payment simulator), the order page, deliveries and order emails, refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, read-only administrators (every admin form is posted as a viewer, and nothing may change; no checkout session id is shown to them), the one-click demo accounts, the demo inbox, the demo's showcase on the home, book and admin pages, and the Arabic interface.
-  Every page check also loads the page's CSS, scripts and images, including each WebP copy in a `srcset`.
+  Every page check also loads the page's CSS, scripts and images, including each WebP copy in a `srcset`, and checks that all of the page is inside landmarks that can be told apart.
 - **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes, the demo's scheduled tasks and the links between the guides) and of the Apache cache rules. The image itself is built and smoke-tested by the CI's Docker job.
 
 Stripe is never contacted by the tests. Most of them talk to `tests/Support/stripe_mock_router.php`, a thin HTTP wrapper

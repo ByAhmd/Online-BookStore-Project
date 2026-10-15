@@ -104,7 +104,7 @@ page_header(t('admin.orders.title'), ['Admin_dashboard.css']);
                     'from' => $pagination['offset'] + 1,
                     'to' => $pagination['offset'] + count($orders),
                 ])) ?></p>
-                <div class="table-scroll" role="region" aria-labelledby="order-list-title" tabindex="0">
+                <div class="table-scroll" role="region" aria-label="<?= e(t('admin.table_region', ['title' => t('admin.orders.list_title')])) ?>" tabindex="0">
                     <table class="admin-table orders-table order-list-table">
                         <thead>
                             <tr>

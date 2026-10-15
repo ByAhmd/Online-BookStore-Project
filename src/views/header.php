@@ -46,15 +46,16 @@ $flashes = take_flashes();
 </head>
 <body class="<?= e($bodyClass) ?>">
     <a class="skip-link" href="#main-content"><?= e(t('common.skip_link')) ?></a>
-<?php if (config('app.demo')): ?>
-    <p class="demo-banner" role="note">
-        <?= e(t($navInbox ? 'common.demo_banner_inbox' : 'common.demo_banner')) ?>
-<?php if ($navUser === null && $navAdmin === null): ?>
-        <?= t_html('common.demo_try', ['link' => '<a href="index.php?form=login#demo-logins">' . e(t('common.demo_try_link')) . '</a>']) ?>
-<?php endif; ?>
-    </p>
-<?php endif; ?>
     <header class="site-header">
+<?php /* The demo banner belongs to the header (the banner landmark), so screen readers moving between landmarks reach it. */ ?>
+<?php if (config('app.demo')): ?>
+        <p class="demo-banner" role="note">
+            <?= e(t($navInbox ? 'common.demo_banner_inbox' : 'common.demo_banner')) ?>
+<?php if ($navUser === null && $navAdmin === null): ?>
+            <?= t_html('common.demo_try', ['link' => '<a href="index.php?form=login#demo-logins">' . e(t('common.demo_try_link')) . '</a>']) ?>
+<?php endif; ?>
+        </p>
+<?php endif; ?>
         <nav class="site-nav" aria-label="<?= e(t('common.main_navigation')) ?>">
             <a class="brand" href="<?= $navAdmin !== null ? 'admin_dashboard.php' : 'Home_Page.php' ?>">
                 <?= e($appName) ?><?php if ($navAdmin !== null): ?> <span class="brand-tag"><?= e(t('common.admin_tag')) ?></span><?php endif; ?>

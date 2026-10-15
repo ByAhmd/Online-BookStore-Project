@@ -655,9 +655,18 @@ textarea.form-control {
     font-size: 0.95rem;
 }
 
-/* "Try the store in one click" (the shared focus ring's black outline stays visible on the banner). */
+/* "Try the store in one click". */
 .demo-banner a {
     color: inherit;
+}
+
+/* The banner is yellow inside the dark header: its link keeps the shared
+   two-tone ring, whose black outline shows on the yellow (a yellow-only ring
+   would disappear). */
+.site-header .demo-banner :focus-visible {
+    outline: 3px solid var(--color-focus-ink);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 5px var(--color-focus);
 }
 
 /* Read-only administrators (role "viewer"): above every page, explaining the switched-off forms. */
