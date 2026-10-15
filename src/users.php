@@ -641,7 +641,7 @@ const DEMO_GUEST_TTL_HOURS = 24;
 /** At most this many demo guests exist at once: the oldest make room for new ones. */
 const DEMO_GUESTS_MAX = 200;
 /**
- * One network (demo_guest_network()) may create this many demo guests
+ * One network (client_network()) may create this many demo guests
  * within DEMO_GUEST_RATE_WINDOW_MINUTES.
  */
 const DEMO_GUEST_RATE_LIMIT = 10;
@@ -670,32 +670,13 @@ function is_demo_guest(int $userId): bool
 }
 
 /**
- * The network that demo guests created from $ip are counted against: an
- * IPv4 address on its own, an IPv6 address by its /64 prefix (for example
- * "2001:db8:1:2::/64"). An IPv6 visitor usually has a whole /64 to choose
- * addresses from, so counting single IPv6 addresses would limit nobody.
- * IPv4-mapped addresses (::ffff:192.0.2.1) count as the IPv4 address.
- */
-function demo_guest_network(string $ip): string
-{
-    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false) {
-        return $ip;
-    }
-    $packed = (string) inet_pton($ip);
-    if (str_starts_with($packed, str_repeat("\0", 10) . "\xFF\xFF")) {
-        return (string) inet_ntop(substr($packed, 12));
-    }
-    return inet_ntop(substr($packed, 0, 8) . str_repeat("\0", 8)) . '/64';
-}
-
-/**
  * Creates a demo guest for the "Try as a customer" button: a new, confirmed
  * customer account named like "Demo reader 4821" (in the visitor's language),
  * with a random address at the reserved DEMO_EMAIL_DOMAIN and a random
  * password that nobody knows, and a few books among its favorites. The
  * caller signs the visitor in to it.
  *
- * The network of the visitor's address ($ip, see demo_guest_network()) may
+ * The network of the visitor's address ($ip, see client_network()) may
  * create DEMO_GUEST_RATE_LIMIT guests per DEMO_GUEST_RATE_WINDOW_MINUTES
  * ("throttled"), and all visitors together DEMO_GUEST_RATE_LIMIT_TOTAL
  * ("crowded"). At most $maxGuests demo guests exist at once: the oldest are
@@ -713,7 +694,7 @@ function create_demo_guest(string $ip, int $maxGuests = DEMO_GUESTS_MAX): array
     }
     try {
         // The ip_address column holds the network that a creation counts against.
-        $network = demo_guest_network($ip);
+        $network = client_network($ip);
         $recent = (int) db_value(
             'SELECT COUNT(*) FROM demo_guest_creations WHERE ip_address = ? AND created_at > (NOW() - INTERVAL ? MINUTE)',
             [$network, DEMO_GUEST_RATE_WINDOW_MINUTES]

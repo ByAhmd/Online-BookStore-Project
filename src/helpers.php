@@ -340,6 +340,27 @@ function client_ip(): string
     return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
 }
 
+/**
+ * The network that limits per visitor count $ip (an address from
+ * client_ip()) against: an IPv4 address on its own, an IPv6 address by its
+ * /64 prefix (for example "2001:db8:1:2::/64"). An IPv6 visitor usually has
+ * a whole /64 to choose addresses from, so counting single IPv6 addresses
+ * would limit nobody. IPv4-mapped addresses (::ffff:192.0.2.1) count as the
+ * IPv4 address. Sign-in throttling (login_is_throttled()) and the demo
+ * customers' limits (create_demo_guest()) use it.
+ */
+function client_network(string $ip): string
+{
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false) {
+        return $ip;
+    }
+    $packed = (string) inet_pton($ip);
+    if (str_starts_with($packed, str_repeat("\0", 10) . "\xFF\xFF")) {
+        return (string) inet_ntop(substr($packed, 12));
+    }
+    return inet_ntop(substr($packed, 0, 8) . str_repeat("\0", 8)) . '/64';
+}
+
 /* ---------------------------------------------------------------------
  * Flash messages and old input (one-request session values)
  * ------------------------------------------------------------------- */

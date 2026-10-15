@@ -142,6 +142,23 @@ final class AuthTest extends DatabaseTestCase
         self::assertTrue(login_is_throttled('target@example.com', '203.0.113.77'), 'Distributed guessing hits the global ceiling');
     }
 
+    public function testTheGlobalCeilingNeedsManyNetworks(): void
+    {
+        // The guesses of one IPv6 host spread over its /64 never reach the global
+        // ceiling: they stop after LOGIN_MAX_ATTEMPTS_PER_EMAIL.
+        $failed = 0;
+        for ($i = 1; $i <= LOGIN_MAX_ATTEMPTS_PER_EMAIL_GLOBAL; $i++) {
+            $ip = '2001:db8:1:2::' . dechex($i);
+            if (!login_is_throttled('admin@example.com', $ip)) {
+                record_failed_login('admin@example.com', $ip);
+                $failed++;
+            }
+        }
+
+        self::assertSame(LOGIN_MAX_ATTEMPTS_PER_EMAIL, $failed);
+        self::assertFalse(login_is_throttled('admin@example.com', '203.0.113.9'), 'The owner still signs in from elsewhere');
+    }
+
     public function testIpIsThrottledAfterTwentyFailuresAcrossEmails(): void
     {
         for ($i = 1; $i < LOGIN_MAX_ATTEMPTS_PER_IP; $i++) {
@@ -152,6 +169,33 @@ final class AuthTest extends DatabaseTestCase
         record_failed_login('victim-20@example.com', '192.0.2.10');
         self::assertTrue(login_is_throttled('fresh@example.com', '192.0.2.10'));
         self::assertFalse(login_is_throttled('fresh@example.com', '192.0.2.11'), 'Other IPs are unaffected');
+    }
+
+    public function testAnIpv6HostCannotEscapeTheLimitsWithinItsNetwork(): void
+    {
+        // One host picks a new address of its /64 for every guess.
+        for ($i = 1; $i <= LOGIN_MAX_ATTEMPTS_PER_EMAIL; $i++) {
+            record_failed_login('target@example.com', '2001:db8:1:2::' . dechex($i));
+        }
+        self::assertTrue(login_is_throttled('target@example.com', '2001:db8:1:2:ffff::99'), 'The whole /64 counts as one visitor');
+        self::assertSame(['2001:db8:1:2::/64'], array_values(array_unique(array_map('strval', db_run('SELECT ip_address FROM login_attempts')->fetchAll(\PDO::FETCH_COLUMN)))));
+        self::assertFalse(login_is_throttled('target@example.com', '2001:db8:1:3::1'), 'The next /64 is another visitor');
+
+        for ($i = LOGIN_MAX_ATTEMPTS_PER_EMAIL + 1; $i <= LOGIN_MAX_ATTEMPTS_PER_IP; $i++) {
+            record_failed_login("victim-$i@example.com", '2001:db8:1:2:' . dechex($i) . '::1');
+        }
+        self::assertTrue(login_is_throttled('fresh@example.com', '2001:db8:1:2:abcd::1'), 'Spraying many accounts from one /64 is limited too');
+        self::assertFalse(login_is_throttled('fresh@example.com', '198.51.100.20'));
+    }
+
+    public function testAnIpv4MappedAddressCountsAsItsIpv4Address(): void
+    {
+        for ($i = 0; $i < LOGIN_MAX_ATTEMPTS_PER_EMAIL; $i++) {
+            record_failed_login('target@example.com', $i % 2 === 0 ? '198.51.100.30' : '::ffff:198.51.100.30');
+        }
+
+        self::assertTrue(login_is_throttled('target@example.com', '198.51.100.30'));
+        self::assertTrue(login_is_throttled('target@example.com', '::ffff:198.51.100.30'));
     }
 
     public function testClearingFailuresUnlocksTheEmail(): void

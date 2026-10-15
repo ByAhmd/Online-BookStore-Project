@@ -2,10 +2,14 @@
 
 declare(strict_types=1);
 
-/** Failures allowed for one email from one IP address. */
+/**
+ * Failures allowed for one email from one network: an IPv4 address or an
+ * IPv6 /64 (client_network()).
+ */
 const LOGIN_MAX_ATTEMPTS_PER_EMAIL = 5;
+/** Failures allowed from one network, whatever the emails. */
 const LOGIN_MAX_ATTEMPTS_PER_IP = 20;
-/** Soft brake against distributed guessing of a single account from many IPs. */
+/** Brake against distributed guessing of a single account from many networks. */
 const LOGIN_MAX_ATTEMPTS_PER_EMAIL_GLOBAL = 100;
 const LOGIN_LOCKOUT_MINUTES = 15;
 
@@ -74,11 +78,18 @@ function dummy_password_hash(): string
  * ------------------------------------------------------------------- */
 
 /**
- * Throttles by email+IP (so an attacker elsewhere cannot lock a user out), by
- * IP, and with a high global per-email ceiling.
+ * Throttles by email and network (so a few failures elsewhere do not lock a
+ * user out), by network, and with a high global per-email ceiling. $ip is
+ * the visitor's address; failures are counted per network (client_network()),
+ * so one IPv6 host cannot escape the limits by changing its address within
+ * its /64. The global ceiling stops distributed guessing at the price that
+ * someone who fails LOGIN_MAX_ATTEMPTS_PER_EMAIL_GLOBAL times from many
+ * networks locks the account for everyone until the window has passed; a
+ * password reset (or bin/create-admin.php for an administrator) clears it.
  */
 function login_is_throttled(string $email, string $ip): bool
 {
+    $ip = client_network($ip);
     $window = LOGIN_LOCKOUT_MINUTES;
     $row = db_one(
         "SELECT
@@ -94,9 +105,13 @@ function login_is_throttled(string $email, string $ip): bool
         || (int) ($row['by_email'] ?? 0) >= LOGIN_MAX_ATTEMPTS_PER_EMAIL_GLOBAL;
 }
 
+/**
+ * Records a failed sign-in for $email from the network of $ip (see
+ * login_is_throttled()); the ip_address column holds that network.
+ */
 function record_failed_login(string $email, string $ip): void
 {
-    db_run('INSERT INTO login_attempts (email, ip_address) VALUES (?, ?)', [mb_substr($email, 0, 255), $ip]);
+    db_run('INSERT INTO login_attempts (email, ip_address) VALUES (?, ?)', [mb_substr($email, 0, 255), client_network($ip)]);
     db_run('DELETE FROM login_attempts WHERE attempted_at < (NOW() - INTERVAL 1 DAY)');
 }
 

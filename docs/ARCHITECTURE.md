@@ -550,9 +550,11 @@ On alwaysdata it runs every night as a scheduled task, next to `php bin/demo-cle
   In particular it never sees a checkout session id, which would let anyone finish that customer's payment on the simulator's page (`pay.php` needs no sign-in, like Stripe's).
 - **Passwords:** bcrypt via `password_hash()`, with a transparent upgrade of legacy MD5 hashes.
   Sign-in performs one hash verification per attempt, so response times don't reveal which accounts exist.
-  Login is throttled after 5 failures for one email from one IP address, 20 failures from one IP, or 100 failures for one email from anywhere, within 15 minutes.
-  Attackers elsewhere therefore cannot lock the real owner out.
-  `bin/create-admin.php` clears an administrator's lockout.
+  Login is throttled after 5 failures for one email from one network, 20 failures from one network, or 100 failures for one email from anywhere, within 15 minutes.
+  A network is an IPv4 address or an IPv6 /64: one IPv6 host usually has a whole /64 to pick addresses from, so single IPv6 addresses would limit nobody.
+  A few failures elsewhere therefore do not lock the real owner out, but 100 failures from at least 20 networks do (see [Known limitations](#known-limitations)).
+  A password reset clears the lockout, and so does `bin/create-admin.php` for an administrator.
+  The same checks apply to the password asked for by email confirmation, password changes and account deletion.
 - **Password-reset and email-verification tokens:** 256-bit random, stored only as SHA-256 hashes, single use, expiring after 60 minutes (reset) or 24 hours (verification).
   Opening a link only shows a form; the token is used when the form is submitted (with the new password, or the account's password for a confirmation).
   Reset requests, sign-ups, verification resends and sign-in attempts on unconfirmed accounts do not reveal whether an account exists.
@@ -583,8 +585,9 @@ The hosting side (serving only `public/`, database rights, TLS, proxies) is cove
 - **Limited account self-service:** customers cannot change their email address or export their data. Administrators cannot manage customers from the UI.
 - **Refunds are full refunds only.** Partial refunds and disputes are handled in the Stripe Dashboard and are not reflected in orders.
   A payment that does not match its order is marked `failed` and logged as `MANUAL REVIEW REQUIRED` in `app.log`.
-- **Login throttling** counts attempts per IP address. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server.
+- **Login throttling** counts attempts per IPv4 address or IPv6 /64 network. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server.
   The Docker image takes the address from `X-Forwarded-For` on connections from private addresses; on alwaysdata this was not confirmed (see [DEPLOYMENT.md](DEPLOYMENT.md#step-9-check-the-visitors-addresses) for a check).
+  The ceiling of 100 failures per email stops guessing from many addresses, at a price: someone with 20 or more networks can lock an account (an administrator's too) for everyone by failing 100 times, and keep it locked by doing so again every 15 minutes. A password reset, or `bin/create-admin.php` for an administrator, clears the count until the next 100 failures.
 - **No sign-up rate limit:** only verification and sign-up notice emails are limited, to one per account every few minutes.
 - **Sign-up reveals registered addresses when email verification is off** (`REQUIRE_EMAIL_VERIFICATION=false`, as in `docker-compose.yml` and the browser tests' local store): the form then answers "An account with this email already exists." With verification on, the default, it gives the same answer either way.
 - **Demo accounts:**
