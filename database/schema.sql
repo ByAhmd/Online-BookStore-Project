@@ -2,7 +2,7 @@
 -- BookWise database schema
 -- Compatible with MariaDB 10.4+ and MySQL 8.0.16+ (InnoDB, utf8mb4).
 --
--- Fresh install (see README.md):
+-- Fresh install (see docs/DEPLOYMENT.md, "Local setup without Docker"):
 --   CREATE DATABASE bookwise CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 --   php bin/install.php --seed          (or import this file, then seed.sql)
 --
@@ -11,7 +11,8 @@
 -- updated with:  php bin/migrate.php
 --
 -- Upgrading the original "signup" database instead? Run
---   php bin/upgrade-legacy-db.php --i-have-a-backup   (see README.md)
+--   php bin/upgrade-legacy-db.php --i-have-a-backup
+-- (see docs/ARCHITECTURE.md, "Upgrading a database from the original project")
 -- Do NOT run this file against an existing database (it intentionally fails
 -- if tables exist).
 --

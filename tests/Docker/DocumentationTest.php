@@ -12,7 +12,8 @@ use PHPUnit\Framework\TestCase;
  * SECURITY.md and docs/*.md. Their links lead to files and headings that
  * exist, the README shows every screenshot in docs/screenshots/ and lists
  * every guide, and docs/CONFIGURATION.md lists every setting the code reads
- * with the default the code uses.
+ * with the default the code uses. Comments in the code and the configuration
+ * files name guides and sections that exist.
  */
 final class DocumentationTest extends TestCase
 {
@@ -131,6 +132,43 @@ final class DocumentationTest extends TestCase
         return implode('/', $parts);
     }
 
+    /**
+     * Comments and messages in the code, the schema and the configuration
+     * files name guides that exist, and a section they name as
+     * `GUIDE.md, "Heading"` is a heading of that guide.
+     */
+    public function testFilesOutsideTheGuidesNameGuidesAndSectionsThatExist(): void
+    {
+        $files = [];
+        foreach (['src', 'bin', 'public', 'database', 'docker', 'e2e', 'lang', '.github'] as $directory) {
+            $entries = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(BASE_PATH . '/' . $directory, \FilesystemIterator::SKIP_DOTS));
+            foreach ($entries as $entry) {
+                if ($entry instanceof \SplFileInfo && preg_match('/\.(php|sql|js|sh|ya?ml|conf|json)$|^\.htaccess$/D', $entry->getFilename())) {
+                    $files[] = substr(str_replace('\\', '/', $entry->getPathname()), strlen(str_replace('\\', '/', BASE_PATH)) + 1);
+                }
+            }
+        }
+        foreach (['Dockerfile', 'docker-compose.yml', '.env.example', '.htaccess', 'playwright.config.js'] as $file) {
+            $files[] = $file;
+        }
+
+        $named = [];
+        foreach ($files as $file) {
+            preg_match_all('/(?<![\w\/.$-])((?:docs\/)?[A-Z][A-Z_]*\.md)\b(?:, "([^"]+)")?/', self::read($file), $references, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL);
+            foreach ($references as [, $guide, $heading]) {
+                self::assertFileExists(BASE_PATH . '/' . $guide, "$file names $guide");
+                if ($heading !== null) {
+                    $anchor = array_key_first(self::anchors("# $heading"));
+                    self::assertArrayHasKey((string) $anchor, self::anchors(self::read((string) $guide)), "$file names the section \"$heading\" of $guide");
+                }
+                $named[] = "$file: $guide" . ($heading !== null ? ", \"$heading\"" : '');
+            }
+        }
+        self::assertContains('database/schema.sql: docs/DEPLOYMENT.md, "Local setup without Docker"', $named, 'The schema points to the fresh install');
+        self::assertContains('database/schema.sql: docs/ARCHITECTURE.md, "Upgrading a database from the original project"', $named, 'The schema points to the legacy upgrade');
+        self::assertContains('bin/setup.php: docs/CONFIGURATION.md', $named, 'The .env file that bin/setup.php writes points to the settings reference');
+    }
+
     public function testTheReadmeShowsEveryScreenshot(): void
     {
         $readme = self::read('README.md');
@@ -231,6 +269,34 @@ final class DocumentationTest extends TestCase
         }
         $undocumented = array_diff(array_unique($read), array_keys($documented));
         self::assertSame([], array_values($undocumented), 'Every setting the code reads is in docs/CONFIGURATION.md');
+    }
+
+    public function testTheTestingGuideListsEverySettingOfTheBrowserTestsStore(): void
+    {
+        $script = self::read('e2e/local-server.js');
+        self::assertSame(1, preg_match('/^const environment = \{\n    \.\.\.process\.env,\n(.*?)^\};/ms', $script, $block));
+        preg_match_all('/^    ([A-Z][A-Z0-9_]*): (.+),$/m', $block[1], $settings, PREG_SET_ORDER);
+        self::assertGreaterThan(10, count($settings));
+
+        $guide = self::read('docs/TESTING.md');
+        self::assertSame(1, preg_match('/^### Running them against a local store\n(.*?)^### /ms', $guide, $section));
+        $documented = [];
+        preg_match_all('/^   \| ([^|]+) \| ([^|]+) \|$/m', $section[1], $rows, PREG_SET_ORDER);
+        foreach ($rows as [, $names, $values]) {
+            preg_match_all('/`([A-Z][A-Z0-9_]*)`/', $names, $keys);
+            $parts = explode(' / ', trim($values));
+            foreach ($keys[1] as $i => $key) {
+                $documented[$key] = count($parts) === count($keys[1]) ? $parts[$i] : trim($values);
+            }
+        }
+
+        foreach ($settings as [, $name, $value]) {
+            self::assertArrayHasKey($name, $documented, "docs/TESTING.md lists $name, which e2e/local-server.js sets");
+            // A fixed value, or one the shell may replace (process.env.X || 'value').
+            if (preg_match("/^(?:process\\.env\\.$name \\|\\| )?'([^']*)'$/D", $value, $literal)) {
+                self::assertStringStartsWith('`' . $literal[1] . '`', $documented[$name], "docs/TESTING.md gives the value of $name");
+            }
+        }
     }
 
     public function testEnvExampleHoldsTheApplicationsSettings(): void

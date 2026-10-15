@@ -98,6 +98,9 @@ Do not open a public issue for a security problem. [SECURITY.md](SECURITY.md) ex
 
 For maintainers. Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html): for this application, a major version for changes that need an operator's action beyond `php bin/install.php` (a setting that is removed or renamed, a script or option that goes away), a minor version for new features, and a patch version for fixes.
 
+Releases are made from `main` only, each with a higher version than the one before: the workflow tags every image it publishes `X` and `latest` without comparing it with the versions published earlier, so a later fix of an older line would move those tags back to it.
+Only versions of the form `X.Y.Z` are released; a pre-release tag such as `v1.1.0-rc.1` stops the workflow at the release notes, before anything is published.
+
 1. In [CHANGELOG.md](CHANGELOG.md), move the entries under `## [Unreleased]` into a new section `## [X.Y.Z] - YYYY-MM-DD` below it, grouped under Added, Changed, Deprecated, Removed, Fixed and Security, and update the link definitions at the end of the file.
    The section becomes the notes of the GitHub release, so links inside it must be absolute (`https://…`).
 2. Check the notes: `php bin/release-notes.php X.Y.Z` prints them, or says what is missing.
@@ -116,6 +119,6 @@ For maintainers. Versions follow [Semantic Versioning](https://semver.org/spec/v
 
    It uses the workflow's own `GITHUB_TOKEN` with `contents: write` and `packages: write`; no other secret is needed.
 6. If the workflow stopped, fix the cause, delete the tag (`git push --delete origin vX.Y.Z` and `git tag -d vX.Y.Z`) and tag again.
-7. After the first release, open the package on GitHub (the repository's **Packages**) and check its visibility: pulling the image without signing in needs a public package.
+7. After the first release made this way, open the package on GitHub (the repository's **Packages**) and check its visibility: pulling the image without signing in needs a public package.
 
 [DEPLOYMENT.md](docs/DEPLOYMENT.md#use-a-published-image) explains how to run a published image.

@@ -126,12 +126,15 @@ Without `BASE_URL`, Playwright first starts `e2e/local-server.js` (also availabl
    | Setting | Value |
    | --- | --- |
    | `APP_ENV` / `APP_DEMO` / `APP_URL` | `local` / `true` / `http://127.0.0.1:8181` |
+   | `APP_NAME` / `APP_DEBUG` / `APP_TIMEZONE` / `APP_DEFAULT_LOCALE` | `BookWise` / `false` / `Asia/Riyadh` / `en` |
+   | `PAYMENT_SIMULATOR` / `STRIPE_CURRENCY` | `true` / `sar` |
    | `MAIL_DRIVER` / `REQUIRE_EMAIL_VERIFICATION` | `database` (the demo inbox) / `false` (`true` in your shell shows the confirmation emails, but the tests that sign customers up need `false`) |
    | `PAYMENT_SIMULATOR_STORE`, `LOG_DIR`, sessions | the folder `bookwise-e2e-8181` in the system's temporary folder, emptied when the store starts and deleted when it stops (on Windows, Playwright ends the store without letting it clean up, so the folder stays until the next start) |
    | `DB_NAME` | from your shell (never from `.env`); default `bookwise_e2e_test` |
    | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASS` | from your shell, or else from the project's `.env` file; defaults `127.0.0.1` / `3306` / `root` / empty |
 
-   A `.env` file in the project cannot change the other settings of this table. `PHP_BINARY` chooses another PHP than the `php` on your `PATH`.
+   A `.env` file in the project cannot change the other settings of this table. Settings that are not in it come from your shell or else from `.env`, as for any store: with `BOOKWISE_ADMIN_EMAIL` and `BOOKWISE_ADMIN_PASSWORD`, for example, `bin/install.php` also creates that administrator in the test database (as for the [README screenshots](#readme-screenshots)).
+   `PHP_BINARY` chooses another PHP than the `php` on your `PATH`.
 
 You can also start the store by hand, without the script (Bash, on an empty database):
 

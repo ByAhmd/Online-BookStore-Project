@@ -313,7 +313,7 @@ setup_say('The database answers.');
  * ------------------------------------------------------------------- */
 
 $lines = ['# Written by php bin/setup.php on ' . date('Y-m-d H:i') . ': a public demo with simulated payments and no email.'];
-$lines[] = '# See .env.example and docs/DEPLOYMENT.md for every setting. Keep this file private.';
+$lines[] = '# See .env.example and docs/CONFIGURATION.md for every setting. Keep this file private.';
 $lines[] = '# For a real store set APP_DEMO=false AND PAYMENT_SIMULATOR=false (docs/DEPLOYMENT.md, section (d)).';
 $lines[] = '';
 $written = [];

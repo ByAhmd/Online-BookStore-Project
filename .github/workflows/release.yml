@@ -42,7 +42,10 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/byahmd/online-bookstore-project
-          # 1.2.3, 1.2 and 1; "latest" is added for these by default.
+          # 1.2.3, 1.2 and 1; "latest" is added for these by default. The
+          # action does not compare with the versions published before, so 1
+          # and latest move to every release: versions are released in
+          # increasing order only (CONTRIBUTING.md).
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

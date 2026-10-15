@@ -10,14 +10,14 @@ The release workflow publishes each version's section below as the notes of its 
 
 ## [1.0.0] - 2026-10-15
 
-The first release of BookWise as an audited and extended version of the original student project, the course project of *Fundamentals of Web Programming* at King Faisal University.
+The first versioned release of BookWise: the audited and extended version of the original student project, the course project of *Fundamentals of Web Programming* at King Faisal University.
 `docs/AUDIT.md` records the audit, the reviews and how each part was checked.
 
 ### Added
 
 - English and Arabic interface with a right-to-left layout, Arabic plural forms, dates and amounts, and a language that is remembered on the account.
 - Guest browsing of the home page, the Explore page (search, genres, pages) and the book pages.
-- Accounts: email verification with the account's password, password reset by email, password change and account deletion.
+- Accounts: email verification with the account's password, password change and account deletion.
 - Stock per book, a catalog of 24 books per page, cover uploads with WebP copies, and refunds in full from the admin order page or the Stripe Dashboard.
 - Saudi National Address delivery addresses (up to five per customer), a checkout page with the delivery address and the VAT, delivery stages (processing, shipped with carrier and tracking number, delivered), an order page with a printable receipt and **Buy again**, and order emails in the customer's language.
 - Administrator roles: owners, and read-only viewers who open every admin page but change nothing and see customers' details and payment references only shortened.
@@ -36,14 +36,15 @@ The first release of BookWise as an audited and extended version of the original
 - `public/` is the web root, and the shared code lives in `src/` (procedural modules loaded by Composer); configuration comes from environment variables or `.env`.
 - The database is used through PDO with prepared statements instead of `mysqli`, with the constraints, foreign keys and transactions the code relies on.
 - Payments: an order is paid only after the Checkout Session has been retrieved from Stripe (or the simulator) and matches the order; prices are charged in integer minor units, and checkouts are serialised per customer.
-- The pages were reworked on the original visual identity: real data on the home page, a no-JavaScript Explore page, a cart with an order summary, flash messages instead of alerts, and layouts that work down to 375 pixels.
+- The pages were reworked on the original visual identity: real data on the home page, an Explore page that also works without JavaScript, a cart with an order summary, flash messages instead of alerts, and layouts that work down to 375 pixels.
+- The original password reset by email was rewritten: its links are single use and expire after 60 minutes, requests have a cooldown, and completing a reset confirms the account's address and signs out its other sessions.
 - PHP 8.3 or newer is required. The project uses PHPUnit 12 and `stripe/stripe-php` 22 (Stripe API version `2026-09-30.endive`, with the client's telemetry turned off).
 
 ### Security
 
 - Prepared statements everywhere, output escaping, a Content-Security-Policy without inline scripts, and CSRF tokens on every state-changing request.
 - Passwords hashed with `password_hash()` (old MD5 hashes are upgraded at the next sign-in), throttled sign-in, session ID regeneration and session time limits.
-- Reset and verification tokens stored only as SHA-256 hashes, single use and expiring; no account enumeration through sign-up, reset or sign-in.
+- Reset and verification tokens stored only as SHA-256 hashes, single use and expiring; no account enumeration through sign-up (with email verification on, the default), reset or sign-in.
 - Uploads checked by their contents, re-encoded with GD and stored under random names, with PHP execution blocked in `uploads/`.
 - Access control on the server for every page and action; read-only administrators get 403 for every change.
 - Live Stripe keys are refused outside production and in demo mode, and a real store refuses the payment simulator.

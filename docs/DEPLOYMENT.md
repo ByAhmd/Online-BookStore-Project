@@ -350,11 +350,15 @@ Notes:
 ### Use a published image
 
 Every release also publishes the image to GitHub Container Registry once its tag has been pushed, so it does not have to be built: `ghcr.io/byahmd/online-bookstore-project`, tagged with the version (`1.0.0`), its minor and major lines (`1.0`, `1`) and `latest`.
+Versions are released in increasing order, so `latest` is the most recent release and a major tag such as `1` the most recent release of that major version.
 The images are built for `linux/amd64` by `.github/workflows/release.yml` from the release's tag ([CONTRIBUTING.md](../CONTRIBUTING.md#releasing-a-version)), from the same Dockerfile as above.
 
 ```bash
 docker pull ghcr.io/byahmd/online-bookstore-project:1.0.0
 ```
+
+Pulling without signing in works only once the package is public; the maintainer checks its visibility after the first release ([CONTRIBUTING.md](../CONTRIBUTING.md#releasing-a-version), step 7).
+While it is private, only GitHub accounts that have access to it can pull it, after signing in with `docker login ghcr.io` (the GitHub user name, and a personal access token (classic) with the `read:packages` scope as the password).
 
 To run it with the Compose setup of (a), give it the name the Compose file uses for its own build, then start Compose **without** `--build` (Compose builds `bookwise:local` only when it is missing):
 

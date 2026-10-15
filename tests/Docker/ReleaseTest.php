@@ -161,6 +161,12 @@ final class ReleaseTest extends TestCase
             self::assertStringContainsString("type=semver,pattern=$pattern\n", $workflow);
         }
         self::assertStringNotContainsString('latest=false', $workflow, 'Releases are also tagged latest');
+        // The action moves the major tag and latest to every release it
+        // publishes, so the guides say to release in increasing order, and
+        // that an anonymous pull needs a public package.
+        self::assertStringContainsString('Releases are made from `main` only, each with a higher version than the one before', self::read('CONTRIBUTING.md'));
+        self::assertStringContainsString('Versions are released in increasing order', self::read('docs/DEPLOYMENT.md'));
+        self::assertStringContainsString('Pulling without signing in works only once the package is public', self::read('docs/DEPLOYMENT.md'));
         self::assertStringContainsString("registry: ghcr.io\n          username: \${{ github.actor }}\n          password: \${{ secrets.GITHUB_TOKEN }}\n", $workflow);
         foreach (['push: true', 'tags: ${{ steps.meta.outputs.tags }}', 'labels: ${{ steps.meta.outputs.labels }}', 'provenance: mode=max', 'sbom: true'] as $setting) {
             self::assertStringContainsString("          $setting\n", $workflow, "build-push-action: $setting");

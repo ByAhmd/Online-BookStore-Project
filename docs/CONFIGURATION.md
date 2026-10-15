@@ -19,7 +19,7 @@ Every setting of BookWise is an environment variable. This page lists all of the
 - The file has one `KEY=VALUE` per line. Blank lines and lines starting with `#` are ignored, as is a comment after a value (`value # note`), and an `export ` prefix is allowed.
   Values can be quoted: `'single'` quotes keep the text as it is, `"double"` quotes understand `\n`, `\"` and `\\`.
 - Yes/no settings are true for `1`, `true`, `yes` or `on` (in any case) and false for anything else.
-- `.env` is git-ignored and must never be committed; `.env.example` contains placeholders only. The PHPUnit suites never read `.env`, and the local store of the browser tests takes only its database login from it (see [TESTING.md](TESTING.md)).
+- `.env` is git-ignored and must never be committed; `.env.example` contains placeholders only. The PHPUnit suites never read `.env`. The local store of the browser tests sets the demo's settings itself and takes the others from it, such as the database login (see [TESTING.md](TESTING.md#running-them-against-a-local-store)).
 
 To start, copy the template and edit it:
 

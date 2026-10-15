@@ -192,7 +192,7 @@ Verification after the fixes:
 
 ## 6. Second round (October 2026)
 
-The project was then extended a second time, up to its first release, 1.0.0 (15 October 2026, see `CHANGELOG.md`).
+The project was then extended a second time, up to its first versioned release, 1.0.0 (15 October 2026, see `CHANGELOG.md`).
 The sections above are kept as they were written. Since this round, the README is a short landing page: the README sections they refer to are now in other files.
 The credential rotation note is in `SECURITY.md`, the known limitations are in `docs/ARCHITECTURE.md`, and the nginx `uploads/` rule is in the deployment checklist of `docs/DEPLOYMENT.md`.
 
@@ -233,12 +233,14 @@ CI found three more problems after the reviews:
 - PHPStan on PHP 8.5 treats a bare `$argv` as possibly undefined in the scripts of `bin/`. They read `$GLOBALS['argv']`, and `tests/Unit/ScriptArgumentsTest.php` fails if one reads `$argv` again.
 - A flaky test: the profile test looked for four-digit runs of card numbers, which random CSRF tokens and asset versions contain by chance, about once in a thousand runs. It now looks for the full card numbers.
 
+The documentation and the release preparation (the guides, the changelog, the release workflow and the screenshots) were reviewed the same way. The review reported 10 low findings: statements that did not match the code (the demo banner, the settings the browser tests' store takes from `.env`), changelog entries that claimed too much, comments that still pointed to sections of the old README, image tags that a release made out of order would move back, a missing note on the package's visibility, intermediate commits whose links did not resolve yet, and a screenshot caption and sequence. All were fixed.
+
 Verification of the release, on the final tree, against isolated sandbox databases only:
 
 | Check | Result |
 | --- | --- |
 | `php bin/lint.php` | 194 PHP files, no syntax errors |
 | PHPStan level 8 (`src/`, `bin/`, `public/`) | no errors |
-| PHPUnit (unit, integration, http, deploy) on PHP 8.4 + MariaDB 10.4 | **OK, 1172 tests** (PHP 8.4.23, MariaDB 10.4.32) |
+| PHPUnit (unit, integration, http, deploy) on PHP 8.4 + MariaDB 10.4 | **OK, 1174 tests** (PHP 8.4.23, MariaDB 10.4.32) |
 | Browser tests (Playwright with axe-core, Chromium) against a local demo store on PHP 8.4 + MariaDB 10.4 | **25 passed** |
-| CI: PHP 8.3, 8.4 and 8.5 with MySQL 8.4, PHP 8.4 with MariaDB 11.4, the Docker image job and the browser-test job | run by GitHub Actions on every push and pull request |
+| CI: PHP 8.3, 8.4 and 8.5 with MySQL 8.4, PHP 8.4 with MariaDB 11.4, the Docker image job and the browser-test job | not yet run on this tree; GitHub Actions runs it on pushes to `main` and on pull requests |

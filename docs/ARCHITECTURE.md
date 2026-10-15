@@ -509,7 +509,7 @@ Existing MD5 passwords keep working and are re-hashed with bcrypt the next time 
 
 ### One-click demo accounts
 
-Only in demo mode, the sign-in page and the banner offer two buttons (`demo_login.php`, which answers 404 without `APP_DEMO=true`; both are POST forms with a CSRF token):
+Only in demo mode, the sign-in page offers two buttons (`demo_login.php`, which answers 404 without `APP_DEMO=true`; both are POST forms with a CSRF token), and the banner links to them for visitors who are not signed in:
 
 - **Try as a customer** creates a fresh account for that visitor ("Demo reader 4821", a random address at the reserved `demo.invalid` domain, a random password nobody knows, already confirmed, with a few favorites and a made-up delivery address in Riyadh) and signs it in, so the visitor can check out at once.
   It can use the whole store (cart, simulated checkout, reviews of the books it bought, the demo inbox) and delete itself, but it has no password to change or reset.
@@ -586,6 +586,7 @@ The hosting side (serving only `public/`, database rights, TLS, proxies) is cove
 - **Login throttling** counts attempts per IP address. Behind a reverse proxy, every client shares the proxy's address unless `REMOTE_ADDR` is set correctly by the server.
   The Docker image takes the address from `X-Forwarded-For` on connections from private addresses; on alwaysdata this was not confirmed (see [DEPLOYMENT.md](DEPLOYMENT.md#step-9-check-the-visitors-addresses) for a check).
 - **No sign-up rate limit:** only verification and sign-up notice emails are limited, to one per account every few minutes.
+- **Sign-up reveals registered addresses when email verification is off** (`REQUIRE_EMAIL_VERIFICATION=false`, as in `docker-compose.yml` and the browser tests' local store): the form then answers "An account with this email already exists." With verification on, the default, it gives the same answer either way.
 - **Demo accounts:**
   - Demo customers are limited per visitor (10 per hour for an IPv4 address or an IPv6 /64 network), with the same caveat as login throttling behind a proxy: if every visitor shares the proxy's address, they share the limit too.
   - Someone with many addresses can still use up the limit for all visitors (60 per hour). Nobody can then start a demo customer until the hour is over, but existing demo customers are not pushed out faster than that.
