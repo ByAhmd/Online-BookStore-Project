@@ -28,20 +28,38 @@ async function tabTo(page, target, { backward = false, max = 60 } = {}) {
     throw new Error(`Not reached with ${backward ? 'Shift+Tab' : 'Tab'} after ${max} presses. Focus went through:\n  ${trail.join('\n  ')}`);
 }
 
-/** The focused element shows a focus indicator: an outline of 2 px or more, or a ring. */
+/**
+ * The focused element shows a focus indicator that it does not have without
+ * the focus: an outline of 2 px or more, or another box shadow. Some
+ * elements have a box shadow anyway (the current section's marker in the
+ * profile menu), so the element is compared with itself after blur(), then
+ * focused again.
+ */
 async function expectVisibleFocus(locator, name) {
     await expect(locator, `${name} has the focus`).toBeFocused();
     await expect(locator, `${name} is on screen`).toBeInViewport();
     const style = await locator.evaluate((element) => {
-        const computed = window.getComputedStyle(element);
-        return {
-            focusVisible: element.matches(':focus-visible'),
-            outline: computed.outlineStyle !== 'none' && parseFloat(computed.outlineWidth) >= 2,
-            ring: computed.boxShadow !== 'none',
+        const indicator = () => {
+            const computed = window.getComputedStyle(element);
+            const width = parseFloat(computed.outlineWidth);
+            return {
+                outline: computed.outlineStyle === 'none' || width === 0 ? 'none' : `${width}px ${computed.outlineStyle} ${computed.outlineColor}`,
+                outlineWidth: width,
+                boxShadow: computed.boxShadow,
+            };
         };
+        const focusVisible = element.matches(':focus-visible');
+        const focused = indicator();
+        element.blur();
+        const unfocused = indicator();
+        element.focus({ preventScroll: true });
+        return { focusVisible, focused, unfocused, refocused: document.activeElement === element };
     });
     expect(style.focusVisible, `${name} matches :focus-visible`).toBe(true);
-    expect(style.outline || style.ring, `${name} shows a focus outline or ring`).toBe(true);
+    expect(style.refocused, `${name} has the focus again after the comparison`).toBe(true);
+    const outline = style.focused.outline !== 'none' && style.focused.outlineWidth >= 2 && style.focused.outline !== style.unfocused.outline;
+    const ring = style.focused.boxShadow !== 'none' && style.focused.boxShadow !== style.unfocused.boxShadow;
+    expect(outline || ring, `${name} shows a focus outline or ring it does not have without the focus: ${JSON.stringify(style)}`).toBe(true);
 }
 
 test('the demo banner in the dark header shows a dark focus ring on its yellow', async ({ page }) => {
