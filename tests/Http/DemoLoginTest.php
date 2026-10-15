@@ -155,8 +155,17 @@ final class DemoLoginTest extends HttpTestCase
         $this->enableDemo();
         [$visitor, $guest] = $this->demoCustomer();
 
+        // A made-up delivery address is ready, so checkout needs no typing.
+        $addresses = db_all('SELECT city, phone, is_default FROM addresses WHERE user_id = ?', [$guest['id']]);
+        self::assertSame([['city' => 'Riyadh', 'phone' => '+966500000000', 'is_default' => 1]], array_map(
+            static fn (array $row): array => ['city' => $row['city'], 'phone' => $row['phone'], 'is_default' => (int) $row['is_default']],
+            $addresses
+        ));
+
+        // purchase() keeps the checkout page's preselected address.
         $purchase = $this->purchase($visitor, [51 => 1]);
         self::assertSame((int) $guest['id'], (int) $purchase['order']['user_id']);
+        self::assertSame('Riyadh', db_value('SELECT city FROM order_addresses WHERE order_id = ?', [$purchase['order']['id']]));
 
         $book = $this->bookPage($visitor, 51);
         $response = $visitor->submitForm($book, 'Selected.php?id=51', ['rating' => '5', 'comment' => 'Tried in one click.'], ['action' => 'add_review']);
@@ -323,7 +332,7 @@ final class DemoLoginTest extends HttpTestCase
         $this->enableDemo(['PAYMENT_SIMULATOR' => 'true']);
         [$customer] = $this->signedInCustomer('Paying Reader');
         $this->assertRedirect($this->addToCart($customer, 51, 1), 'cart.php');
-        $checkout = $customer->submitForm($customer->get('cart.php'), 'checkout.php');
+        $checkout = $this->submitCheckout($customer);
         $this->assertStatus(303, $checkout);
         self::assertSame(1, preg_match('#/pay\.php\?session=(cs_test_[A-Za-z0-9]+)$#D', (string) $checkout->header('Location'), $match));
         $sessionId = $match[1];
@@ -340,6 +349,13 @@ final class DemoLoginTest extends HttpTestCase
         }
         $detail = $this->assertHtmlPage($visitor->get('admin_order.php?id=' . (int) $order['id']));
         self::assertSame(['cs_test_…'], $detail->texts('//code[' . HtmlDocument::hasClass('stripe-ref') . ']'), 'Only the prefix of the session id');
+        // The delivery address is reduced to its city: no recipient, street, number or phone.
+        $addressText = $detail->text('//p[' . HtmlDocument::hasClass('address-text') . ']');
+        self::assertSame('Delivery in Riyadh (the full address is hidden from read-only administrators).', $addressText);
+        foreach (['Sara Ahmed', 'King Fahd Road', 'Al Olaya', '1234', '512345678', 'RRRD2929'] as $private) {
+            self::assertStringNotContainsString($private, $detail->text('//main'), "No $private for a viewer");
+        }
+        self::assertNull($detail->first('//a[starts-with(@href, "tel:")]'), 'No phone link for a viewer');
 
         // Nothing the viewer saw lets it finish the customer's payment.
         $state = payment_simulator_session($sessionId, self::server()->configuration['PAYMENT_SIMULATOR_STORE']);

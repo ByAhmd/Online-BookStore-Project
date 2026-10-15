@@ -97,7 +97,7 @@ page architecture is unchanged; there is no framework.
 - Optional demo mode (`APP_DEMO=true`) for a public showcase: a banner, a built-in payment simulator instead of Stripe, and optionally a demo inbox that shows the store's emails instead of sending them.
   The simulator runs inside the application, so no Stripe account, second server or special web-server setup is needed.
 - One-click demo accounts (only with `APP_DEMO=true`), offered on the sign-in page and pointed to by the banner:
-  - **Try as a customer** creates a fresh account for that visitor ("Demo reader 4821", a random address at the reserved `demo.invalid` domain, a random password nobody knows, already confirmed, with a few favorites) and signs it in.
+  - **Try as a customer** creates a fresh account for that visitor ("Demo reader 4821", a random address at the reserved `demo.invalid` domain, a random password nobody knows, already confirmed, with a few favorites and a made-up delivery address in Riyadh) and signs it in, so the visitor can check out at once.
     It can use the whole store (cart, simulated checkout, reviews of the books it bought, the demo inbox) and delete itself, but it has no password to change or reset.
     One visitor (an IPv4 address, or an IPv6 /64 network) may create 10 per hour and all visitors together 60 per hour, and at most 200 exist at once (the oldest are deleted, with their data, to make room).
     `php bin/demo-cleanup.php` deletes them after 24 hours, with their carts, favorites, reviews and abandoned checkouts; paid orders are kept, anonymised, as when customers delete their accounts.

@@ -179,6 +179,7 @@ return [
         'address' => 'Delivery address',
         'no_address' => 'No delivery address is stored for this order.',
         'call' => 'Call :phone',
+        'address_shortened' => 'Delivery in :city (the full address is hidden from read-only administrators).',
     ],
 
     // Delivery of paid orders on the order page (processing -> shipped -> delivered).

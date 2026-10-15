@@ -144,6 +144,12 @@ return [
         'admin_hint' => 'Look around the dashboard, the books and the orders. Every form is switched off, so nothing can be changed.',
         // Stored as the demo customer's name.
         'guest_name' => 'Demo reader :number',
+        // A made-up delivery address saved for each demo customer.
+        'address' => [
+            'city' => 'Riyadh',
+            'district' => 'Sample District',
+            'street' => 'Demo Street',
+        ],
         'admin_name' => 'Demo administrator',
         'customer_welcome' => [
             'one' => 'Welcome, :name! This demo account is yours to try the store with. It is deleted after :count hour.',

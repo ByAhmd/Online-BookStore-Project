@@ -165,7 +165,9 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
 <?php endif; ?>
 
                     <h2 id="order-address-title"><?= e(t('admin.order.address')) ?></h2>
-<?php if ($address !== null): ?>
+<?php if ($address !== null && !$showCustomers): ?>
+                    <p class="address-text"><?= t_markup('admin.order.address_shortened', ['city' => '<bdi dir="auto">' . e((string) $address['city']) . '</bdi>']) ?></p>
+<?php elseif ($address !== null): ?>
                     <p class="address-text"><?= address_html($address) ?></p>
                     <p class="address-call"><a href="tel:<?= e((string) $address['phone']) ?>"><?= t_markup('admin.order.call', ['phone' => '<span dir="ltr">' . e(format_saudi_mobile((string) $address['phone'])) . '</span>']) ?></a></p>
 <?php else: ?>
@@ -214,7 +216,7 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
                         <input type="hidden" name="action" value="ship">
                         <div class="form-field">
                             <label for="shipment-carrier"><?= e(t('admin.fulfilment.carrier')) ?></label>
-                            <input class="form-control" type="text" id="shipment-carrier" name="carrier" maxlength="<?= CARRIER_MAX_LENGTH ?>" list="carrier-options" autocomplete="off" dir="auto" value="<?= e($shipmentValues['carrier']) ?>"<?= $shipmentAria('carrier', 'shipment-carrier-hint') ?>>
+                            <input class="form-control" type="text" id="shipment-carrier" name="carrier" maxlength="<?= CARRIER_MAX_LENGTH ?>" list="carrier-options" autocomplete="off" dir="auto" value="<?= e($shipmentValues['carrier']) ?>"<?= $shipmentAria('carrier', 'shipment-carrier-hint') ?><?= $locked ?>>
 <?php if (is_array($carriers)): ?>
                             <datalist id="carrier-options">
 <?php foreach ($carriers as $carrier): ?>
@@ -229,14 +231,14 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
                         </div>
                         <div class="form-field">
                             <label for="shipment-tracking_number"><?= e(t('admin.fulfilment.tracking_number')) ?></label>
-                            <input class="form-control" type="text" id="shipment-tracking_number" name="tracking_number" maxlength="<?= TRACKING_NUMBER_MAX_LENGTH ?>" autocomplete="off" spellcheck="false" dir="ltr" value="<?= e($shipmentValues['tracking_number']) ?>"<?= $shipmentAria('tracking_number', 'shipment-tracking_number-hint') ?>>
+                            <input class="form-control" type="text" id="shipment-tracking_number" name="tracking_number" maxlength="<?= TRACKING_NUMBER_MAX_LENGTH ?>" autocomplete="off" spellcheck="false" dir="ltr" value="<?= e($shipmentValues['tracking_number']) ?>"<?= $shipmentAria('tracking_number', 'shipment-tracking_number-hint') ?><?= $locked ?>>
                             <p class="form-hint" id="shipment-tracking_number-hint"><?= e(t('admin.fulfilment.tracking_hint')) ?></p>
 <?php if ($shipmentErrors['tracking_number'] !== null): ?>
                             <p class="field-error" id="shipment-tracking_number-error"><?= e($shipmentErrors['tracking_number']) ?></p>
 <?php endif; ?>
                         </div>
                         <div class="form-actions">
-                            <button type="submit" class="btn admin-submit" aria-describedby="ship-help"><?= e(t('admin.fulfilment.ship_button')) ?></button>
+                            <button type="submit" class="btn admin-submit" aria-describedby="ship-help"<?= $locked ?>><?= e(t('admin.fulfilment.ship_button')) ?></button>
                         </div>
                     </form>
 <?php elseif ($status === 'paid' && $fulfilment === 'shipped'): ?>
@@ -244,7 +246,7 @@ page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashbo
                     <form method="post" action="<?= e($orderUrl) ?>" data-confirm="<?= e(t('admin.fulfilment.deliver_confirm', ['id' => (int) $order['id']])) ?>" data-once>
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="deliver">
-                        <button type="submit" class="btn admin-submit" aria-describedby="deliver-help"><?= e(t('admin.fulfilment.deliver_button')) ?></button>
+                        <button type="submit" class="btn admin-submit" aria-describedby="deliver-help"<?= $locked ?>><?= e(t('admin.fulfilment.deliver_button')) ?></button>
                     </form>
 <?php elseif ($status === 'refunded'): ?>
                     <p><?= e(t('admin.fulfilment.refunded_note')) ?></p>

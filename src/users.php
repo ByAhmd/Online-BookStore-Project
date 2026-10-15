@@ -531,8 +531,9 @@ function delete_customer_account(int $userId, string $password, string $ip): arr
  * Open checkouts are resolved first (settle_pending_orders) while holding the
  * customer's checkout lock, so no payment can complete for an account that
  * no longer exists. Then, in one transaction: the customer's reviews and
- * reactions, reset tokens, login attempts, demo inbox messages and the users
- * row are deleted (cart, favorites, sales and verification tokens cascade;
+ * reactions, reset tokens, login attempts, demo inbox messages, the delivery
+ * addresses of orders that no longer need them and the users row are deleted
+ * (cart, favorites, sales, saved addresses and verification tokens cascade;
  * orders are kept with user_id set to NULL by the schema). The uploaded
  * profile picture is left to the caller (account['profile_image']).
  *
@@ -755,7 +756,33 @@ function create_demo_guest(string $ip, int $maxGuests = DEMO_GUESTS_MAX): array
     }
 
     $user = find_user($userId) ?? throw new RuntimeException('The new demo guest could not be loaded.');
+    // A made-up delivery address, so the visitor can check out at once.
+    [$address, $errors] = validate_address_input(demo_guest_address((string) $user['name']));
+    if ($errors === []) {
+        save_customer_address($userId, $address, null, true);
+    }
     return ['status' => 'created', 'user' => $user];
+}
+
+/**
+ * A made-up delivery address in the right format for a demo guest, in the
+ * visitor's language: no real person, phone number or building.
+ *
+ * @return array<string, string>
+ */
+function demo_guest_address(string $name): array
+{
+    return [
+        'recipient_name' => $name,
+        'phone' => '0500000000',
+        'city' => t('auth.demo.address.city'),
+        'district' => t('auth.demo.address.district'),
+        'street' => t('auth.demo.address.street'),
+        'building_number' => '1234',
+        'postal_code' => '12345',
+        'additional_number' => '',
+        'short_address' => '',
+    ];
 }
 
 /**
