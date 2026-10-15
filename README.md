@@ -410,6 +410,7 @@ A leaked webhook secret alone therefore cannot mark an unpaid order as paid or a
 **API version.** `stripe/stripe-php` 22 sends every request with Stripe API version `2026-09-30.endive`.
 Checkout therefore limits the payment methods to cards with `allowed_payment_method_types`; that version no longer has `payment_method_types`.
 When Stripe adds a notice to an answer (a `Stripe-Notice` header, for example in test mode), it is written to `app.log` as a `Stripe notice` warning and never interrupts a checkout or a refund.
+The store turns off stripe-php's client telemetry. Since version 21 it would keep a random ID in the configuration folder of the user that runs PHP (`~/.config/stripe` or `%APPDATA%\Stripe`), even with the simulator, and send that ID and the operating system's name to Stripe with each request.
 
 **Stock.** Adding to the cart and starting a checkout check the stock. The copies are taken out of stock when the payment is confirmed, and put back when an order is refunded before it is shipped.
 Once shipped, the copies have left the store, so a refund does not change the stock; staff add any returned copies on the book's edit page.

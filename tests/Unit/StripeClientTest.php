@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace BookWise\Tests\Unit;
 
 use BookWise\Tests\Support\IsolatedPhp;
+use FilesystemIterator;
 use PHPUnit\Framework\TestCase;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 
 /**
  * stripe_client() caches its client for the whole process, so each case runs
@@ -124,6 +127,27 @@ final class StripeClientTest extends TestCase
         self::assertArrayNotHasKey('storage/logs/app.log', $run['files'], 'Nothing is logged');
     }
 
+    public function testStripePhpWritesNothingToTheUsersConfigurationFolder(): void
+    {
+        // stripe-php 21+ would create a telemetry_id file on its first request, also
+        // with the simulator: in %APPDATA%\Stripe on Windows, else in
+        // $XDG_CONFIG_HOME/stripe or ~/.config/stripe.
+        $home = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'bookwise-home-' . bin2hex(random_bytes(6));
+        self::assertTrue(mkdir($home, 0700));
+        try {
+            $run = IsolatedPhp::run('simulated_payment', [], [
+                'PAYMENT_SIMULATOR' => 'true', 'STRIPE_SECRET_KEY' => null,
+                'APPDATA' => $home, 'XDG_CONFIG_HOME' => $home, 'HOME' => $home,
+            ]);
+
+            self::assertTrue($run['result']['ok'], (string) json_encode($run['result']));
+            self::assertSame(['succeeded', 2500], $run['result']['refund'], 'Requests were sent');
+            self::assertSame([], array_values(array_diff((array) scandir($home), ['.', '..'])), 'Nothing is written outside the project');
+        } finally {
+            self::removeDirectory($home);
+        }
+    }
+
     public function testDemoModeTurnsTheSimulatorOnUnlessItIsSwitchedOff(): void
     {
         $demo = IsolatedPhp::run('stripe_client', [], ['APP_DEMO' => 'true', 'PAYMENT_SIMULATOR' => null, 'STRIPE_SECRET_KEY' => null]);
@@ -160,5 +184,20 @@ final class StripeClientTest extends TestCase
 
         $demo = IsolatedPhp::run('stripe_client', [], ['APP_ENV' => 'production', 'APP_DEMO' => 'true', 'PAYMENT_SIMULATOR' => 'true', 'STRIPE_SECRET_KEY' => null]);
         self::assertSame(['ok' => true, 'api_base' => PAYMENT_SIMULATOR_API_BASE], $demo['result'], 'A public demo in production keeps the simulator');
+    }
+
+    private static function removeDirectory(string $directory): void
+    {
+        if (!is_dir($directory)) {
+            return;
+        }
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $item) {
+            $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
+        }
+        @rmdir($directory);
     }
 }

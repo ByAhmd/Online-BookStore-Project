@@ -104,6 +104,33 @@ final class CheckoutTest extends CheckoutTestCase
         self::assertSame(1, substr_count((string) file_get_contents($logFile, false, null, $logOffset), 'Stripe notice'));
     }
 
+    public function testRequestsCarryNoClientTelemetry(): void
+    {
+        $user = $this->customerWithCart([self::ESABELLA => 1]);
+        [$sessionId] = $this->checkout($user);
+        $this->stripe->pay($sessionId);
+        self::assertSame('paid', confirm_checkout_return((int) $user['id'], $sessionId)['state']);
+
+        $requests = $this->stripe->http->requests();
+        self::assertGreaterThanOrEqual(2, count($requests), 'stripe-php sends the previous request\'s timing with the next one');
+        foreach ($requests as $request) {
+            $label = $request['method'] . ' ' . $request['path'];
+            $userAgent = null;
+            foreach ($request['headers'] as $header) {
+                self::assertStringStartsNotWith('X-Stripe-Client-Telemetry:', $header, $label);
+                if (str_starts_with($header, 'X-Stripe-Client-User-Agent: ')) {
+                    $userAgent = json_decode(substr($header, strlen('X-Stripe-Client-User-Agent: ')), true, 512, JSON_THROW_ON_ERROR);
+                }
+            }
+            self::assertIsArray($userAgent, $label);
+            // stripe-php 21+ keeps a random telemetry_id in the user's configuration
+            // folder and sends it, with the operating system, unless telemetry is off.
+            self::assertArrayNotHasKey('telemetry_id', $userAgent, $label);
+            self::assertArrayNotHasKey('platform', $userAgent, $label);
+            self::assertSame('php', $userAgent['lang'], $label);
+        }
+    }
+
     public function testLongTitlesAreTruncatedForStripe(): void
     {
         $book = $this->insertStockedBook(['title' => str_repeat('L', 255)]);

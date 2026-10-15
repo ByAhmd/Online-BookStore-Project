@@ -552,6 +552,7 @@ The free alwaysdata plan cannot be used for a store that makes money.
 ## Security notes
 
 - **The demo takes no real payments.** With the payment simulator on, the Stripe key is not even read and nothing leaves the server.
+  The store also turns off stripe-php's client telemetry, so no Stripe ID file is written to the account's home folder (`~/.config/stripe`).
   **Never put live Stripe keys into a demo:** in demo mode the application never uses a live key, even with the simulator off, and the container refuses to start with one.
 - **The payment page is closed outside the simulator.** `pay.php` answers 404 when `PAYMENT_SIMULATOR` is off. Its buttons need the visitor's CSRF token, and it only ever redirects to the store's own `APP_URL`.
   The simulator keeps no card data and no email addresses.

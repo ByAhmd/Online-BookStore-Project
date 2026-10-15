@@ -83,6 +83,12 @@ function stripe_client(): \Stripe\StripeClient
         app_log('error', 'Refusing the payment simulator on a real store (APP_ENV=production, APP_DEMO=false): set PAYMENT_SIMULATOR=false to take payments with Stripe');
         throw new CheckoutException(t('shop.checkout.not_available'));
     }
+    // Client telemetry is on by default in stripe-php. Since version 21 it keeps
+    // a random ID in the user's configuration folder (%APPDATA%\Stripe or
+    // ~/.config/stripe), outside the project, and sends it with the operating
+    // system to Stripe; the simulator would create that file too. The store
+    // needs none of it, nor the timing of earlier requests that it also sends.
+    \Stripe\Stripe::setEnableTelemetry(false);
     if (payment_simulator_enabled()) {
         // stripe-php sends every request through one global HTTP client: the
         // simulator's answers them in-process, so nothing reaches the network.

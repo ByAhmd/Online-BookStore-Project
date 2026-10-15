@@ -11,6 +11,7 @@ use Stripe\Exception\ApiConnectionException;
 use Stripe\Exception\IdempotencyException;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\HttpClient\ClientInterface;
+use Stripe\Stripe;
 use Stripe\StripeClient;
 
 /**
@@ -22,6 +23,7 @@ final class PaymentSimulatorTest extends TestCase
 {
     private string $store;
     private ?ClientInterface $previousHttpClient = null;
+    private ?bool $previousTelemetry = null;
 
     protected function setUp(): void
     {
@@ -32,6 +34,9 @@ final class PaymentSimulatorTest extends TestCase
     {
         if ($this->previousHttpClient !== null) {
             ApiRequestor::setHttpClient($this->previousHttpClient);
+        }
+        if ($this->previousTelemetry !== null) {
+            Stripe::setEnableTelemetry($this->previousTelemetry);
         }
         // The state file, its .lock file and whatever a test left next to them.
         foreach (glob(dirname($this->store) . DIRECTORY_SEPARATOR . '*') ?: [] as $path) {
@@ -412,6 +417,9 @@ final class PaymentSimulatorTest extends TestCase
     {
         $this->previousHttpClient = ApiRequestor::httpClient();
         ApiRequestor::setHttpClient(new PaymentSimulatorHttpClient($this->store));
+        // As in stripe_client(): no telemetry ID file in the user's configuration folder.
+        $this->previousTelemetry = Stripe::getEnableTelemetry();
+        Stripe::setEnableTelemetry(false);
         $stripe = new StripeClient(['api_key' => PAYMENT_SIMULATOR_API_KEY, 'api_base' => PAYMENT_SIMULATOR_API_BASE]);
 
         // Native integers and nested arrays are encoded as they would be on the wire.
