@@ -134,7 +134,7 @@ On CI, a failed test is tried once more and two tests run at a time. When a test
 
 ## README screenshots
 
-`npm run screenshots` takes the README's screenshots, as JPEG files (quality 78) in `docs/screenshots/`:
+`npm run screenshots` takes a new set of screenshots for the README, as JPEG files (quality 78) in `docs/screenshots/`:
 
 | File | Shows |
 | --- | --- |
@@ -153,3 +153,4 @@ BASE_URL=http://localhost:8080 SCREENSHOT_ADMIN_EMAIL=admin@bookwise.test SCREEN
 
 With `SCREENSHOT_ADMIN_EMAIL` and `SCREENSHOT_ADMIN_PASSWORD` (an owner administrator of that store, such as the local one of `docker-compose.yml` above), the order is marked shipped first, so its timeline shows the carrier and the tracking number, and the dashboard is the owner's. Without them, the dashboard is the read-only demo administrator's.
 The script overwrites the files of the same name; look at them before you commit them.
+The README's [Screenshots](../README.md#screenshots) table still shows an older set, which also uses `cart.jpg`, `payment-success.jpg`, `reviews.jpg` and `sign-up.jpg`. The script does not take those four, so when you commit its images, switch the table to them and delete the four old files.

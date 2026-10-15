@@ -586,7 +586,7 @@ BASE_URL=http://localhost:8080 npx playwright test             # or tests the Do
 ```
 
 The CI's **Browser tests** job runs them against the Docker Compose store and keeps the HTML report when a test fails.
-[docs/TESTING.md](docs/TESTING.md) explains the setup, the accessibility checks and `npm run screenshots`, which takes the [screenshots](#screenshots) of this README.
+[docs/TESTING.md](docs/TESTING.md) explains the setup, the accessibility checks and `npm run screenshots`, which takes a new set of screenshots for this README (the [Screenshots](#screenshots) below are still an older set).
 
 ### Images and browser caching
 
