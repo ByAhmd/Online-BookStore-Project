@@ -8,6 +8,7 @@ use BookWise\Tests\Support\HtmlDocument;
 use BookWise\Tests\Support\HttpClient;
 use BookWise\Tests\Support\HttpResponse;
 use BookWise\Tests\Support\HttpTestCase;
+use BookWise\Tests\Support\StockFixtures;
 
 /**
  * The checkout page (checkout.php) between the cart and the payment: the
@@ -16,6 +17,8 @@ use BookWise\Tests\Support\HttpTestCase;
  */
 final class CheckoutDeliveryTest extends HttpTestCase
 {
+    use StockFixtures;
+
     private const BIOLOGY = 7;      // 5.50
     private const ESABELLA = 51;    // 19.99
 
@@ -155,6 +158,47 @@ final class CheckoutDeliveryTest extends HttpTestCase
         self::assertSame(1, (int) customer_addresses($userId)[0]['is_default']);
     }
 
+    public function testTheChosenAddressIsOfferedAgainWhenThePaymentDoesNotGoAhead(): void
+    {
+        [$customer, $user] = $this->signedInCustomer();
+        $userId = (int) $user['id'];
+        $home = $this->createAddress($userId);
+        $page = $this->checkoutPage($customer);
+
+        // A new address is typed in, but the book sold out meanwhile: the payment does not start.
+        $office = ['recipient_name' => 'Office Person', 'city' => 'Jeddah'] + self::SAMPLE_ADDRESS;
+        $this->setStock(self::ESABELLA, 0);
+        $refused = $customer->submitForm($page, 'checkout.php', ['address' => 'new'] + $office);
+        $this->assertRedirect($refused, 'cart.php');
+        self::assertSame(0, $this->countRows('orders'));
+        $saved = customer_addresses($userId);
+        self::assertSame(['Sara Ahmed', 'Office Person'], array_column($saved, 'recipient_name'), 'The new address is in the address book');
+        $officeId = (int) $saved[1]['id'];
+
+        // Back at checkout, the address just typed is chosen, not the default one.
+        $this->setStock(self::ESABELLA, 5);
+        $page = $customer->get('checkout.php');
+        self::assertSame((string) $officeId, $this->assertHtmlPage($page)->form('checkout.php')->field('address'));
+
+        // Typing it again (or sending the form twice) uses the saved address instead of a copy.
+        $response = $customer->submitForm($page, 'checkout.php', ['address' => 'new'] + $office);
+        $this->assertStatus(303, $response);
+        $order = $this->orderBySession(self::sessionFrom($response));
+        self::assertSame('Office Person', order_address((int) $order['id'])['recipient_name'] ?? null);
+        $again = $customer->postWithToken('checkout.php', ['address' => 'new'] + $office);
+        $this->assertStatus(303, $again);
+        self::assertSame([$home, $officeId], array_map('intval', array_column(customer_addresses($userId), 'id')));
+
+        // A customer who leaves the payment page and comes back finds the same address chosen.
+        self::assertSame((string) $officeId, $customer->get('checkout.php')->document()->form('checkout.php')->field('address'));
+        // Once it is deleted (or for any id that is not one of the customer's), the default is chosen again.
+        self::assertTrue(delete_customer_address($userId, $officeId));
+        self::assertSame((string) $home, $customer->get('checkout.php')->document()->form('checkout.php')->field('address'));
+        $foreign = $this->createAddress((int) $this->createUser()['id']);
+        $this->assertRedirect($customer->postWithToken('checkout.php', ['address' => (string) $foreign]), 'checkout.php');
+        self::assertSame((string) $home, $customer->get('checkout.php')->document()->form('checkout.php')->field('address'));
+    }
+
     public function testAFullAddressBookOffersOnlyTheSavedAddresses(): void
     {
         [$customer, $user] = $this->signedInCustomer();
@@ -233,6 +277,12 @@ final class CheckoutDeliveryTest extends HttpTestCase
         self::assertStringStartsWith('Sara Ahmed 1234 King Fahd Road Al Olaya Riyadh 12345-6789 Short address: RRRD2929 +966 51 234 5678 Default Edit', $cards[0]);
         $home = (int) customer_addresses($userId)[0]['id'];
 
+        // The same address is not added a second time.
+        $duplicate = $customer->submitForm($page, 'profilePage.php', ['phone' => '+966 51 234 5678'] + self::SAMPLE_ADDRESS, ['action' => 'save_address']);
+        $this->assertRedirect($duplicate, 'profilePage.php?section=addresses');
+        $this->assertFlash($customer->follow($duplicate), 'info', 'This address is already in your address book, so it was not added again.');
+        self::assertSame([$home], array_map('intval', array_column(customer_addresses($userId), 'id')));
+
         // A second address, then made the default from the list.
         $second = $customer->submitForm($page, 'profilePage.php', ['recipient_name' => 'Noura Ali', 'city' => 'Dammam'] + self::SAMPLE_ADDRESS, ['action' => 'save_address']);
         $page = $customer->follow($second);
@@ -298,7 +348,7 @@ final class CheckoutDeliveryTest extends HttpTestCase
         $full = $customer->get('profilePage.php?section=addresses');
         $this->assertPageText('You can save up to 5 addresses. Delete one to add another.', $full);
         self::assertFalse($full->document()->hasForm('profilePage.php', ['action' => 'save_address']), 'No form for a sixth address');
-        $sixth = $customer->postWithToken('profilePage.php', ['action' => 'save_address'] + self::SAMPLE_ADDRESS);
+        $sixth = $customer->postWithToken('profilePage.php', ['action' => 'save_address', 'recipient_name' => 'Recipient 6'] + self::SAMPLE_ADDRESS);
         $this->assertFlash($customer->follow($sixth), 'error', 'You can save up to 5 addresses. Delete one to add another.');
         self::assertSame(ADDRESS_MAX_PER_CUSTOMER, $this->countRows('addresses', 'user_id = ?', [$user['id']]));
     }

@@ -112,6 +112,10 @@ if (is_post()) {
             flash('error', t('account.addresses.not_found'));
             redirect('profilePage.php?section=addresses');
         }
+        if ($saved['status'] === 'existing') {
+            flash('info', t('account.addresses.existing'));
+            redirect('profilePage.php?section=addresses');
+        }
         flash('success', t($saved['status'] === 'created' ? 'account.addresses.created' : 'account.addresses.updated'));
         redirect('profilePage.php?section=addresses');
     }

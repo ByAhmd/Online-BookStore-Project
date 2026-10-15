@@ -67,6 +67,33 @@ final class AddressBookTest extends DatabaseTestCase
         self::assertSame('created', save_customer_address((int) $this->createUser()['id'], $address)['status']);
     }
 
+    public function testTheSameAddressIsNeverSavedTwice(): void
+    {
+        $userId = (int) $this->createUser()['id'];
+        $home = $this->createAddress($userId);
+        $work = $this->createAddress($userId, ['recipient_name' => 'Work']);
+        // Typed differently, but the same address once normalized.
+        [$again] = validate_address_input(['phone' => '+966 51 234 5678', 'postal_code' => '١٢٣٤٥', 'short_address' => 'rrrd 2929'] + self::SAMPLE_ADDRESS);
+
+        self::assertSame(['status' => 'existing', 'id' => $home], save_customer_address($userId, $again));
+        self::assertSame([$home => 1, $work => 0], self::defaults($userId));
+        self::assertSame(['status' => 'existing', 'id' => $work], save_customer_address($userId, ['recipient_name' => 'Work'] + $again, null, true));
+        self::assertSame([$work => 1, $home => 0], self::defaults($userId), 'Made the default when asked');
+
+        // Any difference is another address, also a missing optional field.
+        self::assertSame('created', save_customer_address($userId, ['additional_number' => ''] + $again)['status']);
+        self::assertSame('created', save_customer_address($userId, ['building_number' => '4321'] + $again)['status']);
+        self::assertSame('created', save_customer_address($userId, ['recipient_name' => 'Fifth'] + $again)['status']);
+        self::assertSame(ADDRESS_MAX_PER_CUSTOMER, $this->countRows('addresses', 'user_id = ?', [$userId]));
+
+        // With a full address book, a saved address is still found; a new one is refused.
+        self::assertSame(['status' => 'existing', 'id' => $home], save_customer_address($userId, $again));
+        self::assertSame(['status' => 'limit', 'id' => null], save_customer_address($userId, ['recipient_name' => 'Sixth'] + $again));
+
+        // Another customer may save the same address.
+        self::assertSame('created', save_customer_address((int) $this->createUser()['id'], $again)['status']);
+    }
+
     public function testEditingKeepsTheDefaultAndMayMakeTheAddressTheDefault(): void
     {
         $userId = (int) $this->createUser()['id'];

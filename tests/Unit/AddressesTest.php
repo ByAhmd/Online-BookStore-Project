@@ -43,6 +43,11 @@ final class AddressesTest extends TestCase
         yield 'international with spaces' => ['+966 51 234 5678', '+966512345678'];
         yield 'with 00' => ['00966512345678', '+966512345678'];
         yield 'with 966 only' => ['966512345678', '+966512345678'];
+        yield 'country code and the local zero' => ['+966 05 1234 5678', '+966512345678'];
+        yield 'with 00, the country code and the local zero' => ['009660512345678', '+966512345678'];
+        yield 'with 966 and the local zero' => ['9660512345678', '+966512345678'];
+        yield 'two local zeros' => ['00512345678', null];
+        yield 'country code twice' => ['+966966512345678', null];
         yield 'dashes, dots and brackets' => ['(051) 234-56.78', '+966512345678'];
         yield 'Arabic-Indic digits' => ['٠٥١٢٣٤٥٦٧٨', '+966512345678'];
         yield 'Eastern Arabic-Indic digits' => ['۰۵۵۱۲۳۴۵۶۷', '+966551234567'];

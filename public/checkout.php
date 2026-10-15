@@ -9,8 +9,14 @@ require __DIR__ . '/../src/bootstrap.php';
  * GET shows the books, the totals (prices include VAT, delivery is free) and
  * the delivery address: one of the customer's saved addresses, or a new one
  * typed in here. POST saves a new address in the customer's address book if
- * one was entered, then starts the payment exactly as before (start_checkout())
- * and sends the browser to Stripe or to the payment simulator.
+ * one was entered (an address saved already is used again, never saved
+ * twice), then starts the payment exactly as before (start_checkout()) and
+ * sends the browser to Stripe or to the payment simulator.
+ *
+ * The address chosen is remembered for the session: when the payment cannot
+ * start (the stock changed, an earlier payment is still open…) or is
+ * canceled, the customer comes back to this page with that address chosen
+ * again, not the default one.
  */
 
 if (!in_array(request_method(), ['GET', 'HEAD', 'POST'], true)) {
@@ -35,13 +41,17 @@ if (is_post()) {
             redirect('checkout.php');
         }
         $saved = save_customer_address($userId, $address, null, $makeDefault);
-        if ($saved['status'] !== 'created' || $saved['id'] === null) {
+        if (!in_array($saved['status'], ['created', 'existing'], true) || $saved['id'] === null) {
             flash('error', tn('shop.checkout_page.address_limit', ADDRESS_MAX_PER_CUSTOMER));
             redirect('checkout.php');
         }
         $addressId = $saved['id'];
     } else {
         $addressId = parse_int($choice);
+    }
+    if ($addressId !== null) {
+        // Chosen again on this page if the payment does not go ahead.
+        remember_checkout_address($addressId);
     }
 
     // Prices, totals and the payment session are all built server-side from the stored cart.
@@ -66,9 +76,16 @@ $simulated = payment_simulator_enabled();
 
 $addresses = customer_addresses($userId);
 $canAdd = count($addresses) < ADDRESS_MAX_PER_CUSTOMER;
+$savedIds = array_map(static fn (array $address): string => (string) $address['id'], $addresses);
+// The choice to show: the one just refused (the new address with its
+// errors), else the address of the customer's last checkout while it is
+// still saved, else the default address (listed first).
 $chosen = old('address');
-if ($chosen === '' || ($chosen === 'new' && !$canAdd)) {
-    $chosen = $addresses !== [] ? (string) $addresses[0]['id'] : 'new';
+if ($chosen === '') {
+    $chosen = (string) remembered_checkout_address();
+}
+if (!in_array($chosen, $savedIds, true) && !($chosen === 'new' && $canAdd)) {
+    $chosen = $addresses !== [] ? $savedIds[0] : 'new';
 }
 $newValues = [];
 $newErrors = [];

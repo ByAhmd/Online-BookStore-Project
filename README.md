@@ -373,7 +373,7 @@ BookWise sells printed books delivered within Saudi Arabia. Delivery is free, an
 
 **Delivery addresses.** Customers keep up to five addresses on the **Delivery Addresses** page of their profile, one of them the default. Each is a Saudi National Address:
 
-- the recipient's full name and a Saudi mobile number (typed as `05XXXXXXXX`, `+966 5X XXX XXXX` and so on, stored as `+9665XXXXXXXX`);
+- the recipient's full name and a Saudi mobile number (typed as `05XXXXXXXX`, `+966 5X XXX XXXX`, `+966 05X XXX XXXX` and so on, stored as `+9665XXXXXXXX`);
 - the city, district and street;
 - the building number (4 digits), the postal code (5 digits) and, optionally, the additional number (4 digits) and the short address code (4 letters and 4 digits, such as `RRRD2929`).
 
@@ -381,8 +381,10 @@ Digits may also be typed as Arabic-Indic digits (`٠١٢٣`). Every field is che
 
 **Checkout.** The cart's **Proceed to Checkout** button opens `checkout.php`:
 
-1. GET shows the books, the total with the VAT it contains, free delivery, and the delivery address: the saved addresses (the default one is selected) or **Deliver to a new address**, typed in on the same page. A customer without saved addresses only sees the address form.
+1. GET shows the books, the total with the VAT it contains, free delivery, and the delivery address: the saved addresses or **Deliver to a new address**, typed in on the same page. A customer without saved addresses only sees the address form.
+   The address chosen at the customer's last checkout in this session is selected again (for example after a payment that could not start because a book sold out, or that was canceled); otherwise the default address is.
 2. POST saves a new address in the customer's address book (their first address becomes the default), then starts the payment as before with `start_checkout()`: the stock is checked, the minimum total applies, one checkout runs at a time per customer, and earlier pending orders are settled first.
+   An address that is already saved (the same in every field once normalized) is used again rather than saved a second time, so retyping it or sending the form twice never fills the address book with copies.
    The chosen address must be one of the customer's own. It is read under the checkout lock and copied into the order (`order_addresses`), so editing or deleting the saved address later never changes an order that was already placed.
 3. The customer pays on Stripe's page or on the payment simulator's page, as described above.
 

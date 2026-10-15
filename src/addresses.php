@@ -57,13 +57,14 @@ function ascii_digits(string $value): string
 /**
  * A Saudi mobile number as +9665XXXXXXXX, or null. Accepts the usual ways of
  * writing one (05XXXXXXXX, 5XXXXXXXX, +966 5X XXX XXXX, 009665XXXXXXXX,
- * 9665XXXXXXXX), with spaces, dashes, dots, brackets and the invisible
+ * 9665XXXXXXXX, and the country code followed by the local 0, as in
+ * +966 05X XXX XXXX), with spaces, dashes, dots, brackets and the invisible
  * direction marks that copying from right-to-left text adds.
  */
 function normalize_saudi_mobile(string $phone): ?string
 {
     $compact = preg_replace('/[\s\-.()\x{00A0}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]+/u', '', ascii_digits($phone));
-    if (!is_string($compact) || !preg_match('/^(?:\+966|00966|966|0)?(5\d{8})$/D', $compact, $match)) {
+    if (!is_string($compact) || !preg_match('/^(?:\+966|00966|966)?0?(5\d{8})$/D', $compact, $match)) {
         return null;
     }
     return '+966' . $match[1];
@@ -251,16 +252,45 @@ function default_address_id(int $userId): ?int
 }
 
 /**
+ * Remembers for the rest of the session the address the customer chose at
+ * checkout, so the checkout page chooses it again (instead of the default)
+ * when the payment could not start or was canceled.
+ */
+function remember_checkout_address(int $addressId): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['checkout_address'] = $addressId;
+    }
+}
+
+/**
+ * The address chosen at the last checkout in this session, or null. It may
+ * have been deleted since, or belong to an account that was signed in
+ * before: callers use it only when it is one of the customer's addresses.
+ */
+function remembered_checkout_address(): ?int
+{
+    $id = $_SESSION['checkout_address'] ?? null;
+    return is_int($id) ? $id : null;
+}
+
+/**
  * Adds an address ($addressId null) or changes one of the customer's own.
  * The first address becomes the default, and $makeDefault makes this one the
- * default. The customer's row is locked meanwhile, so requests at the same
- * time can neither go beyond ADDRESS_MAX_PER_CUSTOMER nor leave two defaults.
+ * default. An address the customer has already saved (every field the same
+ * once normalized) is not added a second time: its id is returned instead
+ * (status 'existing'), so typing it again at checkout (after a payment that
+ * did not start, or in a double submit) never fills the address book with
+ * copies. The customer's row is locked meanwhile, so requests at the same
+ * time can neither go beyond ADDRESS_MAX_PER_CUSTOMER, nor save the same
+ * address twice, nor leave two defaults.
  *
- * status: 'created', 'updated', 'limit' (already ADDRESS_MAX_PER_CUSTOMER
- * addresses, nothing saved) or 'missing' (not the customer's address).
+ * status: 'created', 'existing' (already saved, nothing added), 'updated',
+ * 'limit' (already ADDRESS_MAX_PER_CUSTOMER addresses, nothing saved) or
+ * 'missing' (not the customer's address).
  *
  * @param array<string, string> $address Clean values from validate_address_input()
- * @return array{status: 'created'|'updated'|'limit'|'missing', id: int|null}
+ * @return array{status: 'created'|'existing'|'updated'|'limit'|'missing', id: int|null}
  */
 function save_customer_address(int $userId, array $address, ?int $addressId = null, bool $makeDefault = false): array
 {
@@ -271,7 +301,16 @@ function save_customer_address(int $userId, array $address, ?int $addressId = nu
         $values = address_column_values($address);
 
         if ($addressId === null) {
-            $count = (int) db_value('SELECT COUNT(*) FROM addresses WHERE user_id = ?', [$userId]);
+            $saved = db_all('SELECT id, ' . implode(', ', ADDRESS_FIELDS) . ' FROM addresses WHERE user_id = ? ORDER BY id', [$userId]);
+            foreach ($saved as $row) {
+                if (address_column_values($row) === $values) {
+                    if ($makeDefault) {
+                        db_run('UPDATE addresses SET is_default = (id = ?) WHERE user_id = ?', [$row['id'], $userId]);
+                    }
+                    return ['status' => 'existing', 'id' => (int) $row['id']];
+                }
+            }
+            $count = count($saved);
             if ($count >= ADDRESS_MAX_PER_CUSTOMER) {
                 return ['status' => 'limit', 'id' => null];
             }

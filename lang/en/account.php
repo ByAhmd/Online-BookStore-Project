@@ -73,6 +73,7 @@ return [
         'submit' => 'Save Address',
         'cancel' => 'Cancel',
         'created' => 'Your address has been saved.',
+        'existing' => 'This address is already in your address book, so it was not added again.',
         'updated' => 'Your address has been updated.',
         'default_set' => 'Your default address has been changed.',
         'deleted' => 'The address has been deleted.',
