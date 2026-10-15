@@ -159,9 +159,10 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 │   ├── upgrade-legacy-db.php  Upgrade a database created by the original project
 │   └── lint.php            `php -l` over the whole project
 ├── docker/  Dockerfile  docker-compose.yml   Container image and local Compose setup
-├── docs/                   DEPLOYMENT.md (Docker, alwaysdata demo, Tailscale Funnel), AUDIT.md (audit record), screenshots/
+├── docs/                   DEPLOYMENT.md (Docker, alwaysdata demo, Tailscale Funnel), TESTING.md (browser tests), AUDIT.md (audit record), screenshots/
 ├── storage/                logs/ (app.log, php-error.log, mail.log) and the payment simulator's state (git-ignored)
 ├── tests/                  PHPUnit suites (unit, integration, http, deploy) and an HTTP wrapper around the payment simulator
+├── e2e/  package.json  playwright.config.js   Browser tests (Playwright with axe-core; Node.js, tests only)
 ├── .env.example            Configuration template
 └── .github/workflows/ci.yml
 ```
@@ -572,6 +573,19 @@ GitHub Actions (`.github/workflows/ci.yml`) runs `composer validate`, `composer 
 It runs on PHP 8.1, 8.2, 8.3, 8.4 and 8.5 against a MySQL 8.4 service, and once more on PHP 8.4 against MariaDB 11.4 (MySQL 8.0 reached its end of life in April 2026).
 A separate job builds the Docker image and smoke-tests the running container.
 The workflow's actions are pinned to commit SHAs. Dependabot (`.github/dependabot.yml`) proposes updates every week for the Composer packages, the actions, the Dockerfile's base images and `docker-compose.yml`: minor and patch updates of each come as one grouped pull request, major updates one by one.
+
+### Browser tests
+
+The `e2e/` folder holds real-browser tests (Playwright and Chromium, with axe-core for accessibility) of the demo store: guest browsing, the language switch and the right-to-left layout, the one-click demo accounts, checkout with every ending of the payment simulator, the demo inbox, the read-only administrator, the profile with the keyboard alone, and axe-core on the main pages in English and Arabic.
+They need Node.js 20 or newer:
+
+```bash
+npm ci && npx playwright install chromium
+DB_PORT=3306 DB_USER=root DB_PASS=secret npx playwright test   # starts a local demo store on a scratch database (bookwise_e2e_test)
+BASE_URL=http://localhost:8080 npx playwright test             # or tests the Docker store
+```
+
+[docs/TESTING.md](docs/TESTING.md) explains the setup and the accessibility checks.
 
 ### Images and browser caching
 

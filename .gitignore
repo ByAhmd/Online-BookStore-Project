@@ -1,5 +1,6 @@
-# Dependencies (install with `composer install`)
+# Dependencies (install with `composer install`; the browser tests' with `npm ci`)
 /vendor/
+/node_modules/
 
 # Environment / secrets
 .env
@@ -22,6 +23,10 @@
 /coverage/
 /build/
 /tests/_output/
+# Browser tests (Playwright): results, traces and the HTML report
+/test-results/
+/playwright-report/
+/blob-report/
 
 # Database engine files and local dumps (export SQL instead)
 *.frm
