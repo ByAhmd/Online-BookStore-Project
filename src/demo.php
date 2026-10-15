@@ -339,11 +339,11 @@ function insert_demo_showcase(): array
         foreach ($lines as $line) {
             $taken = 0;
             if ($paid !== null) {
-                // As fulfill_order(): never more copies than are in stock, and in demo mode
-                // never below DEMO_MIN_STOCK. As apply_order_refund(): an order refunded
-                // before it was shipped puts its copies back.
+                // As fulfill_order() in demo mode: never take a book below DEMO_MIN_STOCK
+                // (a book already below it is topped up). As apply_order_refund(): an
+                // order refunded before it was shipped puts its copies back.
                 $copies = $stock[$line['book_id']];
-                $taken = min($copies, $line['quantity']);
+                $taken = max(0, min($line['quantity'], $copies - DEMO_MIN_STOCK));
                 $stock[$line['book_id']] = max($copies - $taken, DEMO_MIN_STOCK) + ($refunded !== null ? $taken : 0);
             }
             db_run(

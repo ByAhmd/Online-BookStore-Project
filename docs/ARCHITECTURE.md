@@ -297,7 +297,7 @@ The return page and a webhook can confirm the same payment at the same moment: t
 Once shipped, the copies have left the store, so a refund does not change the stock; staff add any returned copies on the book's edit page.
 Two customers can still pay for the last copy at the same moment; the second order is then recorded and logged as `OVERSOLD` in `app.log` so that staff can restock or refund it.
 Each order line records the copies it took (`order_items.stock_taken`), so a refund puts back exactly those.
-In demo mode, simulated purchases never take a book below 3 copies.
+In demo mode, simulated purchases never take a book below 3 copies: a line records only the copies above that minimum, so a purchase followed by its refund leaves the stock as it was.
 
 ### Refunds
 

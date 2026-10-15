@@ -734,13 +734,16 @@ function fulfill_order_locked(int $orderId, \Stripe\StripeObject $session): stri
             }
         }
         // Record what each line really takes (less than ordered when oversold),
-        // so a refund later puts back exactly those copies.
+        // so a refund later puts back exactly those copies. On a public demo,
+        // visitors' free simulated purchases must not sell the shared catalog
+        // out for everyone else: they never take a book below DEMO_MIN_STOCK.
+        $floor = config('app.demo') ? DEMO_MIN_STOCK : 0;
         db_run(
             'UPDATE order_items oi
              JOIN books b ON b.id = oi.book_id
-             SET oi.stock_taken = LEAST(b.stock, oi.quantity)
+             SET oi.stock_taken = GREATEST(0, LEAST(oi.quantity, b.stock - ?))
              WHERE oi.order_id = ?',
-            [$orderId]
+            [$floor, $orderId]
         );
         db_run(
             'UPDATE books b
@@ -749,8 +752,8 @@ function fulfill_order_locked(int $orderId, \Stripe\StripeObject $session): stri
             [$orderId]
         );
         if (config('app.demo')) {
-            // Public demo: visitors' free simulated purchases must not sell the
-            // shared catalog out for everyone else.
+            // A book that was already below the demo minimum (an administrator
+            // lowered it) is topped up; that is not a copy the order took.
             db_run(
                 'UPDATE books b
                  JOIN order_items oi ON oi.book_id = b.id AND oi.order_id = ?

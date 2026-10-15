@@ -210,7 +210,30 @@ final class RefundTest extends CheckoutTestCase
         $this->setEnv('APP_DEMO', 'true');
         [, $order] = $this->paidOrder([self::ESABELLA => 3]);
         self::assertSame(DEMO_MIN_STOCK, $this->stockOf(self::ESABELLA), 'Visitors cannot sell the shared demo catalog out');
-        self::assertSame(3, (int) db_value('SELECT stock_taken FROM order_items WHERE order_id = ?', [$order['id']]));
+        self::assertSame(1, (int) db_value('SELECT stock_taken FROM order_items WHERE order_id = ?', [$order['id']]), 'Only one copy left the stock');
+
+        // A refund puts back exactly the copy the order took, not the three it asked for.
+        self::assertSame('refunded', refund_order((int) $order['id']));
+        self::assertSame(4, $this->stockOf(self::ESABELLA));
+    }
+
+    public function testDemoPurchaseAndRefundCyclesNeverAddCopies(): void
+    {
+        $this->setStock(self::ESABELLA, DEMO_MIN_STOCK + 1);
+        $this->setStock(self::BIOLOGY, 1); // an administrator lowered it below the demo minimum
+        stripe_client();
+        $this->setEnv('APP_DEMO', 'true');
+
+        for ($cycle = 1; $cycle <= 3; $cycle++) {
+            [, $order] = $this->paidOrder([self::ESABELLA => 2, self::BIOLOGY => 1]);
+            self::assertSame([DEMO_MIN_STOCK, DEMO_MIN_STOCK], [$this->stockOf(self::ESABELLA), $this->stockOf(self::BIOLOGY)], 'The book below the minimum is topped up');
+            self::assertSame(
+                [self::BIOLOGY => 0, self::ESABELLA => 1],
+                array_map('intval', array_column(db_all('SELECT book_id, stock_taken FROM order_items WHERE order_id = ? ORDER BY book_id', [$order['id']]), 'stock_taken', 'book_id'))
+            );
+            self::assertSame('refunded', refund_order((int) $order['id']));
+            self::assertSame([DEMO_MIN_STOCK + 1, DEMO_MIN_STOCK], [$this->stockOf(self::ESABELLA), $this->stockOf(self::BIOLOGY)], "Cycle $cycle added no copies");
+        }
     }
 
     public function testARefundAlreadyMadeInTheStripeDashboardIsRecorded(): void
