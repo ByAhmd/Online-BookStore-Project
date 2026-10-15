@@ -175,7 +175,8 @@ As a safety net for Apache setups that serve the whole folder, the root `.htacce
 
 ### 1. Prerequisites
 
-- PHP 8.3+ with the extensions listed above, and [Composer](https://getcomposer.org/)
+- PHP 8.3+ with the extensions listed above, and [Composer](https://getcomposer.org/). `php -v` shows the version of the `php` on your PATH.
+  XAMPP 8.2 bundles PHP 8.2, which cannot run BookWise; XAMPP can still provide the database.
 - MySQL 8.0.16+ or MariaDB 10.4+ (XAMPP, Laragon, DBngin, Docker, a system service and so on)
 - Optional: a free [Stripe](https://dashboard.stripe.com/register) account in **test mode**. Without one, checkout uses the built-in [payment simulator](#payments-the-simulator-and-stripe).
 
@@ -246,8 +247,11 @@ php -S localhost:8000 -t public
 
 Open <http://localhost:8000>. With this option, set `APP_URL=http://localhost:8000`.
 With the payment simulator on, this one server is all you need to buy a book: checkout opens the simulated payment page `pay.php` on the same server.
+The `php` that starts the server must be PHP 8.3 or newer. With an older one, for example XAMPP 8.2's `C:\xampp\php\php.exe` first on the PATH, every page fails with Composer's "Composer detected issues in your platform" error.
 
-**XAMPP / Apache:** keep the project *outside* `htdocs` and expose only `public/` with an alias.
+**XAMPP / Apache:** this needs a XAMPP whose bundled PHP is 8.3 or newer, because Apache runs BookWise with XAMPP's own PHP.
+With XAMPP 8.2, use XAMPP only for the database and start the store with `php -S` from a separate PHP 8.3+ installation, or use Laragon or [Docker](#running-with-docker-and-the-live-demo).
+Keep the project *outside* `htdocs` and expose only `public/` with an alias.
 Add this to `C:\xampp\apache\conf\extra\httpd-xampp.conf`, or to the end of `httpd.conf`, then restart Apache:
 
 ```apache
