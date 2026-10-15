@@ -485,7 +485,7 @@ All its options are listed by `php bin/setup.php --help`.
    The sign-in page also offers **Try as a customer** and **Try as an administrator (read-only)**, which sign visitors in with one click.
 3. Log in with the administrator account from step 6 and open **Orders**: the order is paid, and you can refund it.
 4. Optional, from your own computer (Git Bash on Windows): `BASE_URL=https://myaccount.alwaysdata.net bash tests/Docker/smoke.sh`.
-   It registers one throwaway customer and buys one book.
+   It registers one throwaway customer, confirms its email address with the link in the demo inbox (`bin/setup.php` turns email confirmation on), and buys one book.
 
 ### Step 9: check the visitors' addresses
 
@@ -765,7 +765,7 @@ The **Docker image** job in `.github/workflows/ci.yml` runs next to the test mat
 2. It builds the image with `docker compose build`. The build fails if a PHP extension or a gd image format is missing, or if the Apache configuration is invalid.
 3. It starts `docker compose up` and waits until `/health.php` answers. Then it checks:
    - that the app runs as `www-data`;
-   - `tests/Docker/smoke.sh`: the home page with the 55 books, sign-up, add to cart, the checkout page with a new delivery address, checkout to `pay.php`, the refused form without a CSRF token, the simulated payment, the paid confirmation on `success_pay.php`, the simulator's own 404 for an unknown payment session, and 404 from `stripe_webhook.php`.
+   - `tests/Docker/smoke.sh`: the home page with the 55 books, sign-up (on a store that asks for email confirmation, such as the alwaysdata demo, it confirms the address with the link in the demo inbox), add to cart, the checkout page with a new delivery address, checkout to `pay.php`, the refused form without a CSRF token, the simulated payment, the paid confirmation on `success_pay.php`, the simulator's own 404 for an unknown payment session, and 404 from `stripe_webhook.php`.
      It also checks that `/.env`, `/composer.json`, `/vendor/autoload.php`, `/storage/logs/app.log`, `/storage/payment-simulator.json` and other private paths answer 403/404, and the security headers;
    - that the order is stored as `paid` in MySQL, and that the simulator's state file in `storage/` belongs to `www-data` and records the payment;
    - that the container refuses the local-only administrator password with a public `APP_URL`, and `PAYMENT_SIMULATOR=true` on a real store (`APP_ENV=production`, `APP_DEMO=false`);

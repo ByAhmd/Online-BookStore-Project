@@ -5,7 +5,8 @@
 #     docker compose up -d --build
 #     tests/Docker/smoke.sh                       # BASE_URL=http://localhost:8080
 #
-# It uses only curl, grep, sed and od, so it can also check a deployed demo:
+# It needs only bash, curl and common text tools such as grep, sed and od, so
+# it can also check a deployed demo:
 #     BASE_URL=https://<account>.alwaysdata.net tests/Docker/smoke.sh
 # (that registers one throwaway customer and buys one book with the simulator).
 # BASE_URL must be the site's APP_URL: the payment page returns there.
@@ -15,6 +16,9 @@
 # simulator's page (public/pay.php) to the paid confirmation, that the payment
 # page needs its CSRF token and refuses unknown sessions, that the Stripe
 # webhook is closed, that private files are not served, and the security headers.
+# When the store asks new customers to confirm their email address
+# (REQUIRE_EMAIL_VERIFICATION=true, as bin/setup.php sets up a demo), the new
+# customer confirms it with the link of the email in the demo inbox.
 
 set -euo pipefail
 
@@ -150,6 +154,39 @@ request POST Register.php \
     --data-urlencode "password_confirmation=${PASSWORD}"
 expect_status 302 303
 [[ "$LOCATION" != *form=signup* ]] || fail "sign-up was rejected (redirected back to the form)"
+
+if [[ "$LOCATION" == *form=verify* ]]; then
+    # REQUIRE_EMAIL_VERIFICATION=true (as bin/setup.php sets up a demo): the
+    # address is confirmed with the link of the confirmation email, which the
+    # demo inbox shows to the browser that created the account.
+    request GET inbox.php
+    expect_status 200
+    grep -o 'inbox\.php?id=[0-9][0-9]*' "$BODY" | cut -d= -f2 | sort -rn | uniq >"$WORK/messages.txt" || true
+    [[ -s "$WORK/messages.txt" ]] \
+        || fail "sign-up asks for email confirmation, but the demo inbox (MAIL_DRIVER=database) shows no email"
+    verify_token=''
+    while read -r message_id <&3; do
+        request GET "inbox.php?id=${message_id}"
+        expect_status 200
+        verify_token="$(grep -o 'verify_email\.php?token=[A-Za-z0-9]*' "$BODY" | head -n 1 | cut -d= -f2 || true)"
+        if [[ -n "$verify_token" ]]; then
+            break
+        fi
+    done 3<"$WORK/messages.txt"
+    [[ -n "$verify_token" ]] || fail "the demo inbox has no confirmation email with a verify_email.php link"
+
+    # Opening the link shows a form; the account's password confirms the address and signs in.
+    request GET "verify_email.php?token=${verify_token}"
+    expect_status 200
+    token="$(csrf_token)"
+    request POST verify_email.php \
+        --data-urlencode "_token=${token}" \
+        --data-urlencode "token=${verify_token}" \
+        --data-urlencode "password=${PASSWORD}"
+    expect_status 302 303
+    [[ "$LOCATION" == *Home_Page.php ]] || fail "the email address was not confirmed (Location: ${LOCATION})"
+    pass "the confirmation email in the demo inbox confirms the new customer's address"
+fi
 
 request GET cart.php
 if [[ "$STATUS" != 200 ]]; then
