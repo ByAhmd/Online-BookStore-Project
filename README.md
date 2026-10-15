@@ -110,7 +110,7 @@ page architecture is unchanged; there is no framework.
 
 | Layer | Technology |
 | --- | --- |
-| Language | PHP ≥ 8.1 (tested on 8.2 and 8.4; CI covers 8.1–8.5) |
+| Language | PHP ≥ 8.3 (tested on 8.3 and 8.4; CI covers 8.3–8.5) |
 | Database | MySQL ≥ 8.0.16 or MariaDB ≥ 10.4 (InnoDB, utf8mb4), accessed with PDO prepared statements |
 | Payments | [Stripe Checkout](https://stripe.com/docs/payments/checkout) via `stripe/stripe-php` 16.x, or the built-in payment simulator |
 | Email | Any SMTP server through PHPMailer (`phpmailer/phpmailer` 7.x), a demo inbox stored in the database, or a local log file for development |
@@ -175,7 +175,7 @@ As a safety net for Apache setups that serve the whole folder, the root `.htacce
 
 ### 1. Prerequisites
 
-- PHP 8.1+ with the extensions listed above, and [Composer](https://getcomposer.org/)
+- PHP 8.3+ with the extensions listed above, and [Composer](https://getcomposer.org/)
 - MySQL 8.0.16+ or MariaDB 10.4+ (XAMPP, Laragon, DBngin, Docker, a system service and so on)
 - Optional: a free [Stripe](https://dashboard.stripe.com/register) account in **test mode**. Without one, checkout uses the built-in [payment simulator](#payments-the-simulator-and-stripe).
 
@@ -570,7 +570,8 @@ and `STRIPE_API_BASE=http://127.0.0.1:12111` in `.env`), but `PAYMENT_SIMULATOR=
 No email leaves the machine either: the SMTP tests talk to a small local server, `tests/Support/fake_smtp_server.php`, which only records the conversation.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs `composer validate`, `composer audit`, lint, PHPStan and all test suites.
-It runs on PHP 8.1, 8.2, 8.3, 8.4 and 8.5 against a MySQL 8.4 service, and once more on PHP 8.4 against MariaDB 11.4 (MySQL 8.0 reached its end of life in April 2026).
+It runs on PHP 8.3, 8.4 and 8.5 against a MySQL 8.4 service, and once more on PHP 8.4 against MariaDB 11.4 (MySQL 8.0 reached its end of life in April 2026).
+PHP 8.3 is the oldest version BookWise supports: PHP 8.1 is past its end of life, and PHP 8.2 receives security fixes only until December 2026.
 A separate job builds the Docker image and smoke-tests the running container.
 The workflow's actions are pinned to commit SHAs. Dependabot (`.github/dependabot.yml`) proposes updates every week for the Composer packages, the actions, the Dockerfile's base images and `docker-compose.yml`: minor and patch updates of each come as one grouped pull request, major updates one by one.
 

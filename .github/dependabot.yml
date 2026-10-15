@@ -3,7 +3,7 @@
 # pull request (.github/workflows/ci.yml).
 version: 2
 updates:
-  # composer.json / composer.lock (resolved for PHP 8.1, see config.platform)
+  # composer.json / composer.lock (resolved for PHP 8.3, see config.platform)
   - package-ecosystem: composer
     directory: /
     schedule:

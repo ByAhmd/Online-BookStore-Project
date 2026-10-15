@@ -151,8 +151,8 @@ $force = isset($options['force']);
 setup_say('BookWise setup: a public demo with simulated payments.');
 setup_say();
 
-if (version_compare(PHP_VERSION, '8.1.0', '<')) {
-    setup_fail('BookWise needs PHP 8.1 or newer; this is PHP ' . PHP_VERSION . '. Choose a newer PHP version for your account or site and run the script with it.');
+if (version_compare(PHP_VERSION, '8.3.0', '<')) {
+    setup_fail('BookWise needs PHP 8.3 or newer; this is PHP ' . PHP_VERSION . '. Choose a newer PHP version for your account or site and run the script with it.');
 }
 $missing = array_values(array_filter(['pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo'], static function (string $extension): bool {
     return !extension_loaded($extension);

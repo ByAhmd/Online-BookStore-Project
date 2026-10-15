@@ -257,7 +257,7 @@ The panel is at <https://admin.alwaysdata.com>; menu names are written as **Menu
 ### Step 2: choose the PHP version
 
 1. Open **Environment > PHP**.
-2. Set the default version to **8.3** (any version from 8.1 to 8.4 works; the CI tests 8.1–8.4) and save.
+2. Set the default version to **8.4** and save. BookWise needs PHP 8.3 or newer, and the CI tests 8.3, 8.4 and 8.5.
 
 The default version is used both by your site and by the `php` command over SSH.
 alwaysdata advises against choosing a PHP version per site, because each extra version uses more of the account's memory.
@@ -300,7 +300,7 @@ php -v
 composer install --no-dev --optimize-autoloader
 ```
 
-`php -v` must print PHP 8.1 or newer; otherwise go back to step 2. Composer is installed on alwaysdata (`composer` is Composer 2).
+`php -v` must print PHP 8.3 or newer (8.4 if you followed step 2); otherwise go back to step 2. Composer is installed on alwaysdata (`composer` is Composer 2).
 
 ### Step 6: run the setup script (over SSH)
 
@@ -595,7 +595,7 @@ These variables are specific to the container and `docker-compose.yml`. The appl
 
 ## Checks and CI
 
-The **Docker image** job in `.github/workflows/ci.yml` runs next to the test matrix (PHP 8.1–8.5 on MySQL 8.4, and PHP 8.4 on MariaDB 11.4):
+The **Docker image** job in `.github/workflows/ci.yml` runs next to the test matrix (PHP 8.3–8.5 on MySQL 8.4, and PHP 8.4 on MariaDB 11.4):
 
 1. It checks the shell scripts with `bash -n` and ShellCheck, and runs `tests/Docker/entrypoint_test.sh` (the entrypoint's configuration logic).
 2. It builds the image with `docker compose build`. The build fails if a PHP extension or a gd image format is missing, or if the Apache configuration is invalid.
@@ -626,7 +626,7 @@ Locally, without Docker:
 | --- | --- |
 | `Error: Cannot connect to the database: … Access denied for user …` (setup) or `Database not ready yet … Access denied …` (container) | Wrong database user, password or name, or the user has no rights on that database. On alwaysdata, check **Databases > MySQL**. |
 | `Error: … already exists` from `bin/setup.php` | `.env` is already there. Edit it, or run `php bin/setup.php --force` to write it again. |
-| `BookWise needs PHP 8.1 or newer` | Choose a newer default version in **Environment > PHP** (alwaysdata), then reconnect over SSH. |
+| `BookWise needs PHP 8.3 or newer` | Choose a newer default version in **Environment > PHP** (alwaysdata; 8.4 is recommended), then reconnect over SSH. |
 | `The dependencies are not installed` or "BookWise is not installed yet" in the browser | Run `composer install --no-dev --optimize-autoloader` in the project folder. |
 | The site shows a listing of the project, or `.env` can be opened | The site's root directory is not `public/`. Set it to `/bookwise/public/` (alwaysdata) or point the server's document root at `public/`. |
 | 403 or 500 on every page on a classic host | The server does not allow the rules in `public/.htaccess` (`Require`, `Options`). Ask the host to allow them, or remove the lines it rejects. |

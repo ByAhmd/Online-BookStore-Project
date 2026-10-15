@@ -51,6 +51,26 @@ final class DeploymentFilesTest extends TestCase
         }
     }
 
+    public function testEveryFileNamesTheSameOldestPhpVersion(): void
+    {
+        $composer = json_decode(self::read('composer.json'), true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($composer);
+        self::assertMatchesRegularExpression('/^\^(\d+\.\d+)$/D', (string) ($composer['require']['php'] ?? ''));
+        $floor = substr((string) $composer['require']['php'], 1);
+        self::assertSame("$floor.0", $composer['config']['platform']['php'] ?? null, 'Dependencies are resolved for the oldest supported PHP');
+
+        $setup = self::read('bin/setup.php');
+        self::assertStringContainsString("version_compare(PHP_VERSION, '$floor.0', '<')", $setup);
+        self::assertStringContainsString("BookWise needs PHP $floor or newer", $setup);
+        self::assertStringContainsString("`BookWise needs PHP $floor or newer`", self::read('docs/DEPLOYMENT.md'), 'The troubleshooting table quotes the message');
+        self::assertStringContainsString("| Language | PHP ≥ $floor ", self::read('README.md'));
+
+        self::assertSame(1, preg_match('/^\s+php: \[(.*)\]\R/m', self::read('.github/workflows/ci.yml'), $matrix), 'The CI test matrix lists its PHP versions');
+        $versions = array_map(static fn (string $version): string => trim($version, " '"), explode(',', $matrix[1]));
+        self::assertSame($floor, $versions[0], 'CI tests the oldest supported PHP first');
+        self::assertSame($versions, array_values(array_unique($versions)));
+    }
+
     public function testShellScriptsRunWithBashInStrictMode(): void
     {
         foreach (['docker/entrypoint.sh', 'tests/Docker/smoke.sh', 'tests/Docker/entrypoint_test.sh'] as $script) {
