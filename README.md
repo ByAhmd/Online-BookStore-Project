@@ -270,7 +270,7 @@ Customers register through the **Sign Up** button. Administrators log in on the 
 
 ## Running with Docker and the live demo
 
-The repository includes a production-style image (PHP 8.3 + Apache, serving only `public/`) and a Compose setup with MySQL:
+The repository includes a production-style image (PHP 8.4 + Apache, serving only `public/`) and a Compose setup with MySQL 8.4:
 
 ```bash
 docker compose up --build
@@ -578,6 +578,7 @@ It runs on PHP 8.3, 8.4 and 8.5 against a MySQL 8.4 service, and once more on PH
 PHP 8.3 is the oldest version BookWise supports: PHP 8.1 is past its end of life, and PHP 8.2 receives security fixes only until December 2026.
 A separate job builds the Docker image and smoke-tests the running container.
 The workflow's actions are pinned to commit SHAs. Dependabot (`.github/dependabot.yml`) proposes updates every week for the Composer packages, the actions, the Dockerfile's base images and `docker-compose.yml`: minor and patch updates of each come as one grouped pull request, major updates one by one.
+It does not propose PHP 8.5 for the image or MySQL versions after the 8.4 LTS line: those moves are made by hand (the file's comments say why), and a deploy test checks that every action stays pinned.
 
 ### Browser tests
 

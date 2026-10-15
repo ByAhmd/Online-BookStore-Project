@@ -32,6 +32,14 @@ updates:
       docker:
         patterns: ['*']
         update-types: [minor, patch]
+    ignore:
+      # The image runs the PHP version of the public demo (8.4, see
+      # docs/DEPLOYMENT.md). PHP 8.5 builds OPcache into PHP itself, so
+      # "docker-php-ext-install opcache" fails on php:8.5-apache: moving the
+      # image to 8.5 is a change of its own (Dockerfile, guide, tests), made by
+      # hand. CI already tests the code on PHP 8.5.
+      - dependency-name: php
+        versions: ['>= 8.5']
 
   # Images of docker-compose.yml (the local MySQL)
   - package-ecosystem: docker-compose
@@ -42,3 +50,9 @@ updates:
       docker-compose:
         patterns: ['*']
         update-types: [minor, patch]
+    ignore:
+      # The local database stays on MySQL 8.4 LTS, the version CI tests.
+      # Later versions are short-lived innovation releases or a new LTS line;
+      # moving to one is done by hand, together with the CI's database service.
+      - dependency-name: mysql
+        versions: ['>= 9']

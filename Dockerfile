@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# BookWise: PHP 8.3 + Apache serving public/ (see docs/DEPLOYMENT.md).
+# BookWise: PHP 8.4 + Apache serving public/ (see docs/DEPLOYMENT.md).
 #
 #   docker compose up --build          local store with a MySQL container
 #   docker build -t bookwise .         image only
@@ -30,7 +30,10 @@ RUN composer dump-autoload --no-dev --optimize --no-interaction
 ############################################################################
 # Stage 2: runtime
 ############################################################################
-FROM php:8.3-apache
+# PHP 8.4, the version of the public demo on alwaysdata (CI tests 8.3 to 8.5).
+# PHP 8.5 builds OPcache into PHP itself, so the docker-php-ext-install line
+# below must drop opcache before the image can move to it.
+FROM php:8.4-apache
 
 # PHP extensions: pdo_mysql, gd with JPEG/PNG/WebP, opcache. Only the shared
 # libraries they need are kept; the -dev packages are removed again.

@@ -38,7 +38,7 @@ The guide ends with the [limits of the free demo](#limits-of-the-free-demo), [se
 | `bin/demo-seed.php`, `src/demo.php` | The demo's [showcase](#the-showcase-and-the-daily-reset): fictional customers, orders and reviews, added once (also by `bin/install.php` in demo mode). |
 | `bin/demo-cleanup.php` | Deletes the demo's one-click customers after 24 hours; run it daily as a scheduled task ([below](#schedule-the-daily-reset-and-the-cleanup)). |
 | `src/payment_simulator.php`, `public/pay.php` | The built-in payment simulator and its payment page. |
-| `Dockerfile` | Two-stage build. Composer installs the production dependencies; the runtime image is `php:8.3-apache` with `pdo_mysql`, `gd` (JPEG, PNG, WebP) and `opcache`. |
+| `Dockerfile` | Two-stage build. Composer installs the production dependencies; the runtime image is `php:8.4-apache` with `pdo_mysql`, `gd` (JPEG, PNG, WebP) and `opcache`. |
 | `.dockerignore` | Allowlist for the build context. `.env`, `.git`, `vendor/`, logs, uploads and the test suite never reach the build. |
 | `docker/entrypoint.sh` | Start-up script of the container, described [below](#start-up). |
 | `docker/apache/` | `ports.conf` (listen on `$PORT`), `site.conf` (virtual host), `server.conf` (server-wide hardening, proxy addresses, worker limits). |
@@ -46,7 +46,7 @@ The guide ends with the [limits of the free demo](#limits-of-the-free-demo), [se
 | `docker/db-ready.php` | Database check that the entrypoint repeats while it waits. |
 | `docker/healthcheck.php` | Command used by the image's `HEALTHCHECK`. |
 | `public/health.php` | Health endpoint for Docker and uptime monitors. |
-| `docker-compose.yml` | Local store: MySQL 8.0 plus the app in demo mode. |
+| `docker-compose.yml` | Local store: MySQL 8.4 LTS plus the app in demo mode. |
 | `.gitattributes` | Keeps shell scripts and the files under `docker/` on LF line endings, including in Windows checkouts. |
 | `tests/Docker/` | `smoke.sh` (end-to-end check of a running store), `entrypoint_test.sh` and PHPUnit tests for these files and for `bin/setup.php`. |
 
@@ -123,7 +123,7 @@ On alwaysdata it runs every night as a scheduled task ([below](#schedule-the-dai
 
 ### The image
 
-- The image is based on `php:8.3-apache` and uses the production `php.ini`. Errors are logged, never displayed, and `expose_php` is off.
+- The image is based on `php:8.4-apache`, the PHP version of the alwaysdata demo, and uses the production `php.ini`. Errors are logged, never displayed, and `expose_php` is off.
   Uploads are allowed up to 5 MB at the PHP level; the application itself limits profile pictures to 2 MB.
 - The container runs as **`www-data`**. The code is owned by root and is read-only for the web server. Only `storage/` (logs and the payment simulator's state) and `public/uploads/` are writable.
 - Apache listens on **`PORT`**, 8080 by default. Because the server does not run as root, `PORT` must be above 1023.
@@ -233,8 +233,9 @@ Notes:
 - **Port in use:** if port 8080 is taken, change the left side of `"8080:8080"` in `docker-compose.yml`, for example `"8090:8080"`, and start the store with `BOOKWISE_APP_URL=http://localhost:8090 docker compose up -d`.
   The payment page sends the browser back to `APP_URL`, so it must be the address you browse to.
 - **Volumes:** the database lives in the `db-data` volume and uploaded pictures in the `uploads` volume, mounted at `public/uploads`.
-  The volume keeps the `public/uploads/.htaccess` file it was created with. The virtual host enforces the same rules either way.
+  The `uploads` volume keeps the `public/uploads/.htaccess` file it was created with. The virtual host enforces the same rules either way.
   The payment simulator's state lives in the container's `storage/`; it is lost when the container is recreated, which only matters for refunds (see [the payment simulator](#the-payment-simulator)).
+- **MySQL 8.4:** the database runs on MySQL 8.4 LTS. A `db-data` volume created by the earlier `mysql:8.0` image is upgraded by MySQL when 8.4 first starts it; `docker compose down -v` starts afresh instead.
 - **Windows:** `.gitattributes` keeps the scripts on LF line endings. The image also strips carriage returns from them, so a checkout made before `.gitattributes` existed still works.
 
 ## (b) Free public demo on alwaysdata
@@ -257,7 +258,7 @@ The panel is at <https://admin.alwaysdata.com>; menu names are written as **Menu
 ### Step 2: choose the PHP version
 
 1. Open **Environment > PHP**.
-2. Set the default version to **8.4** and save. BookWise needs PHP 8.3 or newer, and the CI tests 8.3, 8.4 and 8.5.
+2. Set the default version to **8.4** and save. BookWise needs PHP 8.3 or newer; the CI tests 8.3, 8.4 and 8.5, and the Docker image uses 8.4 too.
 
 The default version is used both by your site and by the `php` command over SSH.
 alwaysdata advises against choosing a PHP version per site, because each extra version uses more of the account's memory.
@@ -650,7 +651,7 @@ Locally, without Docker:
 
 ## Facts that could not be confirmed
 
-These points come from alwaysdata's and Tailscale's documentation as it could be read in October 2026, or could not be found there. They were not tried on a live account.
+These points come from alwaysdata's, Tailscale's and MySQL's documentation as it could be read in October 2026, or could not be found there. They were not tried on a live account.
 
 - **alwaysdata sign-up and panel labels:** the exact button and field labels (for example where the PHP type, root directory and "Force HTTPS" are on the site form, or how password login for the SSH user is switched on) may differ slightly from this guide.
   The documentation confirms the menus **Web > Sites**, **Environment > PHP**, **Databases > MySQL**, **Remote access > SSH** and **Advanced > Scheduled tasks**, the site's **Root directory** field (relative to the home folder), and that SSH access is off by default.
@@ -661,6 +662,7 @@ These points come from alwaysdata's and Tailscale's documentation as it could be
   alwaysdata's PHP documentation shows `memory_limit`, `post_max_size` and `upload_max_filesize` of 256M in an example `php.ini`; BookWise's own limits (2 MB for pictures, 5 MB for covers) are far lower either way.
 - **git on alwaysdata:** alwaysdata's own guides use git on their servers, but the documentation has no current version list. Check with `git --version`; without git, upload the project with SFTP instead.
 - **Scheduled tasks on alwaysdata:** the documentation says that command tasks use the default language versions of the **Environment** menu and that a run is skipped while the previous one is still running, but not which time zone the schedule uses, nor which shell or working directory a command gets (it warns that Bash-only commands do not work). The tasks above therefore change to the project folder themselves, and [the time zone](#schedule-the-daily-reset-and-the-cleanup) has to be checked with `date`.
+- **An old `db-data` volume:** MySQL's manual supports upgrading a MySQL 8.0 data directory in place to 8.4, but starting this Compose file on a volume made by `mysql:8.0` was not tried.
 - **Environment variables on alwaysdata:** sites have an environment-variables setting (`FOO=bar` pairs), but whether PHP sites receive them was not confirmed. BookWise does not need it: `bin/setup.php` writes `.env`.
 - **Tailscale Funnel:** which forwarding headers Funnel adds is not documented. Tailscale's source code sets `X-Forwarded-For` to the visitor's address and replaces any value the visitor sent; [(c)](#check-the-visitors-addresses-through-funnel) shows how to confirm it on your own setup.
   Tailscale's documentation and its announcement of version 1.52 confirm that the current commands need Tailscale 1.52 or newer, that a foreground `tailscale funnel` ends with Ctrl+C, and that `--bg` survives reboots until `tailscale funnel reset`; they do not show the exact output of `tailscale funnel status`. Funnel on Windows was not tried.

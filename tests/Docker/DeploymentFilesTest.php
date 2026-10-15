@@ -71,6 +71,30 @@ final class DeploymentFilesTest extends TestCase
         self::assertSame($versions, array_values(array_unique($versions)));
     }
 
+    public function testEveryWorkflowActionIsPinnedToTheCommitOfARelease(): void
+    {
+        $workflows = glob(dirname(__DIR__, 2) . '/.github/workflows/*.yml') ?: [];
+        self::assertNotEmpty($workflows);
+        foreach ($workflows as $path) {
+            preg_match_all('/^\s*(?:-\s+)?uses:\s*(\S+)(.*)$/m', (string) file_get_contents($path), $steps, PREG_SET_ORDER);
+            self::assertNotEmpty($steps, basename($path));
+            foreach ($steps as [, $action, $comment]) {
+                // Dependabot (.github/dependabot.yml) updates the SHA and the comment together.
+                self::assertMatchesRegularExpression('/^[\w.-]+\/[\w.\/-]+@[0-9a-f]{40}$/D', $action, basename($path) . ": $action must name a full commit SHA");
+                self::assertMatchesRegularExpression('/^\s+# v?\d+\.\d+\.\d+\s*$/D', $comment, basename($path) . ": $action needs the release it pins in a comment");
+            }
+        }
+    }
+
+    public function testDependabotKeepsTheImagesOnTheTestedVersions(): void
+    {
+        // Moving to these is a change of its own (see the comments in the file).
+        $dependabot = str_replace("\r\n", "\n", self::read('.github/dependabot.yml'));
+        self::assertMatchesRegularExpression("/- dependency-name: php\n\s+versions: \['>= 8\.5'\]/", $dependabot, 'php:8.5-apache needs another opcache setup');
+        self::assertMatchesRegularExpression("/- dependency-name: mysql\n\s+versions: \['>= 9'\]/", $dependabot, 'The local database stays on the MySQL 8.4 LTS line');
+        self::assertStringContainsString("database: ['mysql:8.4']", self::read('.github/workflows/ci.yml'), 'CI tests the same MySQL line as docker-compose.yml');
+    }
+
     public function testShellScriptsRunWithBashInStrictMode(): void
     {
         foreach (['docker/entrypoint.sh', 'tests/Docker/smoke.sh', 'tests/Docker/entrypoint_test.sh'] as $script) {
@@ -114,7 +138,7 @@ final class DeploymentFilesTest extends TestCase
     public function testImageRunsAsWwwDataWithAHealthcheckAndTheEntrypoint(): void
     {
         $dockerfile = self::read('Dockerfile');
-        self::assertMatchesRegularExpression('/^FROM php:8\.3-apache$/m', $dockerfile);
+        self::assertMatchesRegularExpression('/^FROM php:8\.4-apache$/m', $dockerfile);
         self::assertMatchesRegularExpression('/^USER www-data$/m', $dockerfile);
         self::assertMatchesRegularExpression('/^HEALTHCHECK .*\n\s+CMD \["php", "\/var\/www\/bookwise\/docker\/healthcheck\.php"\]$/m', $dockerfile);
         self::assertMatchesRegularExpression('/^ENTRYPOINT \["\/var\/www\/bookwise\/docker\/entrypoint\.sh"\]$/m', $dockerfile);
@@ -163,7 +187,7 @@ final class DeploymentFilesTest extends TestCase
     public function testComposeRunsADemoStoreWithLocalOnlyCredentials(): void
     {
         $compose = self::read('docker-compose.yml');
-        self::assertStringContainsString('image: mysql:8.0', $compose);
+        self::assertStringContainsString('image: mysql:8.4', $compose);
         self::assertStringContainsString('healthcheck:', $compose);
         self::assertStringContainsString('condition: service_healthy', $compose);
         self::assertStringContainsString('"8080:8080"', $compose);
