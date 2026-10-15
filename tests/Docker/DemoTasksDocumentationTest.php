@@ -30,8 +30,11 @@ final class DemoTasksDocumentationTest extends TestCase
             self::assertStringContainsString('cd $root && ' . $command . '"', $setup, "bin/setup.php names: $command");
         }
         self::assertStringContainsString('Usage: php bin/demo-reset.php --yes', self::read('bin/demo-reset.php'));
-        // 04:00 in Riyadh (UTC+3) on a scheduler that keeps UTC.
+        // 04:00 in Riyadh (UTC+3) on a scheduler that keeps UTC, which alwaysdata does not document:
+        // the guide says so and shows how to check it.
         self::assertMatchesRegularExpression('/\| Daily reset \| `[^`]+` \| `0 1 \* \* \*` \| 04:00 \|/', $guide);
+        self::assertStringContainsString('| Riyadh time, if the scheduler keeps UTC |', $guide);
+        self::assertStringContainsString('`TZ=Asia/Riyadh date`', $guide);
     }
 
     /**

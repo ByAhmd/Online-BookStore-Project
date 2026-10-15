@@ -298,7 +298,7 @@ A demo that starts empty has no best sellers, no ratings and nothing on the admi
 `php bin/demo-reset.php --yes` returns a demo to that starting state. It deletes every customer with their data and orders (every other order too), the demo inbox, the one-click demo customers' records, the books administrators added and the uploaded pictures, puts the 55 sample books back as `database/seed.sql` has them, empties the payment simulator's state and adds the showcase again.
 Administrators are kept. The database part is one transaction, so visitors never see a half-reset store. Without `--yes` it changes nothing, and both commands refuse to run outside demo mode.
 With `--no-showcase` it leaves the showcase out, which empties a demo of every customer and order before it becomes a real store ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#d-a-real-store-stripe-payments-and-email), step 8).
-On alwaysdata it runs every night at 04:00 Riyadh time as a scheduled task, next to `php bin/demo-cleanup.php`; [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-daily-reset-and-the-cleanup) has the exact task settings.
+On alwaysdata it runs every night as a scheduled task, next to `php bin/demo-cleanup.php`. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-daily-reset-and-the-cleanup) has the exact task settings for 04:00 Riyadh time, and shows how to check the time zone of alwaysdata's scheduler first: alwaysdata does not document it, and the settings assume UTC.
 
 ## Configuration reference
 

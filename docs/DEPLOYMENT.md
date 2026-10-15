@@ -381,14 +381,14 @@ Two commands keep a public demo tidy. Run both as scheduled tasks:
 
 Both are safe to run at any time. In **Advanced > Scheduled tasks**, add one task per line of this table (type: command), with the schedule in crontab syntax (`minute hour * * *`; shortcuts such as `@daily` are not accepted), then save:
 
-| Task | Command | Schedule | Riyadh time |
+| Task | Command | Schedule | Riyadh time, if the scheduler keeps UTC |
 | --- | --- | --- | --- |
 | Daily reset | `cd $HOME/bookwise && php bin/demo-reset.php --yes` | `0 1 * * *` | 04:00 |
 | Cleanup | `cd $HOME/bookwise && php bin/demo-cleanup.php` | `0 13 * * *` | 16:00 |
 
 - **The PHP version:** `php` in a scheduled task is the account's default version, the one chosen in **Environment > PHP** in [step 2](#step-2-choose-the-php-version): alwaysdata runs command tasks with the default versions of the **Environment** menu, like the `php` command over SSH. If you change the default version later, the tasks follow it.
-- **The time zone:** the schedules above assume that alwaysdata's scheduler keeps UTC; Riyadh is UTC+3 all year. alwaysdata does not document the time zone of scheduled tasks, so check it over SSH: `date` shows the server's time and `TZ=Asia/Riyadh date` the time in Riyadh. Schedule the reset at 4 minus their difference in hours.
-  On a server that keeps Paris time, for example, that is `0 2 * * *`, and the reset then runs at 03:00 in Riyadh while Paris has summer time.
+- **The time zone:** the schedules above are for a scheduler that keeps UTC (Riyadh is UTC+3 all year), which is not confirmed: alwaysdata does not document the time zone of scheduled tasks. Check it over SSH: `date` shows the server's time and `TZ=Asia/Riyadh date` the time in Riyadh. Schedule the reset at 4 minus their difference in hours.
+  On a server whose time zone has summer time, the reset then moves by an hour twice a year, which does no harm: on Paris time, for example, `0 2 * * *` runs it at 04:00 in Riyadh in winter and at 03:00 while Paris has summer time.
 - **Output:** each run's output goes to `/home/myaccount/admin/logs/jobs/`; the reset also writes its counts to `~/bookwise/storage/logs/app.log`. Put your address in the task's email field to be told when a run fails (an exit status other than 0: 1 when nothing was reset, for example when the database cannot be reached; 2 when the reset was done but the payment simulator's state could not be emptied).
 - **Overlaps:** alwaysdata skips a run while the previous one of the same task is still running. A reset takes a few seconds; a second reset or showcase command started meanwhile waits for it, and gives up with `Another showcase seed or demo reset is running` after 30 seconds.
 
@@ -540,7 +540,7 @@ The free alwaysdata plan cannot be used for a store that makes money.
 
 **The demo itself:**
 
-- Anyone can register. Do not enter real personal data (delivery addresses included: any made-up Saudi address in the right format works). Everything visitors do is deleted by the nightly reset (`php bin/demo-reset.php --yes`, 04:00 in Riyadh), and until then the administrators can see it.
+- Anyone can register. Do not enter real personal data (delivery addresses included: any made-up Saudi address in the right format works). Everything visitors do is deleted by the nightly reset (`php bin/demo-reset.php --yes`, meant for 04:00 in Riyadh once [the scheduler's time zone](#schedule-the-daily-reset-and-the-cleanup) has been checked), and until then the administrators can see it.
 - One-click demo customers are limited to 10 per visitor address (for IPv6, per /64 network) and hour, 60 per hour for all visitors together, and 200 at once (the oldest are deleted first). The nightly reset deletes them, and `php bin/demo-cleanup.php` deletes any that are more than 24 hours old.
   Everybody who tries the read-only administrator shares one account, which shows every order of the demo with shortened customer names, addresses and payment references (a full checkout session id would open that customer's payment page).
 - The showcase's customers, orders and reviews are fictional and the same every day; only their dates move with the reset. Its orders never reached anybody, and its customers cannot sign in.
