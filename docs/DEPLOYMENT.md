@@ -614,7 +614,7 @@ Locally, without Docker:
 - `bash tests/Docker/entrypoint_test.sh` tests the entrypoint's configuration logic.
 - With `ENTRYPOINT_TEST_DB_NAME=<a database whose name ends in _test>` and `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASS`, the same script also runs the whole entrypoint against that database, with a stand-in for Apache. **It drops every table in that database.**
 - `vendor/bin/phpunit tests/Docker` runs the PHPUnit tests for `/health.php`, `docker/db-ready.php`, `docker/healthcheck.php`, `bin/setup.php` and the deployment files, including the demo's scheduled tasks in this guide.
-  The showcase and the daily reset are tested by the integration suite (`tests/Integration/DemoShowcaseTest.php`, `DemoResetTest.php`).
+  The showcase and the daily reset are tested by the integration suite (`tests/Integration/DemoShowcaseTest.php`, `DemoResetTest.php`), and the pages that show the showcase by `tests/Http/DemoShowcasePagesTest.php`.
 - `BASE_URL=https://myaccount.alwaysdata.net bash tests/Docker/smoke.sh` checks a deployed demo the same way.
 
 ## Troubleshooting
