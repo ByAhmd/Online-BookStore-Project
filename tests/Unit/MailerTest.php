@@ -245,6 +245,29 @@ final class MailerTest extends TestCase
         }
     }
 
+    public function testSmtpNeverSendsToTheDemoAccountsMadeUpAddresses(): void
+    {
+        $server = FakeSmtpServer::start();
+        try {
+            // The demo customers' and the demo administrator's addresses (DEMO_EMAIL_DOMAIN), in any case.
+            foreach (['reader-0a1b2c3d4e5f@demo.invalid', 'Reader-0A1B@Demo.Invalid', DEMO_VIEWER_ADMIN_EMAIL] as $to) {
+                $run = IsolatedPhp::run('send_mail', ['to' => $to] + self::MESSAGE, self::smtpEnv($server->port));
+                self::assertSame(['ok' => true, 'returned' => true], $run['result'], "$to: reported as handled\n" . $run['stderr']);
+                self::assertArrayNotHasKey('storage/logs/app.log', $run['files'], "$to: not a delivery failure");
+            }
+            self::assertSame('', $server->transcript(), 'No connection to the SMTP server at all');
+            self::assertSame([], $server->messages());
+
+            // Other recipients still go out, also at domains that merely contain the name.
+            $run = IsolatedPhp::run('send_mail', ['to' => 'reader@demo.invalid.example.com'] + self::MESSAGE, self::smtpEnv($server->port));
+            self::assertSame(['ok' => true, 'returned' => true], $run['result'], $run['stderr']);
+            self::assertStringContainsString("C: RCPT TO:<reader@demo.invalid.example.com>\n", $server->transcript());
+            self::assertCount(1, $server->messages());
+        } finally {
+            $server->stop();
+        }
+    }
+
     public function testSmtpWithTlsNeverSignsInOnAServerWithoutStarttls(): void
     {
         $server = FakeSmtpServer::start();
