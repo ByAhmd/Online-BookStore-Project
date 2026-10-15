@@ -276,6 +276,7 @@ sequenceDiagram
 1. `checkout.php` copies the cart into a **pending** order, using prices from the database and integer minor units, together with a copy of the delivery address the customer chose.
    It then creates a Checkout Session for exactly that amount, with an idempotency key that is unique to the order row.
    Checkouts are serialised per customer (`GET_LOCK`), so double clicks, two tabs or two devices cannot open two payable sessions.
+   Named locks belong to the whole database server, so the store's lock names include its database's name (`store_lock_name()`): other databases on the same server, such as other accounts of a shared host, cannot hold them.
    Orders below the minimum charge (2.00 in the store currency) are refused before Stripe is called.
 2. After payment, `success_pay.php` **retrieves the session from Stripe** (or the simulator) and checks that it belongs to the signed-in customer's order.
    It also checks that the amount, currency and payment status all match.

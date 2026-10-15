@@ -103,17 +103,12 @@ function demo_showcase_present(): bool
 
 /**
  * The name of this store's showcase lock: DEMO_SHOWCASE_LOCK and the
- * database's name. Named locks belong to the whole database server, which
- * other databases share (another BookWise demo, or other accounts on a
- * shared host), so without the database in it any of them could hold up
- * this store's nightly reset. MySQL accepts names of at most 64 characters:
- * a longer one uses the hash of the database's name.
+ * database's name (store_lock_name()), so that no other database on the
+ * server can hold up this store's nightly reset.
  */
 function demo_showcase_lock_name(): string
 {
-    $database = (string) config('db.name');
-    $name = DEMO_SHOWCASE_LOCK . ':' . $database;
-    return strlen($name) <= 64 ? $name : DEMO_SHOWCASE_LOCK . ':' . md5($database);
+    return store_lock_name(DEMO_SHOWCASE_LOCK);
 }
 
 /**

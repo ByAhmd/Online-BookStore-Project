@@ -552,7 +552,7 @@ function erase_customer_account(int $userId, ?string $expectedHash = null, bool 
     $email = (string) $user['Eaddress'];
 
     // The same lock start_checkout() takes: no new checkout can begin meanwhile.
-    $lock = 'bookwise-checkout-' . $userId;
+    $lock = checkout_lock_name($userId);
     if ((int) db_value('SELECT GET_LOCK(?, 15)', [$lock]) !== 1) {
         return ['status' => 'unresolved', 'account' => null];
     }
@@ -655,6 +655,8 @@ const DEMO_GUEST_RATE_LIMIT_TOTAL = 60;
 const DEMO_GUEST_RATE_WINDOW_MINUTES = 60;
 /** Books a new demo guest finds among its favorites. */
 const DEMO_GUEST_FAVORITES = 3;
+/** Named lock that serialises the creation of demo guests (store_lock_name() adds the database). */
+const DEMO_GUESTS_LOCK = 'bookwise-demo-guests';
 
 /**
  * True when the sign-in page offers the one-click demo accounts.
@@ -681,14 +683,15 @@ function is_demo_guest(int $userId): bool
  * ("throttled"), and all visitors together DEMO_GUEST_RATE_LIMIT_TOTAL
  * ("crowded"). At most $maxGuests demo guests exist at once: the oldest are
  * deleted with their data to make room ("busy" when that is not possible
- * right now). Creations are serialised with a named lock, so concurrent
- * clicks cannot overshoot any of these limits.
+ * right now). Creations are serialised with a named lock of this store
+ * (DEMO_GUESTS_LOCK), so concurrent clicks cannot overshoot any of these
+ * limits.
  *
  * @return array{status: 'created', user: array<string, mixed>}|array{status: 'throttled'|'crowded'|'busy', user: null}
  */
 function create_demo_guest(string $ip, int $maxGuests = DEMO_GUESTS_MAX): array
 {
-    $lock = 'bookwise-demo-guests';
+    $lock = store_lock_name(DEMO_GUESTS_LOCK);
     if ((int) db_value('SELECT GET_LOCK(?, 10)', [$lock]) !== 1) {
         return ['status' => 'busy', 'user' => null];
     }

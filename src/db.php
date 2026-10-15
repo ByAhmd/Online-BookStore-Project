@@ -143,6 +143,23 @@ function db_transaction(callable $callback): mixed
 }
 
 /**
+ * The name of one of this store's named locks (GET_LOCK()): $name and the
+ * database's name, e.g. "bookwise-checkout-17:bookwise". Named locks belong
+ * to the whole database server, which other databases share (another
+ * BookWise store, or other accounts on a shared host). Without the database
+ * in the name, any of them could hold this store's locks, by chance or on
+ * purpose, and hold up its checkouts or demo customers. MySQL accepts names
+ * of at most 64 characters: a longer one uses the hash of the database's
+ * name instead.
+ */
+function store_lock_name(string $name): string
+{
+    $database = (string) config('db.name');
+    $lock = $name . ':' . $database;
+    return strlen($lock) <= 64 ? $lock : $name . ':' . md5($database);
+}
+
+/**
  * True when a PDOException is a duplicate-key violation (SQLSTATE 23000 / 1062).
  */
 function is_duplicate_key_error(PDOException $e): bool

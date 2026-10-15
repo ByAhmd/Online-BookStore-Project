@@ -190,7 +190,7 @@ final class AccountManagementTest extends DatabaseTestCase
         self::assertSame(['status' => 'unresolved', 'account' => null], delete_customer_account($userId, self::DEFAULT_PASSWORD, self::IP));
         self::assertNotNull(find_user($userId));
         self::assertSame('pending', db_value('SELECT status FROM orders WHERE stripe_session_id = ?', [$sessionId]));
-        self::assertSame(0, (int) db_value('SELECT IS_USED_LOCK(?) IS NOT NULL', ['bookwise-checkout-' . $userId]), 'The checkout lock is released');
+        self::assertSame(0, (int) db_value('SELECT IS_USED_LOCK(?) IS NOT NULL', [checkout_lock_name($userId)]), 'The checkout lock is released');
 
         // A checkout that is merely open is expired on Stripe first, then the account goes.
         $stripe->setState($sessionId, 'open', 'unpaid');

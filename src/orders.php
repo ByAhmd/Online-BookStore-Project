@@ -401,6 +401,17 @@ function mark_order_status(int $orderId, string $status, array $from = ['pending
  * ------------------------------------------------------------------- */
 
 /**
+ * The named lock that serialises a customer's checkouts (start_checkout())
+ * with each other and with the deletion of the account
+ * (erase_customer_account()), scoped to this store's database
+ * (store_lock_name()).
+ */
+function checkout_lock_name(int $userId): string
+{
+    return store_lock_name('bookwise-checkout-' . $userId);
+}
+
+/**
  * Starts (or resumes) checkout for the customer and returns the URL to send
  * the browser to: Stripe's hosted page, or the success page when an earlier
  * pending order turns out to have been paid already.
@@ -416,7 +427,7 @@ function start_checkout(array $user, ?int $addressId): string
 {
     // One checkout at a time per customer (two tabs, double clicks, two devices),
     // so concurrent requests can never leave two payable sessions behind.
-    $lock = 'bookwise-checkout-' . (int) $user['id'];
+    $lock = checkout_lock_name((int) $user['id']);
     if ((int) db_value('SELECT GET_LOCK(?, 15)', [$lock]) !== 1) {
         throw new CheckoutException(t('shop.checkout.in_progress'));
     }
