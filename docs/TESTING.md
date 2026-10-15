@@ -139,9 +139,10 @@ On CI, a failed test is tried once more and two tests run at a time. When a test
 | File | Shows |
 | --- | --- |
 | `home.jpg`, `explore.jpg`, `home-ar.jpg` | The home page, the Explore page and the Arabic home page, as a guest |
-| `book.jpg`, `checkout.jpg`, `payment-simulator.jpg`, `order.jpg`, `inbox.jpg` | A demo customer's book page, checkout page, simulated payment page, order page (with its timeline) and demo inbox |
-| `admin-dashboard.jpg` | The admin dashboard |
-| `mobile.jpg` | The home page on a phone (375 pixels wide) |
+| `book.jpg`, `cart.jpg`, `checkout.jpg`, `payment-simulator.jpg`, `order.jpg`, `inbox.jpg` | A demo customer's book page, cart, checkout page, simulated payment page, order page (with its timeline) and demo inbox |
+| `order-ar.jpg` | The same order page in Arabic |
+| `admin-dashboard.jpg`, `admin-orders.jpg` | The admin dashboard and the orders page (the demo's [showcase](../README.md#the-demos-showcase-and-daily-reset) orders at every stage of their delivery) |
+| `mobile.jpg`, `mobile-order-ar.jpg` | On a phone (375 pixels wide): the home page, and the customer's order page in Arabic |
 
 Desktop pages are taken at 1280 × 800 pixels, the phone at 375 × 812 with a device pixel ratio of 2.
 Like the tests, the script uses the store at `BASE_URL`, or starts the local store described above:
@@ -151,6 +152,13 @@ npm run screenshots
 BASE_URL=http://localhost:8080 SCREENSHOT_ADMIN_EMAIL=admin@bookwise.test SCREENSHOT_ADMIN_PASSWORD=local-admin-password npm run screenshots
 ```
 
-With `SCREENSHOT_ADMIN_EMAIL` and `SCREENSHOT_ADMIN_PASSWORD` (an owner administrator of that store, such as the local one of `docker-compose.yml` above), the order is marked shipped first, so its timeline shows the carrier and the tracking number, and the dashboard is the owner's. Without them, the dashboard is the read-only demo administrator's.
-The script overwrites the files of the same name; look at them before you commit them.
-The README's [Screenshots](../README.md#screenshots) table still shows an older set, which also uses `cart.jpg`, `payment-success.jpg`, `reviews.jpg` and `sign-up.jpg`. The script does not take those four, so when you commit its images, switch the table to them and delete the four old files.
+With `SCREENSHOT_ADMIN_EMAIL` and `SCREENSHOT_ADMIN_PASSWORD` (an owner administrator of that store, such as the local one of `docker-compose.yml` above), the order is marked shipped first, so its timeline shows the carrier and the tracking number, and the admin pages are the owner's. Without them, they are the read-only demo administrator's, with customers' names and addresses shortened.
+The local store has no owner administrator of its own, but `bin/install.php` creates one when `BOOKWISE_ADMIN_EMAIL` and `BOOKWISE_ADMIN_PASSWORD` are set, and `e2e/local-server.js` passes your shell's variables on to it (Bash):
+
+```bash
+export BOOKWISE_ADMIN_EMAIL=owner@bookwise.test BOOKWISE_ADMIN_PASSWORD='<a password of your own>'
+SCREENSHOT_ADMIN_EMAIL="$BOOKWISE_ADMIN_EMAIL" SCREENSHOT_ADMIN_PASSWORD="$BOOKWISE_ADMIN_PASSWORD" \
+    DB_PORT=3306 DB_USER=root DB_PASS=secret npm run screenshots
+```
+
+The script overwrites the files of the same name; look at every image before you commit it. The README's [Screenshots](../README.md#screenshots) section shows all of them.

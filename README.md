@@ -597,7 +597,7 @@ BASE_URL=http://localhost:8080 npx playwright test             # or tests the Do
 ```
 
 The CI's **Browser tests** job runs them against the Docker Compose store and keeps the HTML report when a test fails.
-[docs/TESTING.md](docs/TESTING.md) explains the setup, the accessibility checks and `npm run screenshots`, which takes a new set of screenshots for this README (the [Screenshots](#screenshots) below are still an older set).
+[docs/TESTING.md](docs/TESTING.md) explains the setup, the accessibility checks and `npm run screenshots`, which takes the [screenshots](#screenshots) of this README.
 
 ### Images and browser caching
 
@@ -713,18 +713,21 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
 
 ## Screenshots
 
-These were captured from the application running locally with the sample catalog, a demo customer and the local Stripe mock.
+Taken with `npm run screenshots` ([docs/TESTING.md](docs/TESTING.md#readme-screenshots)) from a local demo store with its showcase data. Select an image to see it at full size.
 
-| | |
-| --- | --- |
-| ![Home page with real catalog data](docs/screenshots/home.jpg) | ![Explore page filtered by genre](docs/screenshots/explore.jpg) |
-| **Home**: catalog size, genres, recommended books | **Explore**: search and genre tabs |
-| ![Book detail page](docs/screenshots/book.jpg) | ![Cart with server-side totals](docs/screenshots/cart.jpg) |
-| **Book page**: price, quantity, favorites | **Cart**: quantities and totals computed on the server |
-| ![Payment confirmed after verification](docs/screenshots/payment-success.jpg) | ![Reviews unlocked after purchase](docs/screenshots/reviews.jpg) |
-| **Payment confirmed** after server-side verification | **Reviews**: only buyers can review; names shown, never emails |
-| ![Sign-up form](docs/screenshots/sign-up.jpg) | ![Admin dashboard](docs/screenshots/admin-dashboard.jpg) |
-| **Sign up / log in** | **Admin dashboard**: catalog and sales totals, book management |
+| English | Arabic (right to left) | Phone (375 pixels wide) |
+| :---: | :---: | :---: |
+| <a href="docs/screenshots/home.jpg"><img src="docs/screenshots/home.jpg" alt="The home page in English" width="300"></a> | <a href="docs/screenshots/home-ar.jpg"><img src="docs/screenshots/home-ar.jpg" alt="The home page in Arabic" width="300"></a> | <a href="docs/screenshots/mobile.jpg"><img src="docs/screenshots/mobile.jpg" alt="The home page on a phone" width="140"></a> |
+| **Home** for a guest | The same page in Arabic | The home page on a phone |
+| <a href="docs/screenshots/order.jpg"><img src="docs/screenshots/order.jpg" alt="An order's page with its delivery timeline" width="300"></a> | <a href="docs/screenshots/order-ar.jpg"><img src="docs/screenshots/order-ar.jpg" alt="The order's page in Arabic" width="300"></a> | <a href="docs/screenshots/mobile-order-ar.jpg"><img src="docs/screenshots/mobile-order-ar.jpg" alt="The order's page in Arabic on a phone" width="140"></a> |
+| **An order**: shipped, with carrier and tracking number | The same order in Arabic | The Arabic order page on a phone |
+
+| | | | |
+| :---: | :---: | :---: | :---: |
+| <a href="docs/screenshots/explore.jpg"><img src="docs/screenshots/explore.jpg" alt="The Explore page" width="180"></a> | <a href="docs/screenshots/book.jpg"><img src="docs/screenshots/book.jpg" alt="A book page" width="180"></a> | <a href="docs/screenshots/cart.jpg"><img src="docs/screenshots/cart.jpg" alt="The cart" width="180"></a> | <a href="docs/screenshots/checkout.jpg"><img src="docs/screenshots/checkout.jpg" alt="The checkout page" width="180"></a> |
+| **Explore**: search, genres, pages | **Book page**: stock, rating, favorites | **Cart**: totals from catalog prices | **Checkout**: delivery address, VAT |
+| <a href="docs/screenshots/payment-simulator.jpg"><img src="docs/screenshots/payment-simulator.jpg" alt="The payment simulator's page" width="180"></a> | <a href="docs/screenshots/inbox.jpg"><img src="docs/screenshots/inbox.jpg" alt="The demo inbox" width="180"></a> | <a href="docs/screenshots/admin-dashboard.jpg"><img src="docs/screenshots/admin-dashboard.jpg" alt="The admin dashboard" width="180"></a> | <a href="docs/screenshots/admin-orders.jpg"><img src="docs/screenshots/admin-orders.jpg" alt="The admin orders page" width="180"></a> |
+| **Payment simulator**: four endings, no card details | **Demo inbox**: the store's emails | **Admin dashboard**: totals, catalog, stock | **Admin orders**: filters, delivery stages |
 
 ## License
 

@@ -2,13 +2,15 @@
 //
 // Takes them from the store at BASE_URL (or the local store), as a guest,
 // a one-click demo customer who buys a book, and an administrator, and writes
-// them as JPEG files into docs/screenshots/: home, explore, book, checkout,
-// payment-simulator, order, inbox, admin-dashboard, home-ar (Arabic) and
-// mobile (375 px wide). With SCREENSHOT_ADMIN_EMAIL and
-// SCREENSHOT_ADMIN_PASSWORD (an owner administrator of that store, such as
-// the local one of docker-compose.yml), the order is marked shipped first, so
-// its timeline shows the carrier and tracking number, and the dashboard is
-// the owner's; otherwise the read-only demo administrator's.
+// them as JPEG files into docs/screenshots/: home, explore, book, cart,
+// checkout, payment-simulator, order, inbox, admin-dashboard, admin-orders,
+// the Arabic home-ar and order-ar, and on a phone (375 px wide) mobile (the
+// home page) and mobile-order-ar (the order page in Arabic). With
+// SCREENSHOT_ADMIN_EMAIL and SCREENSHOT_ADMIN_PASSWORD (an owner
+// administrator of that store, such as the local one of docker-compose.yml),
+// the order is marked shipped first, so its timeline shows the carrier and
+// tracking number, and the admin pages are the owner's; otherwise the
+// read-only demo administrator's.
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
@@ -55,6 +57,7 @@ test('README screenshots', async ({ browser, page }) => {
     await expect(page.locator('#book-title')).toBeVisible();
     await shoot(page, 'book');
     await addBookToCart(page, 'en');
+    await shoot(page, 'cart');
     await page.getByRole('link', { name: labels.en.proceedToCheckout }).click();
     await shoot(page, 'checkout');
     await page.goBack();
@@ -79,6 +82,10 @@ test('README screenshots', async ({ browser, page }) => {
     // Without the welcome message.
     await admin.goto('admin_dashboard.php');
     await shoot(admin, 'admin-dashboard');
+    // The showcase's orders at every stage of their delivery.
+    await admin.goto('admin_orders.php');
+    await expect(admin.locator('.order-list-table tbody tr').first()).toBeVisible();
+    await shoot(admin, 'admin-orders');
     await adminContext.close();
 
     await page.goto(`order.php?id=${orderId}`);
@@ -87,11 +94,21 @@ test('README screenshots', async ({ browser, page }) => {
     await page.goto('inbox.php');
     await expect(page.locator('.inbox-item').first()).toBeVisible();
     await shoot(page, 'inbox');
+    // Last, as switching the language also changes the account's language.
+    await openIn(page, `order.php?id=${orderId}`, 'ar');
+    await expect(page.locator('.order-timeline')).toBeVisible();
+    await shoot(page, 'order-ar');
 
-    // A phone.
+    // A phone: a guest on the home page, and the customer's order page in Arabic.
     const phoneContext = await browser.newContext(phone);
     const mobile = await phoneContext.newPage();
     await openIn(mobile, 'Home_Page.php', 'en');
     await shoot(mobile, 'mobile');
     await phoneContext.close();
+    const customerPhone = await browser.newContext({ ...phone, storageState: await page.context().storageState() });
+    const customerMobile = await customerPhone.newPage();
+    await openIn(customerMobile, `order.php?id=${orderId}`, 'ar');
+    await expect(customerMobile.locator('.order-timeline')).toBeVisible();
+    await shoot(customerMobile, 'mobile-order-ar');
+    await customerPhone.close();
 });
