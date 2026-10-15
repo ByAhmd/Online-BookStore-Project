@@ -1,6 +1,8 @@
 // The keyboard alone: on the profile page, the skip link, the section menu
 // and the main controls of every section are reached with Tab, opened with
 // Enter, and always show where the focus is; so does the demo banner's link.
+// An address sent back with errors starts on the first field the server
+// rejected.
 import { test, expect } from '@playwright/test';
 import { signUp } from './support/store.js';
 
@@ -137,4 +139,23 @@ test('every profile section works with the keyboard alone', async ({ page }) => 
     await page.keyboard.press('Enter');
     await expect(page.locator('.flash-success')).toBeVisible();
     await expect(page.locator('#name')).toHaveValue('Keyboard Reader');
+});
+
+test('an address sent back with errors starts on the first field the server rejected', async ({ page }) => {
+    await signUp(page);
+    await page.goto('profilePage.php?section=addresses');
+    const form = page.locator('#section-addresses form.address-form');
+    // Only the server's checks: the browser's own would stop the form first.
+    await form.evaluate((element) => element.setAttribute('novalidate', ''));
+    await form.locator('#address-phone').fill('abc');
+    await form.locator('button[type="submit"]').click();
+    await expect(page.locator('.flash-error')).toBeVisible();
+    await expect(page.locator('#address-recipient_name')).toHaveAttribute('aria-invalid', 'true');
+
+    // profile.js focuses the field as the page starts. Once the page has
+    // loaded and been drawn, the focus must still be there: a #fragment in
+    // the address used to move it away again.
+    await page.waitForLoadState('load');
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    expect(await describeFocus(page)).toMatch(/^input#address-recipient_name\b/);
 });

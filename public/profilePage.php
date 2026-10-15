@@ -94,7 +94,9 @@ if (is_post()) {
     if ($action === 'save_address') {
         // An address id edits that address (only one of the customer's own); none adds one.
         $addressId = parse_int($_POST['address_id'] ?? null);
-        $formUrl = 'profilePage.php?section=addresses' . ($addressId !== null ? '&edit=' . $addressId : '') . '#address-form';
+        // Without a #fragment: opening one moves the focus to it (or off every
+        // field), after profile.js has put it on the first field with an error.
+        $formUrl = 'profilePage.php?section=addresses' . ($addressId !== null ? '&edit=' . $addressId : '');
         [$address, $errors] = validate_address_input($_POST);
         $makeDefault = ($_POST['make_default'] ?? null) === '1';
         if ($errors !== []) {

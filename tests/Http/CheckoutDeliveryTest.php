@@ -255,9 +255,10 @@ final class CheckoutDeliveryTest extends HttpTestCase
         self::assertSame('Add an address', $document->text('//h3[@id="address-form-title"]'));
         self::assertSame(0, $document->count('//input[@name="make_default"]'), 'The first address is always the default');
 
-        // Mistakes are explained next to the fields.
+        // Mistakes are explained next to the fields. The page opens without a
+        // #fragment, which would take the focus off the first rejected field.
         $refused = $customer->submitForm($page, 'profilePage.php', ['postal_code' => '1234', 'short_address' => 'RR29'] + self::SAMPLE_ADDRESS, ['action' => 'save_address']);
-        $this->assertRedirect($refused, 'profilePage.php?section=addresses#address-form');
+        $this->assertRedirect($refused, 'profilePage.php?section=addresses');
         $page = $customer->follow($refused);
         $document = $this->assertHtmlPage($page);
         $this->assertFlash($page, 'error', 'Please correct the highlighted fields. The address was not saved.');
