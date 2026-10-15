@@ -235,12 +235,27 @@ CI found three more problems after the reviews:
 
 The documentation and the release preparation (the guides, the changelog, the release workflow and the screenshots) were reviewed the same way. The review reported 10 low findings: statements that did not match the code (the demo banner, the settings the browser tests' store takes from `.env`), changelog entries that claimed too much, comments that still pointed to sections of the old README, image tags that a release made out of order would move back, a missing note on the package's visibility, intermediate commits whose links did not resolve yet, and a screenshot caption and sequence. All were fixed.
 
+A last review before the release looked at the whole tree from four sides: security, correctness, translations and accessibility, and documentation and deployment.
+It reported 18 findings, 6 medium and 12 low. Three of them described the same problem, so there were 16 problems, grouped here:
+
+- Sign-in throttling counted single IPv6 addresses, so one host with a /64 network was not limited. It now counts an IPv6 /64 as one network, as the demo customers' limits did, and the security model describes the lockout that 100 failures from 20 or more networks can still cause.
+- The local Compose store listened on every network interface, with an administrator password that the README prints. It now listens on `127.0.0.1` only. The guide's PowerShell steps for Tailscale Funnel left their variables set when the store went back to its local address.
+- The checkout and demo-customer locks (MySQL named locks, which belong to the whole server) did not include the database's name, so other databases on the same server could hold them. Reported three times.
+- Profile pictures were stored at their full size, so a 2 MB upload could take about 6 MB of disk. They are now scaled down to at most 512×512 pixels.
+- In demo mode, a refund put back more copies than the purchase had taken. Migration 003 also recorded copies taken for orders paid before stock tracking existed.
+- Text in both directions was drawn out of order: in Arabic, the book lines of order emails, the Latin paths in the admin texts and the placeholders of empty search fields; in either language, flash messages that start with a title in the other script.
+- In Arabic, the cart link's accessible name lacked the number shown on its icon for 0, 1 and 2 items, and the password limit used the wrong form of its noun.
+- After a refused address, the profile page opened at its `#address-form` fragment, which took the focus off the first rejected field.
+- The smoke test always failed against a demo with email confirmation, as `bin/setup.php` sets it up, and `SECURITY.md` named no way to report privately that works while GitHub's private vulnerability reporting is off.
+
+All were fixed, the code changes with tests. Private vulnerability reporting itself is a setting of the GitHub repository; `SECURITY.md` now says what to do while it is off.
+
 Verification of the release, on the final tree, against isolated sandbox databases only:
 
 | Check | Result |
 | --- | --- |
-| `php bin/lint.php` | 194 PHP files, no syntax errors |
+| `php bin/lint.php` | 195 PHP files, no syntax errors |
 | PHPStan level 8 (`src/`, `bin/`, `public/`) | no errors |
-| PHPUnit (unit, integration, http, deploy) on PHP 8.4 + MariaDB 10.4 | **OK, 1174 tests** (PHP 8.4.23, MariaDB 10.4.32) |
-| Browser tests (Playwright with axe-core, Chromium) against a local demo store on PHP 8.4 + MariaDB 10.4 | **25 passed** |
+| PHPUnit (unit, integration, http, deploy) on PHP 8.4 + MariaDB 10.4 | **OK, 1203 tests** (PHP 8.4.23, MariaDB 10.4.32) |
+| Browser tests (Playwright with axe-core, Chromium) against a local demo store on PHP 8.4 + MariaDB 10.4 | **27 passed** |
 | CI: PHP 8.3, 8.4 and 8.5 with MySQL 8.4, PHP 8.4 with MariaDB 11.4, the Docker image job and the browser-test job | not yet run on this tree; GitHub Actions runs it on pushes to `main` and on pull requests |
