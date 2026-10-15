@@ -55,10 +55,10 @@ services:
       # payment (pay.php; no Stripe account needed, no real payments).
       APP_DEMO: "true"
       REQUIRE_EMAIL_VERIFICATION: "false"
-      # Emails (including password-reset links) are written to
-      # storage/logs/mail.log inside the container instead of being sent:
-      #     docker compose exec app cat storage/logs/mail.log
-      MAIL_DRIVER: log
+      # Emails are kept in the database instead of being sent, as on the
+      # public demo, and shown on the demo inbox page (inbox.php, the "Inbox"
+      # link in the header): each browser sees its own accounts' emails.
+      MAIL_DRIVER: database
       STRIPE_CURRENCY: sar
       DB_HOST: db
       DB_PORT: "3306"

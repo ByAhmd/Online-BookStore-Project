@@ -210,6 +210,7 @@ You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Do
 3. Open <http://localhost:8080>.
    - Sign up as a customer (no email confirmation is needed), or press **Try as a customer** on the sign-in page, add books to the cart and check out. The simulated payment page appears; press **Pay** and you return to the order confirmation.
      Try **Decline**, **Slow payment** and **Cancel** too.
+   - The store's emails (the welcome email, the order confirmation and so on) are not sent: they appear in the demo inbox, the **Inbox** link in the header (`MAIL_DRIVER=database`, as on the public demo). A browser sees the emails of the account it is logged in to and of the accounts it created.
    - **Try as an administrator (read-only)** shows the admin pages with every form switched off.
    - Or log in as the local administrator: `admin@bookwise.test` / `local-admin-password`.
      These values come from `docker-compose.yml` and are **for local use only**. Never reuse them anywhere else; the container refuses that password when `APP_URL` is not a local address.
@@ -220,7 +221,6 @@ You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Do
    | --- | --- |
    | `docker compose up -d --build` | Start in the background |
    | `docker compose logs -f app` | Follow the app's output (start-up, access log, `app.log`) |
-   | `docker compose exec app cat storage/logs/mail.log` | Read the emails, e.g. password-reset links (`MAIL_DRIVER=log`) |
    | `docker compose exec app php bin/create-admin.php you@example.com "Your Name"` | Create another administrator (asks for a password); add `--viewer` for a read-only one |
    | `docker compose exec app php bin/demo-cleanup.php` | Delete the one-click demo customers that are more than 24 hours old |
    | `docker compose exec app php bin/demo-reset.php --yes` | [Reset the demo](#the-showcase-and-the-daily-reset): delete every customer and order, put the sample catalog back and add the showcase again |
@@ -587,7 +587,7 @@ These variables are specific to the container and `docker-compose.yml`. The appl
 | `BOOKWISE_ADMIN_EMAIL` / `BOOKWISE_ADMIN_PASSWORD` | — (Compose: `admin@bookwise.test` / `local-admin-password`) | Administrator created (or its password reset) at every start when both are set. `docker-compose.yml` reads `BOOKWISE_ADMIN_PASSWORD` from your shell. |
 | `BOOKWISE_SEED` | `false` | `true`: load the sample catalog into a new, empty database also outside demo mode |
 | `LOG_DIR` | `storage/logs` | Where `app.log`, `php-error.log` and `mail.log` are written; the first two are copied to the container output |
-| `MAIL_DRIVER` | `log` | `log` locally, `database` (demo inbox) for a public demo, `smtp` for a real store |
+| `MAIL_DRIVER` | `log` (Compose: `database`) | `database` (demo inbox) for a demo, as in `docker-compose.yml`; `log` writes the emails to `mail.log` for development; `smtp` for a real store |
 | `APP_ENV` | `production` | Must be `production` for live Stripe keys (the local Compose file uses `local`). With `production`, the payment simulator needs `APP_DEMO=true` |
 | `DB_NAME`, `DB_HOST`, `DB_PORT` | — | Shown in the start-up log (never `DB_PASS`) |
 | `STRIPE_SECRET_KEY`, `STRIPE_API_BASE` | — | Checked by the entrypoint: a live key stops a demo, and a set `STRIPE_API_BASE` is reported. Neither is used while the simulator is on |

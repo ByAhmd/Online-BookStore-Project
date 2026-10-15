@@ -158,7 +158,8 @@ final class DeploymentFilesTest extends TestCase
         self::assertSame('true', $environment['APP_DEMO'] ?? null);
         self::assertArrayNotHasKey('PAYMENT_SIMULATOR', $environment, 'Demo mode turns the simulator on by itself');
         self::assertSame('false', $environment['REQUIRE_EMAIL_VERIFICATION'] ?? null);
-        self::assertSame('log', $environment['MAIL_DRIVER'] ?? null);
+        // The demo inbox, as on the public demo; the browser tests read their emails there.
+        self::assertSame('database', $environment['MAIL_DRIVER'] ?? null);
         self::assertSame('http://localhost:8080', $environment['APP_URL'] ?? null);
         self::assertSame('db', $environment['DB_HOST'] ?? null);
         self::assertStringContainsString('local', $environment['DB_PASS'] ?? '', 'Use an obviously local-only database password');
