@@ -52,7 +52,7 @@ final class AccountLocalizationTest extends HttpTestCase
         $document = $visitor->get('index.php')->document();
         self::assertSame('أنشئ حسابًا أو سجّل الدخول إلى BookWise', $document->text('//h1'));
         self::assertSame('كلمتا المرور غير متطابقتين.', $document->first('//div[@class="auth-card"]')?->getAttribute('data-i18n-mismatch'));
-        self::assertSame('يجب ألا يزيد طول كلمة المرور على :max بايت.', $document->first('//div[@class="auth-card"]')?->getAttribute('data-i18n-too-long'));
+        self::assertSame('يجب ألا يزيد طول كلمة المرور على :max بايتًا.', $document->first('//div[@class="auth-card"]')?->getAttribute('data-i18n-too-long'));
         self::assertSame('إظهار كلمة المرور', $document->first('//button[@aria-controls="login-password"]')?->getAttribute('aria-label'));
         self::assertSame('8 أحرف على الأقل.', $document->text('//p[@id="signup-password-hint"]'));
         self::assertSame('تنتهي صلاحية الرابط خلال 60 دقيقة.', $document->text('//p[@id="reset-email-hint"]'));

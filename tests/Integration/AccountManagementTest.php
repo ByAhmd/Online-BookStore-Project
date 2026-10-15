@@ -290,7 +290,7 @@ final class AccountManagementTest extends DatabaseTestCase
             self::assertSame('يجب ألا يزيد الاسم على 100 حرف.', person_name_error(str_repeat('ن', 101)));
             self::assertSame(['new' => 'يجب ألا تقل كلمة المرور عن 8 أحرف.'], new_password_errors('short', 'short', 'new', 'confirm'));
             self::assertSame(['confirm' => 'كلمتا المرور غير متطابقتين.'], new_password_errors('long-enough-1', 'different-1', 'new', 'confirm'));
-            self::assertSame(['new' => 'يجب ألا يزيد طول كلمة المرور على 72 بايت.'], new_password_errors(str_repeat('x', 73), str_repeat('x', 73), 'new', 'confirm'));
+            self::assertSame(['new' => 'يجب ألا يزيد طول كلمة المرور على 72 بايتًا.'], new_password_errors(str_repeat('x', 73), str_repeat('x', 73), 'new', 'confirm'));
             self::assertSame('يُرجى إدخال تاريخ ميلاد صالح.', date_of_birth_error('1990-02-30'));
         } finally {
             use_locale(null);

@@ -280,6 +280,25 @@ final class CommerceTranslationsTest extends TestCase
     }
 
     /**
+     * The password limit is stated the same way by the server's messages and
+     * the one the pages' scripts show: 72 is in the Arabic "many" category,
+     * whose counted noun takes the accusative singular ("72 بايتًا").
+     */
+    public function testTheArabicPasswordLimitIsWordedTheSameEverywhere(): void
+    {
+        use_locale('ar');
+        try {
+            $expected = 'يجب ألا يزيد طول كلمة المرور على 72 بايتًا.';
+            self::assertSame(72, PASSWORD_MAX_BYTES);
+            self::assertSame($expected, tn('auth.validation.password_too_long', PASSWORD_MAX_BYTES));
+            self::assertSame($expected, t('auth.js.password_too_long', ['max' => PASSWORD_MAX_BYTES]));
+            self::assertSame('يجب ألا يتجاوز طول كلمة المرور 72 بايتًا.', t('shop.validation.password_too_long', ['max' => PASSWORD_MAX_BYTES]));
+        } finally {
+            use_locale(null);
+        }
+    }
+
+    /**
      * Flash messages quote titles and names isolated (bidi_isolate()), and the
      * page shows each isolate as a <bdi> element, after escaping.
      */
