@@ -14,6 +14,7 @@ The guide ends with the [limits of the free demo](#limits-of-the-free-demo), [se
 
 - [The deployment files](#the-deployment-files)
 - [The payment simulator](#the-payment-simulator)
+- [The showcase and the daily reset](#the-showcase-and-the-daily-reset)
 - [How the container works](#how-the-container-works)
 - [(a) Run it locally with Docker](#a-run-it-locally-with-docker)
 - [(b) Free public demo on alwaysdata](#b-free-public-demo-on-alwaysdata)
@@ -33,7 +34,9 @@ The guide ends with the [limits of the free demo](#limits-of-the-free-demo), [se
 | File | Purpose |
 | --- | --- |
 | `bin/setup.php` | Setup script for hosts without Docker, such as alwaysdata: checks PHP, writes `.env`, installs the database and creates an administrator. |
-| `bin/demo-cleanup.php` | Deletes the demo's one-click customers after 24 hours; run it daily as a scheduled task ([below](#schedule-the-demo-cleanup)). |
+| `bin/demo-reset.php` | Returns the demo to its starting state (visitors' data and orders deleted, sample catalog put back, showcase added again); run it daily as a scheduled task ([below](#schedule-the-daily-reset-and-the-cleanup)). |
+| `bin/demo-seed.php`, `src/demo.php` | The demo's [showcase](#the-showcase-and-the-daily-reset): fictional customers, orders and reviews, added once (also by `bin/install.php` in demo mode). |
+| `bin/demo-cleanup.php` | Deletes the demo's one-click customers after 24 hours; run it daily as a scheduled task ([below](#schedule-the-daily-reset-and-the-cleanup)). |
 | `src/payment_simulator.php`, `public/pay.php` | The built-in payment simulator and its payment page. |
 | `Dockerfile` | Two-stage build. Composer installs the production dependencies; the runtime image is `php:8.3-apache` with `pdo_mysql`, `gd` (JPEG, PNG, WebP) and `opcache`. |
 | `.dockerignore` | Allowlist for the build context. `.env`, `.git`, `vendor/`, logs, uploads and the test suite never reach the build. |
@@ -76,6 +79,44 @@ The store never needs to take real payments for a demo. With the payment simulat
 - **Stripe settings:** while the simulator is on, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_API_BASE` are not used. `STRIPE_CURRENCY` still sets the store's currency.
   In demo mode a live key (`sk_live_…`/`rk_live_…`) is refused even with the simulator off.
 - **Webhooks:** the simulator sends none. The store does not need them: it checks the payment when the customer returns. While the simulator is on, `stripe_webhook.php` answers every request with 404 and logs nothing.
+
+## The showcase and the daily reset
+
+A demo that starts empty has no best sellers, no ratings and an empty admin dashboard. In demo mode (`APP_DEMO=true`) BookWise therefore adds a **showcase** of clearly fictional activity, once (`src/demo.php`):
+
+- **12 customers** with made-up names, six in English and six in Arabic. Their addresses are at the reserved `demo.invalid` domain (`showcase-maya@demo.invalid`, …) and their passwords are random and thrown away: nobody can sign in to them, sign up with their addresses or ask for their links, and no email ever leaves the store for them.
+- **A made-up Saudi delivery address** each: real city names, invented streets and building numbers, and phone numbers of the form `+966 50 000 01NN`.
+- **31 orders over the last 60 days:** 29 paid ones at every stage of their delivery (processing, shipped with a carrier and tracking number, delivered), one refunded before it was shipped and one abandoned checkout.
+  They follow the store's own bookkeeping: a copy of the delivery address, catalog prices with VAT in minor units, a sales row for each line of a paid order, and the copies taken out of stock (no book goes below 3 copies). Every date is counted back from the moment the showcase is added, so the orders always look recent.
+- **32 reviews** (3 to 5 stars, in the customer's language), only of books their author bought and received, with likes and dislikes by the other customers, and a few favorites per customer.
+
+The home page's best sellers and recommendations, the book pages and the admin dashboard then look like a store in use. The read-only demo administrator sees the showcase's orders like any others (names and addresses shortened).
+An owner can ship, deliver and refund them like any order; a refund is recorded in the store only, as the simulator never took those payments. The emails such changes send never reach anybody: they are never sent over SMTP to `demo.invalid`, and the demo inbox keeps them for a customer nobody can sign in to.
+
+| Command | Adds the showcase |
+| --- | --- |
+| `php bin/install.php` (so also `php bin/setup.php` and every container start) | In demo mode, when the store has none yet. `--no-showcase` leaves it out. |
+| `php bin/demo-seed.php` | When the store has none yet; otherwise it says `Demo showcase: already there, nothing added.` |
+| `php bin/demo-reset.php --yes` | After every reset |
+
+All three add nothing outside demo mode; `bin/demo-seed.php` and `bin/demo-reset.php` refuse to run there. The showcase is written in one transaction: a failure adds nothing.
+
+**The daily reset.** A public demo collects visitors' sign-ups, orders, reviews and pictures, and administrators may add or change books. `php bin/demo-reset.php --yes` returns it to its starting state:
+
+- it deletes every customer (sign-ups, one-click demo customers and the showcase's customers) with their carts, favorites, addresses, reviews and orders, every other order, the demo inbox, the one-click demo customers' rate-limit records, password-reset links and failed sign-ins;
+- it deletes the books that administrators added and puts the 55 sample books back as `database/seed.sql` has them (text, prices, covers and stock), also those that were changed or deleted;
+- it deletes the uploaded profile pictures and book covers of the deleted rows, and empties the payment simulator's state, so a payment page left open can no longer be paid;
+- it adds the showcase again.
+
+Administrators are kept, the read-only demo administrator too. The database part is one transaction: visitors never see a half-reset store, and a failure changes nothing. Customers who are signed in at that moment are signed out, as their account is gone.
+Without `--yes` the command explains what it would do and changes nothing; outside demo mode it refuses. It prints two lines and writes the same counts to `storage/logs/app.log` (`Demo reset`):
+
+```
+[2026-10-16 04:00:01] Demo reset: deleted 27 customer(s), 45 order(s), 39 review(s), 18 demo inbox email(s) and 2 uploaded picture(s); removed 1 book(s) added by administrators and put back the 55 sample books.
+[2026-10-16 04:00:01] Demo showcase: added 12 customer(s), 31 order(s), 32 review(s), 98 like(s) and dislike(s) and 36 favorite(s).
+```
+
+On alwaysdata it runs every night as a scheduled task ([below](#schedule-the-daily-reset-and-the-cleanup)). With Docker, run it by hand when you like: `docker compose exec app php bin/demo-reset.php --yes`.
 
 ## How the container works
 
@@ -163,7 +204,7 @@ You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Do
    docker compose up --build
    ```
 
-   Wait for `[bookwise] Starting Apache on port 8080.` On the first start you will also see `Created schema …` and `Loaded the sample catalog (55 books).`
+   Wait for `[bookwise] Starting Apache on port 8080.` On the first start you will also see `Created schema …`, `Loaded the sample catalog (55 books).` and `Demo showcase: added 12 customer(s), 31 order(s), …` (the [showcase](#the-showcase-and-the-daily-reset)).
 
 3. Open <http://localhost:8080>.
    - Sign up as a customer (no email confirmation is needed), or press **Try as a customer** on the sign-in page, add books to the cart and check out. The simulated payment page appears; press **Pay** and you return to the order confirmation.
@@ -181,6 +222,7 @@ You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Do
    | `docker compose exec app cat storage/logs/mail.log` | Read the emails, e.g. password-reset links (`MAIL_DRIVER=log`) |
    | `docker compose exec app php bin/create-admin.php you@example.com "Your Name"` | Create another administrator (asks for a password); add `--viewer` for a read-only one |
    | `docker compose exec app php bin/demo-cleanup.php` | Delete the one-click demo customers that are more than 24 hours old |
+   | `docker compose exec app php bin/demo-reset.php --yes` | [Reset the demo](#the-showcase-and-the-daily-reset): delete every customer and order, put the sample catalog back and add the showcase again |
    | `docker compose down` | Stop; the database and uploads are kept in named volumes |
    | `docker compose down -v` | Stop and **delete** the database and uploads |
    | `BASE_URL=http://localhost:8080 bash tests/Docker/smoke.sh` | Run the end-to-end smoke test against the running store |
@@ -282,9 +324,9 @@ It checks PHP, its extensions and the folders it writes to, then asks:
 Nothing changes until every answer is valid and the database answers. Then the script:
 
 - writes `~/bookwise/.env`, readable only by you, with the values of a public demo: `APP_ENV=production`, `APP_DEBUG=false`, `APP_DEMO=true`, `PAYMENT_SIMULATOR=true`, `MAIL_DRIVER=database` (emails are kept for 48 hours and shown on the demo inbox page, `inbox.php`) and `REQUIRE_EMAIL_VERIFICATION=true` (new customers confirm their address with the link in the inbox);
-- creates the tables and loads the 55-book sample catalog (`php bin/install.php --seed`);
+- creates the tables and loads the 55-book sample catalog (`php bin/install.php --seed`), then adds the [showcase](#the-showcase-and-the-daily-reset) of fictional customers, orders and reviews;
 - creates the administrator;
-- names the command for the daily cleanup of the one-click demo customers ([Schedule the demo cleanup](#schedule-the-demo-cleanup)).
+- names the commands for the two daily scheduled tasks, the reset and the cleanup of the one-click demo customers ([below](#schedule-the-daily-reset-and-the-cleanup)).
 
 Settings come from the `.env` file; nothing has to be entered in the panel's environment variables.
 If you ever turn the demo into a real store, change both `APP_DEMO` and `PAYMENT_SIMULATOR` to `false`, as described in [(d)](#d-a-real-store-stripe-payments-and-email).
@@ -303,7 +345,7 @@ All its options are listed by `php bin/setup.php --help`.
 ### Step 8: check it
 
 1. Open `https://myaccount.alwaysdata.net/health.php`. It should answer `{"status":"ok"}`.
-2. Open `https://myaccount.alwaysdata.net`, sign up as a customer, add a book to the cart and check out. The simulated payment page appears; press **Pay**.
+2. Open `https://myaccount.alwaysdata.net`: the home page shows best sellers with their sales and recommended books with their ratings, from the showcase. Sign up as a customer, add a book to the cart and check out. The simulated payment page appears; press **Pay**.
    The sign-in page also offers **Try as a customer** and **Try as an administrator (read-only)**, which sign visitors in with one click.
 3. Log in with the administrator account from step 6 and open **Orders**: the order is paid, and you can refund it.
 4. Optional, from your own computer (Git Bash on Windows): `BASE_URL=https://myaccount.alwaysdata.net bash tests/Docker/smoke.sh`.
@@ -328,16 +370,26 @@ If the page showed your address, throttling works per visitor. If it showed anot
 The same holds for the one-click demo customers: 10 per hour for everyone together instead of 10 per visitor (and 60 for everyone).
 That is acceptable for a demo; note it in the limits you present.
 
-### Schedule the demo cleanup
+### Schedule the daily reset and the cleanup
 
-Every press of **Try as a customer** creates a throwaway customer account. `php bin/demo-cleanup.php` deletes the ones that are more than 24 hours old, with their carts, favorites, reviews and abandoned checkouts (paid orders are kept, anonymised).
-It is safe to run at any time and prints one line. Run it once a day:
+Two commands keep a public demo tidy. Run both as scheduled tasks:
 
-1. Open **Advanced > Scheduled tasks** and add a task that runs a command.
-2. Command: `cd $HOME/bookwise && php bin/demo-cleanup.php`
-3. Schedule: `0 4 * * *` (04:00 every day, in crontab syntax; shortcuts such as `@daily` are not accepted). Save.
+- `php bin/demo-reset.php --yes` returns the demo to its starting state every night: visitors' accounts, orders, reviews and pictures go, the sample catalog comes back and the showcase is added again ([what it does](#the-showcase-and-the-daily-reset)).
+- `php bin/demo-cleanup.php` deletes the one-click demo customers that are more than 24 hours old, with their carts, favorites, reviews and abandoned checkouts (paid orders are kept, anonymised).
+  After a nightly reset it rarely finds any: it is the safety net for a night without a reset, and the only cleanup if you remove the reset task to keep visitors' data. Without either task, demo customers are only deleted when 200 of them exist (the oldest make room for new ones).
 
-Its output goes to `/home/myaccount/admin/logs/jobs/`. Without the task, demo customers are only deleted when 200 of them exist (the oldest make room for new ones).
+Both are safe to run at any time. In **Advanced > Scheduled tasks**, add one task per line of this table (type: command), with the schedule in crontab syntax (`minute hour * * *`; shortcuts such as `@daily` are not accepted), then save:
+
+| Task | Command | Schedule | Riyadh time |
+| --- | --- | --- | --- |
+| Daily reset | `cd $HOME/bookwise && php bin/demo-reset.php --yes` | `0 1 * * *` | 04:00 |
+| Cleanup | `cd $HOME/bookwise && php bin/demo-cleanup.php` | `0 13 * * *` | 16:00 |
+
+- **The PHP version:** `php` in a scheduled task is the account's default version, the one chosen in **Environment > PHP** in [step 2](#step-2-choose-the-php-version): alwaysdata runs command tasks with the default versions of the **Environment** menu, like the `php` command over SSH. If you change the default version later, the tasks follow it.
+- **The time zone:** the schedules above assume that alwaysdata's scheduler keeps UTC; Riyadh is UTC+3 all year. alwaysdata does not document the time zone of scheduled tasks, so check it over SSH: `date` shows the server's time and `TZ=Asia/Riyadh date` the time in Riyadh. Schedule the reset at 4 minus their difference in hours.
+  On a server that keeps Paris time, for example, that is `0 2 * * *`, and the reset then runs at 03:00 in Riyadh while Paris has summer time.
+- **Output:** each run's output goes to `/home/myaccount/admin/logs/jobs/`; the reset also writes its counts to `~/bookwise/storage/logs/app.log`. Put your address in the task's email field to be told when a run fails (an exit status other than 0, for example when the database cannot be reached).
+- **Overlaps:** alwaysdata skips a run while the previous one of the same task is still running. A reset takes a few seconds; a second reset or showcase command started meanwhile waits for it, and gives up with `Another showcase seed or demo reset is running` after 30 seconds.
 
 ### After the first deploy
 
@@ -350,11 +402,11 @@ Its output goes to `/home/myaccount/admin/logs/jobs/`. Without the task, demo cu
   php bin/install.php
   ```
 
-  `bin/install.php` applies pending migrations and, in demo mode, restocks the catalog.
+  `bin/install.php` applies pending migrations and, in demo mode, restocks the catalog and adds the showcase if it is missing.
 - **Logs:** BookWise writes `~/bookwise/storage/logs/app.log` and `php-error.log`. Read them with `tail -n 50 ~/bookwise/storage/logs/app.log`.
 - **Another administrator:** `php bin/create-admin.php you@example.com "Your Name"` (asks for a password).
 - **Scheduled tasks:** **Advanced > Scheduled tasks** runs commands on a schedule written in crontab syntax, for example `0 4 * * *` for 04:00 every day (shortcuts such as `@daily` are not accepted).
-  Their output goes to `/home/myaccount/admin/logs/jobs/`. The demo cleanup runs this way ([above](#schedule-the-demo-cleanup)); a daily `cd $HOME/bookwise && php bin/install.php` also restocks the catalog.
+  Their output goes to `/home/myaccount/admin/logs/jobs/`. The daily reset and the demo cleanup run this way ([above](#schedule-the-daily-reset-and-the-cleanup)).
 - **Idle site:** alwaysdata stops a site's PHP processes after a period without visits (30 minutes by default, changeable under the site's **Advanced** settings) and starts them again on the next visit.
   Unlike a container platform, files are kept: uploads, logs, sessions and the payment simulator's state survive.
 
@@ -483,8 +535,9 @@ The free alwaysdata plan cannot be used for a store that makes money.
 
 **The demo itself:**
 
-- Anyone can register. Do not enter real personal data (delivery addresses included: any made-up Saudi address in the right format works), and expect the data to be reset.
-- One-click demo customers are limited to 10 per visitor address (for IPv6, per /64 network) and hour, 60 per hour for all visitors together, and 200 at once (the oldest are deleted first). They are deleted after 24 hours by `php bin/demo-cleanup.php`.
+- Anyone can register. Do not enter real personal data (delivery addresses included: any made-up Saudi address in the right format works). Everything visitors do is deleted by the nightly reset (`php bin/demo-reset.php --yes`, 04:00 in Riyadh), and until then the administrators can see it.
+- One-click demo customers are limited to 10 per visitor address (for IPv6, per /64 network) and hour, 60 per hour for all visitors together, and 200 at once (the oldest are deleted first). The nightly reset deletes them, and `php bin/demo-cleanup.php` deletes any that are more than 24 hours old.
+- The showcase's customers, orders and reviews are fictional and the same every day; only their dates move with the reset. Its orders never reached anybody, and its customers cannot sign in.
   Everybody who tries the read-only administrator shares one account, which shows every order of the demo with shortened customer names, addresses and payment references (a full checkout session id would open that customer's payment page).
 - Visitors' purchases never take a book below 3 copies, and `php bin/install.php` (or a container start) restocks the catalog.
 - Nothing is ever shipped: a demo order stays *processing* until an administrator marks it shipped and delivered on its order page, which only updates the order and sends its emails to the demo inbox.
@@ -497,7 +550,7 @@ The free alwaysdata plan cannot be used for a store that makes money.
   The simulator keeps no card data and no email addresses.
 - **A real store never uses the simulator.** With `APP_ENV=production` and `APP_DEMO=false`, `PAYMENT_SIMULATOR=true` is refused (no payments, an error in `app.log`, and the container does not start), so a forgotten setting cannot hand out free orders.
 - **Stripe's webhook is closed in the demo.** While the simulator is on, `stripe_webhook.php` answers 404 and logs nothing, so a demo needs no webhook secret and visitors cannot fill the error log through it.
-- **Demo data is public and temporary.** Anyone can register on a public demo. Do not enter real personal data, and expect the data to be reset.
+- **Demo data is public and temporary.** Anyone can register on a public demo. Do not enter real personal data; the nightly reset deletes it with every customer, order and upload. Both the reset and the showcase refuse to run without `APP_DEMO=true`, and the reset needs `--yes`, so they never touch a real store's customers.
 - **Secrets stay out of the repository.** On alwaysdata they are in `~/bookwise/.env`, which `bin/setup.php` makes readable by its owner only; it never prints passwords.
   With Docker they are environment variables, and the entrypoint never prints them.
 - **Serve only `public/`.** On alwaysdata the site's root directory must be `/bookwise/public/`. With Docker, the virtual host serves only `public/`, PHP never runs under `/uploads/`, and dotfiles are denied.
@@ -555,7 +608,8 @@ Locally, without Docker:
 
 - `bash tests/Docker/entrypoint_test.sh` tests the entrypoint's configuration logic.
 - With `ENTRYPOINT_TEST_DB_NAME=<a database whose name ends in _test>` and `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASS`, the same script also runs the whole entrypoint against that database, with a stand-in for Apache. **It drops every table in that database.**
-- `vendor/bin/phpunit tests/Docker` runs the PHPUnit tests for `/health.php`, `docker/db-ready.php`, `docker/healthcheck.php`, `bin/setup.php` and the deployment files.
+- `vendor/bin/phpunit tests/Docker` runs the PHPUnit tests for `/health.php`, `docker/db-ready.php`, `docker/healthcheck.php`, `bin/setup.php` and the deployment files, including the demo's scheduled tasks in this guide.
+  The showcase and the daily reset are tested by the integration suite (`tests/Integration/DemoShowcaseTest.php`, `DemoResetTest.php`).
 - `BASE_URL=https://myaccount.alwaysdata.net bash tests/Docker/smoke.sh` checks a deployed demo the same way.
 
 ## Troubleshooting
@@ -579,6 +633,9 @@ Locally, without Docker:
 | `The payment simulator cannot save …` in `app.log`, and checkout or the payment page fails | The folder of `PAYMENT_SIMULATOR_STORE` is not writable, or the disk is full (on alwaysdata: the 1 GB quota). The previous state is kept; make the folder writable or free some space, then try again. |
 | `Administrator not created: …` | `BOOKWISE_ADMIN_EMAIL` is not a valid address, or `BOOKWISE_ADMIN_PASSWORD` is shorter than 8 characters. Fix or remove both. |
 | The first page after a quiet period is slow | alwaysdata restarts the site's PHP processes after the idle time (30 minutes by default). |
+| `Refusing to reset: only a public demo (APP_DEMO=true) is reset` or `Refusing to add the showcase` | The store is not in demo mode. Both commands are only for a public demo; check `APP_DEMO` in `.env`. |
+| `Another showcase seed or demo reset is running` | A reset (or `bin/demo-seed.php`) was still running after 30 seconds. Run the command again later; the scheduled reset tries again the next night. |
+| `The database "…" is not up to date. Run: php bin/install.php` (reset or showcase) | The code was updated without its migrations. Run `php bin/install.php`, then the command again. |
 | `PORT must be a TCP port number` / Apache cannot bind | `PORT` must be a number from 1024 to 65535 (the container does not run as root). |
 
 ## Facts that could not be confirmed
@@ -593,6 +650,7 @@ These points come from alwaysdata's and Tailscale's documentation as it could be
 - **Free-plan details:** SSH, scheduled tasks and unlimited sites and databases are listed for the Public Cloud offers, which include the free plan; the free plan's own page lists only disk, memory, CPU, backups and the restrictions above.
   alwaysdata's PHP documentation shows `memory_limit`, `post_max_size` and `upload_max_filesize` of 256M in an example `php.ini`; BookWise's own limits (2 MB for pictures, 5 MB for covers) are far lower either way.
 - **git on alwaysdata:** alwaysdata's own guides use git on their servers, but the documentation has no current version list. Check with `git --version`; without git, upload the project with SFTP instead.
+- **Scheduled tasks on alwaysdata:** the documentation says that command tasks use the default language versions of the **Environment** menu and that a run is skipped while the previous one is still running, but not which time zone the schedule uses, nor which shell or working directory a command gets (it warns that Bash-only commands do not work). The tasks above therefore change to the project folder themselves, and [the time zone](#schedule-the-daily-reset-and-the-cleanup) has to be checked with `date`.
 - **Environment variables on alwaysdata:** sites have an environment-variables setting (`FOO=bar` pairs), but whether PHP sites receive them was not confirmed. BookWise does not need it: `bin/setup.php` writes `.env`.
 - **Tailscale Funnel:** which forwarding headers Funnel adds is not documented. Tailscale's source code sets `X-Forwarded-For` to the visitor's address and replaces any value the visitor sent; [(c)](#check-the-visitors-addresses-through-funnel) shows how to confirm it on your own setup.
   Tailscale's documentation and its announcement of version 1.52 confirm that the current commands need Tailscale 1.52 or newer, that a foreground `tailscale funnel` ends with Ctrl+C, and that `--bg` survives reboots until `tailscale funnel reset`; they do not show the exact output of `tailscale funnel status`. Funnel on Windows was not tried.

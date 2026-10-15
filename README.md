@@ -14,7 +14,8 @@ nothing. The whole interface is available in **English and Arabic** (right-to-le
 It runs locally with PHP's built-in server or Docker, and can be published as a free
 **live demo** with simulated payments on ordinary PHP hosting such as alwaysdata
 (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). A reviewer can try such a demo in one click:
-as a fresh demo customer, or as a read-only administrator.
+as a fresh demo customer, or as a read-only administrator. The demo starts with a showcase of
+fictional customers, orders and reviews, and a nightly reset puts it back.
 
 It started as a team project for the *Fundamentals of Web Programming* course at
 King Faisal University (see the in-app **About** page). It has since been audited
@@ -102,6 +103,8 @@ page architecture is unchanged; there is no framework.
     One visitor (an IPv4 address, or an IPv6 /64 network) may create 10 per hour and all visitors together 60 per hour, and at most 200 exist at once (the oldest are deleted, with their data, to make room).
     `php bin/demo-cleanup.php` deletes them after 24 hours, with their carts, favorites, reviews and abandoned checkouts; paid orders are kept, anonymised, as when customers delete their accounts.
   - **Try as an administrator (read-only)** signs in to a shared viewer administrator, created on first use with a random password nobody knows.
+- A showcase for the demo (only with `APP_DEMO=true`): fictional customers in English and Arabic with their orders at every stage of delivery, reviews, likes and favorites, so that best sellers, ratings and the admin dashboard are not empty; and a nightly reset (`php bin/demo-reset.php --yes`) that deletes everything visitors did and puts the sample catalog and the showcase back.
+  See [The demo's showcase and daily reset](#the-demos-showcase-and-daily-reset).
 
 ## Technology stack
 
@@ -135,6 +138,7 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 │   ├── books.php cart.php orders.php   Catalog, stock, cart, Stripe orders and refunds
 │   ├── addresses.php fulfilment.php    Delivery addresses; delivery of paid orders, order emails, order page data
 │   ├── payment_simulator.php           Built-in stand-in for the Stripe API (demo payments)
+│   ├── demo.php            The demo's showcase (fictional customers, orders, reviews) and its daily reset
 │   ├── i18n.php            Translations (t(), tn()), Arabic plurals, language switching
 │   ├── migrations.php      Schema migration runner
 │   ├── db.php env.php helpers.php mailer.php uploads.php
@@ -150,6 +154,8 @@ Required PHP extensions: `pdo_mysql`, `mbstring`, `curl`, `json`, `fileinfo`.
 │   ├── migrate.php         Apply pending migrations
 │   ├── create-admin.php    Create an administrator (--viewer: read-only) or reset an administrator's password
 │   ├── demo-cleanup.php    Delete the one-click demo customers after 24 hours (a daily scheduled task)
+│   ├── demo-reset.php      Return the demo to its starting state: showcase, sample catalog, no visitors' data (a daily scheduled task)
+│   ├── demo-seed.php       Add the demo's showcase of fictional customers, orders and reviews (once)
 │   ├── upgrade-legacy-db.php  Upgrade a database created by the original project
 │   └── lint.php            `php -l` over the whole project
 ├── docker/  Dockerfile  docker-compose.yml   Container image and local Compose setup
@@ -278,6 +284,21 @@ In demo mode the stock is topped up at every start and simulated purchases never
 - how to present the Docker store from your own PC through **Tailscale Funnel**;
 - how to switch from demo mode to real Stripe payments and email.
 
+### The demo's showcase and daily reset
+
+A demo that starts empty has no best sellers, no ratings and nothing on the admin dashboard. In demo mode (`APP_DEMO=true`) BookWise therefore adds a **showcase** once (`src/demo.php`):
+
+- 12 clearly fictional customers, six with English and six with Arabic names. Their addresses are at the reserved `demo.invalid` domain (`showcase-maya@demo.invalid`, …) and their passwords are random and thrown away, so nobody can sign in to them; each has a made-up Saudi delivery address.
+- 31 orders over the last 60 days: paid ones at every stage of delivery (processing, shipped with a carrier and tracking number, delivered), one refunded before it was shipped and one abandoned checkout.
+  They follow the store's own rules: delivery-address copies, catalog prices with VAT, sales rows for paid orders, and copies taken out of stock (never below 3).
+- 32 reviews (3 to 5 stars, in the customer's language) by customers who received the book, with likes and dislikes by the others, and favorites.
+
+`php bin/install.php` adds it in demo mode when the store has none yet (so `php bin/setup.php` and the container do too; `--no-showcase` leaves it out), and `php bin/demo-seed.php` adds it by hand. Running either again adds nothing.
+
+`php bin/demo-reset.php --yes` returns a demo to that starting state. It deletes every customer with their data and orders (every other order too), the demo inbox, the one-click demo customers' records, the books administrators added and the uploaded pictures, puts the 55 sample books back as `database/seed.sql` has them, empties the payment simulator's state and adds the showcase again.
+Administrators are kept. The database part is one transaction, so visitors never see a half-reset store. Without `--yes` it changes nothing, and both commands refuse to run outside demo mode.
+On alwaysdata it runs every night at 04:00 Riyadh time as a scheduled task, next to `php bin/demo-cleanup.php`; [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-daily-reset-and-the-cleanup) has the exact task settings.
+
 ## Configuration reference
 
 All settings come from environment variables. `src/env.php` loads `.env` for
@@ -291,7 +312,7 @@ convenience, and variables already set in the real environment take precedence.
 | `APP_URL` | `http://localhost:8000` | Public URL of `public/` without a trailing slash. Used for Stripe return URLs and password-reset links. |
 | `APP_TIMEZONE` | `Asia/Riyadh` | PHP and database-session timezone |
 | `APP_DEFAULT_LOCALE` | `en` | Interface language for visitors who have not chosen one: `en` or `ar` |
-| `APP_DEMO` | `false` | Public demo mode: shows a banner, offers the one-click demo accounts on the sign-in page (`demo_login.php` answers 404 without it), turns the payment simulator on (unless `PAYMENT_SIMULATOR=false`) and keeps the sample catalog in stock ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
+| `APP_DEMO` | `false` | Public demo mode: shows a banner, offers the one-click demo accounts on the sign-in page (`demo_login.php` answers 404 without it), turns the payment simulator on (unless `PAYMENT_SIMULATOR=false`), keeps the sample catalog in stock and lets `bin/install.php` add the [showcase](#the-demos-showcase-and-daily-reset) ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
 | `REQUIRE_EMAIL_VERIFICATION` | `true` | New customers must confirm their email address before signing in. Needs working email in production. |
 | `LOG_DIR` | `storage/logs` | Directory for `app.log`, `php-error.log` and `mail.log` (relative paths start at the project root) |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `3306` | Database server |
@@ -533,10 +554,10 @@ Set `BOOKWISE_REQUIRE_DB=1` to make that a failure instead; CI does this.
 The suites are:
 
 - **unit:** pure functions, plus the image tools (WebP copies, `bin/optimize-images.php`) on scratch files.
-- **integration:** domain code against a real database.
+- **integration:** domain code against a real database, including the demo's showcase (every rule of the store it must keep) and its daily reset.
 - **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, guest browsing, cart and stock, the checkout page and delivery addresses, checkout (with Stripe and with every ending of the payment simulator), the order page, deliveries and order emails, refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, read-only administrators (every admin form is posted as a viewer, and nothing may change; no checkout session id is shown to them), the one-click demo accounts, the demo inbox and the Arabic interface.
   Every page check also loads the page's CSS, scripts and images, including each WebP copy in a `srcset`.
-- **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes) and of the Apache cache rules. The image itself is built and smoke-tested by the CI's Docker job.
+- **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes, the demo's scheduled tasks and the links between the guides) and of the Apache cache rules. The image itself is built and smoke-tested by the CI's Docker job.
 
 Stripe is never contacted by the tests. Most of them talk to `tests/Support/stripe_mock_router.php`, a thin HTTP wrapper
 around the payment simulator that the suites start automatically, so they can record, fail and rewrite Stripe requests.
@@ -648,14 +669,15 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
   - Demo customers are limited per visitor (10 per hour for an IPv4 address or an IPv6 /64 network), with the same caveat as login throttling behind a proxy: if every visitor shares the proxy's address, they share the limit too.
   - Someone with many addresses can still use up the limit for all visitors (60 per hour). Nobody can then start a demo customer until the hour is over, but existing demo customers are not pushed out faster than that.
   - At most 200 demo customers exist at once. On a busy demo the oldest are deleted to make room, so a visitor's demo account can disappear before its 24 hours are over.
-  - They are deleted after 24 hours only when `php bin/demo-cleanup.php` runs (a daily scheduled task, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-demo-cleanup)); a checkout still being confirmed delays it to the next run.
+  - They are deleted by the nightly reset, or after 24 hours when `php bin/demo-cleanup.php` runs (both daily scheduled tasks, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-daily-reset-and-the-cleanup)); for the cleanup, a checkout still being confirmed delays it to the next run.
   - Every visitor who presses **Try as an administrator** shares the same read-only account, and sees every order of the demo (with shortened customer details and payment references).
 - **The demo inbox reveals registered addresses:** after signing up, a confirmation email appears in the browser's inbox only when the address was new.
   The sign-up page itself still gives the same answer either way. This only applies to a demo with `MAIL_DRIVER=database`, which holds no real accounts.
 - **Demo inbox access to a new account ends with the browser session:** without logging in, an account's emails can only be read in the browser session that created it.
   Once that session ends (logging out, closing the browser or 2 hours of inactivity), a forgotten password cannot be reset from the demo.
-  An account that was never confirmed cannot be confirmed any more, and its address stays taken until the demo data is reset.
+  An account that was never confirmed cannot be confirmed any more, and its address stays taken until the next nightly reset.
   This follows from the rule that nobody may read another person's emails.
+- **The demo's showcase is fixed:** its customers, orders and reviews are the same every day (only their dates move), and the nightly reset deletes everything visitors and administrators did, books added by administrators included. Its scheduled time depends on the time zone of alwaysdata's scheduler, which has to be checked (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-daily-reset-and-the-cleanup)).
 - **The free live demo** on alwaysdata has 1 GB of disk space, shows its emails in the demo inbox instead of sending them, and its first request after 30 idle minutes is slower. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#limits-of-the-free-demo).
 - **The original database could not be fully recovered:** the original repository shipped raw MariaDB data files instead of an SQL export.
   The table definitions and the 55-book catalog were recovered from them and form `schema.sql`/`seed.sql`.
