@@ -64,7 +64,7 @@ if (config('app.demo')) {
                 echo demo_showcase_report($showcase) . PHP_EOL;
             }
         } catch (DemoStoreException $e) {
-            // Another seed is running right now: it adds the showcase.
+            // A reset is running right now: it adds the showcase itself.
             echo 'Demo showcase: skipped. ' . $e->getMessage() . PHP_EOL;
         }
     }

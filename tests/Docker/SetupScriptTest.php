@@ -138,7 +138,8 @@ final class SetupScriptTest extends DatabaseTestCase
             'The database answers.', 'Database schema is up to date.', 'Created administrator admin@example.test.', 'BookWise is ready at https://bookwise-demo.example.net',
             // The demo's fictional customers, orders and reviews.
             'Demo showcase: added 12 customer(s), 31 order(s), 32 review(s)',
-            // The daily scheduled task for the one-click demo customers.
+            // The daily scheduled tasks: the reset, and the cleanup of the one-click demo customers.
+            'Reset the demo to its starting state with a daily scheduled task: cd ' . BASE_PATH . ' && php bin/demo-reset.php --yes',
             'Delete demo customers older than a day with a daily scheduled task: cd ' . BASE_PATH . ' && php bin/demo-cleanup.php',
         ] as $line) {
             self::assertStringContainsString($line, $run['stdout']);

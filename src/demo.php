@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * The public demo (APP_DEMO=true): its showcase.
+ * The public demo (APP_DEMO=true): its showcase and its daily reset.
  *
  * A demo that starts empty looks abandoned: no best sellers, no ratings and
  * an empty admin dashboard. seed_demo_showcase() (bin/demo-seed.php, and
@@ -33,6 +33,11 @@ declare(strict_types=1);
  * domain in every form), demo guests are "reader-<random>@" and the shared
  * demo administrator is not a customer. The unique email key also makes
  * the showcase impossible to add twice.
+ *
+ * reset_demo_store() (bin/demo-reset.php, a daily scheduled task) returns a
+ * demo to that starting state: every customer goes with their data and
+ * every order, the catalog is put back to the 55 sample books, and the
+ * showcase is added again. Administrators are kept.
  */
 
 /** Showcase customers' email addresses: this prefix, a name, "@" and DEMO_EMAIL_DOMAIN. */
@@ -47,7 +52,7 @@ const DEMO_SHOWCASE_REFUND_HOURS = 5;
 /** Percentages of the other showcase customers who like, and who dislike, a showcase review. */
 const DEMO_SHOWCASE_LIKE_PERCENT = 25;
 const DEMO_SHOWCASE_DISLIKE_PERCENT = 4;
-/** Named lock that lets one showcase seed run at a time. */
+/** Named lock that lets one showcase seed or demo reset run at a time. */
 const DEMO_SHOWCASE_LOCK = 'bookwise-demo-showcase';
 
 /** A demo operation that cannot run right now; its message is safe to print. */
@@ -71,8 +76,8 @@ function require_demo_mode(string $what): void
 }
 
 /**
- * True when the database has every migration (the showcase needs the
- * latest schema).
+ * True when the database has every migration (the showcase and the reset
+ * need the latest schema).
  */
 function demo_database_ready(): bool
 {
@@ -96,8 +101,8 @@ function demo_showcase_present(): bool
 }
 
 /**
- * Runs $callback while holding DEMO_SHOWCASE_LOCK, so that two seeds never
- * run at the same time.
+ * Runs $callback while holding DEMO_SHOWCASE_LOCK, so that two seeds (or a
+ * seed and a reset) never run at the same time.
  *
  * @template T
  * @param callable(): T $callback
@@ -106,7 +111,7 @@ function demo_showcase_present(): bool
 function with_demo_showcase_lock(callable $callback): mixed
 {
     if ((int) db_value('SELECT GET_LOCK(?, 30)', [DEMO_SHOWCASE_LOCK]) !== 1) {
-        throw new DemoStoreException('Another showcase seed is running. Try again in a minute.');
+        throw new DemoStoreException('Another showcase seed or demo reset is running. Try again in a minute.');
     }
     try {
         return $callback();
@@ -125,7 +130,7 @@ function with_demo_showcase_lock(callable $callback): mixed
  * catalog ("no_catalog"); then nothing is added. Only in demo mode.
  *
  * @return array{status: 'seeded'|'present'|'no_catalog', customers: int, orders: int, reviews: int, reactions: int, favorites: int}
- * @throws DemoStoreException outside demo mode, or while another seed runs
+ * @throws DemoStoreException outside demo mode, or while another seed or reset runs
  */
 function seed_demo_showcase(): array
 {
@@ -643,4 +648,113 @@ function demo_showcase_customers(): array
             ],
         ],
     ];
+}
+
+/* ---------------------------------------------------------------------
+ * The daily reset
+ * ------------------------------------------------------------------- */
+
+/**
+ * Returns a public demo to its starting state (bin/demo-reset.php). In one
+ * transaction, so visitors never see a store that is half reset:
+ *  - every customer is deleted (sign-ups, demo guests and the showcase's
+ *    customers) with their carts, favorites, addresses, reviews and
+ *    reactions, and every order (also those kept anonymised from deleted
+ *    accounts), with password-reset links, failed sign-ins, the demo inbox
+ *    and the demo-guest creations;
+ *  - the catalog is put back to database/seed.sql: books that
+ *    administrators added are deleted, and the 55 sample books come back
+ *    with their text, prices, covers and stock (also those an administrator
+ *    deleted or changed);
+ *  - the showcase is added again (insert_demo_showcase()).
+ * Administrators are kept. Once that is committed, the uploaded profile
+ * pictures and book covers that the deleted rows referred to are deleted,
+ * and the payment simulator forgets every checkout session and refund. Rows
+ * are deleted, never truncated: ids keep counting up, so a browser session
+ * that still remembers a deleted account (the demo inbox) can never point at
+ * a new one. Only in demo mode.
+ *
+ * @return array{customers: int, orders: int, reviews: int, mail: int, pictures: int, books_removed: int, books_restored: int, books: int, payment_simulator: 'cleared'|'none'|'failed', showcase: array{customers: int, orders: int, reviews: int, reactions: int, favorites: int}}
+ * @throws DemoStoreException outside demo mode, or while another seed or reset runs
+ */
+function reset_demo_store(): array
+{
+    require_demo_mode('The demo reset');
+    return with_demo_showcase_lock(static function (): array {
+        $avatars = array_map('strval', db_run("SELECT profile_image FROM users WHERE profile_image LIKE 'uploads/%'")->fetchAll(PDO::FETCH_COLUMN));
+        $covers = array_map('strval', db_run("SELECT DISTINCT cover_image FROM books WHERE cover_image LIKE 'uploads/%'")->fetchAll(PDO::FETCH_COLUMN));
+
+        $summary = db_transaction(static function (): array {
+            $booksBefore = array_map('intval', db_run('SELECT id FROM books')->fetchAll(PDO::FETCH_COLUMN));
+            // Order items and delivery address copies go with the orders; sales, carts,
+            // favorites, reactions, addresses and verification links with the customers.
+            $orders = db_run('DELETE FROM orders')->rowCount();
+            $customers = db_run('DELETE FROM users')->rowCount();
+            // Reviews name their author by email, not by id.
+            $reviews = db_run('DELETE FROM comments')->rowCount();
+            db_run('DELETE FROM reset_tokens');
+            db_run('DELETE FROM login_attempts');
+            $mail = db_run('DELETE FROM demo_mail')->rowCount();
+            db_run('DELETE FROM demo_guest_creations');
+
+            db_run('DELETE FROM books');
+            db_execute_sql_file(base_path('database/seed.sql'));
+            $booksAfter = array_map('intval', db_run('SELECT id FROM books')->fetchAll(PDO::FETCH_COLUMN));
+
+            return [
+                'customers' => $customers,
+                'orders' => $orders,
+                'reviews' => $reviews,
+                'mail' => $mail,
+                'pictures' => 0,
+                'books_removed' => count(array_diff($booksBefore, $booksAfter)),
+                'books_restored' => count(array_diff($booksAfter, $booksBefore)),
+                'books' => count($booksAfter),
+                'payment_simulator' => 'none',
+                'showcase' => insert_demo_showcase(),
+            ];
+        });
+
+        // Files are not part of the transaction: they go once the rows are gone.
+        foreach ($avatars as $path) {
+            if (is_generated_upload($path, AVATAR_DIR) && is_file(base_path('public/' . $path))) {
+                delete_uploaded_avatar($path);
+                $summary['pictures']++;
+            }
+        }
+        foreach ($covers as $path) {
+            if (is_generated_upload($path, COVER_DIR) && is_file(base_path('public/' . $path))) {
+                // Deleted with its WebP copies, as no book refers to it any more.
+                release_book_cover($path);
+                $summary['pictures']++;
+            }
+        }
+        $summary['payment_simulator'] = forget_payment_simulator_state();
+        return $summary;
+    });
+}
+
+/**
+ * Empties the payment simulator's state (PAYMENT_SIMULATOR_STORE) under its
+ * lock: every checkout session and refund is forgotten, so a payment page
+ * that was open before a reset can no longer be paid. "none" when there is no
+ * state file; "failed" (logged) when it cannot be saved, for example on a
+ * full disk.
+ *
+ * @return 'cleared'|'none'|'failed'
+ */
+function forget_payment_simulator_state(): string
+{
+    if (!is_file(payment_simulator_store_path())) {
+        return 'none';
+    }
+    try {
+        payment_simulator_transaction(static function (array &$state): void {
+            $state = payment_simulator_normalize_state([]);
+        });
+    } catch (RuntimeException $e) {
+        app_log('warning', 'Demo reset: the payment simulator state could not be cleared: ' . $e->getMessage());
+        return 'failed';
+    }
+    return 'cleared';
 }

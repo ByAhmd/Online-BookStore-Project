@@ -19,8 +19,9 @@ declare(strict_types=1);
  *     and adds the demo's showcase: fictional customers with their orders,
  *     reviews and favorites (src/demo.php), unless the store has it already;
  *  5. optionally creates an administrator.
- * At the end it names the command for the daily cleanup of the demo's
- * one-click accounts (bin/demo-cleanup.php), to run as a scheduled task.
+ * At the end it names the commands for the daily scheduled tasks: the reset
+ * that returns the demo to its starting state (bin/demo-reset.php) and the
+ * cleanup of the demo's one-click accounts (bin/demo-cleanup.php).
  * All questions come first: nothing is changed until every answer is valid.
  * Passwords are never printed, and on Linux and macOS they are not shown
  * while you type them.
@@ -373,5 +374,6 @@ if ($adminEmail !== '') {
     setup_say('  No administrator was created. Create one later with: php bin/create-admin.php you@example.com "Your Name"');
 }
 setup_say('  Visitors can also try the store in one click, as a demo customer or as a read-only administrator.');
+setup_say("  Reset the demo to its starting state with a daily scheduled task: cd $root && php bin/demo-reset.php --yes");
 setup_say("  Delete demo customers older than a day with a daily scheduled task: cd $root && php bin/demo-cleanup.php");
 setup_say('  To change a setting, edit ' . $envFile . '.');

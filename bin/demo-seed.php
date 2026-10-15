@@ -13,9 +13,9 @@ declare(strict_types=1);
  *
  * It runs only in demo mode (APP_DEMO=true) and adds nothing when the
  * showcase is already there, so it is safe to run again. bin/install.php
- * runs it in demo mode. It prints one line (and logs what it added to
- * app.log); the exit status is 0, or 1 when the store is not a demo or the
- * database cannot be used.
+ * runs it in demo mode, and bin/demo-reset.php after every reset. It prints
+ * one line (and logs what it added to app.log); the exit status is 0, or 1
+ * when the store is not a demo or the database cannot be used.
  *
  * Usage: php bin/demo-seed.php
  */
