@@ -13,6 +13,18 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
 
+  # package.json / package-lock.json: the browser tests (Playwright with
+  # axe-core, e2e/). package.json keeps playwright-core on the version of
+  # @playwright/test ("overrides"), so an update of one moves both.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]
+
   # The actions in .github/workflows, pinned to commit SHAs
   - package-ecosystem: github-actions
     directory: /

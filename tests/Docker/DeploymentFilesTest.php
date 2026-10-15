@@ -95,6 +95,41 @@ final class DeploymentFilesTest extends TestCase
         self::assertStringContainsString("database: ['mysql:8.4']", self::read('.github/workflows/ci.yml'), 'CI tests the same MySQL line as docker-compose.yml');
     }
 
+    public function testDependabotUpdatesEveryEcosystemWeeklyInGroups(): void
+    {
+        $dependabot = str_replace("\r\n", "\n", self::read('.github/dependabot.yml'));
+        $blocks = preg_split('/^  - package-ecosystem: /m', $dependabot) ?: [];
+        array_shift($blocks);
+        $ecosystems = [];
+        foreach ($blocks as $block) {
+            $ecosystem = strtok($block, "\n");
+            $ecosystems[] = $ecosystem;
+            self::assertStringContainsString("    directory: /\n", $block, "$ecosystem: the project root");
+            self::assertStringContainsString("      interval: weekly\n", $block, "$ecosystem: weekly");
+            // Minor and patch updates as one pull request, major updates one by one.
+            self::assertMatchesRegularExpression("/    groups:\n      [\w-]+:\n        patterns: \['\*'\]\n        update-types: \[minor, patch\]\n/", $block, "$ecosystem: grouped");
+        }
+        // composer.json, package.json (the browser tests), the workflows, the Dockerfile and docker-compose.yml.
+        self::assertSame(['composer', 'npm', 'github-actions', 'docker', 'docker-compose'], $ecosystems);
+    }
+
+    public function testPlaywrightCoreFollowsTheVersionOfPlaywrightTest(): void
+    {
+        // @axe-core/playwright asks for playwright-core too; without the
+        // override an update of @playwright/test alone would leave two versions.
+        $package = json_decode(self::read('package.json'), true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($package);
+        self::assertSame('$@playwright/test', $package['overrides']['playwright-core'] ?? null);
+        self::assertMatchesRegularExpression('/^\d+\.\d+\.\d+$/D', (string) ($package['devDependencies']['@playwright/test'] ?? ''), 'Exact versions, as in package-lock.json');
+
+        $lock = json_decode(self::read('package-lock.json'), true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($lock);
+        $version = $package['devDependencies']['@playwright/test'];
+        foreach (['node_modules/@playwright/test', 'node_modules/playwright', 'node_modules/playwright-core'] as $name) {
+            self::assertSame($version, $lock['packages'][$name]['version'] ?? null, "package-lock.json: $name");
+        }
+    }
+
     public function testShellScriptsRunWithBashInStrictMode(): void
     {
         foreach (['docker/entrypoint.sh', 'tests/Docker/smoke.sh', 'tests/Docker/entrypoint_test.sh'] as $script) {
