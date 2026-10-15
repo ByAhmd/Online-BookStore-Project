@@ -30,9 +30,12 @@ return [
         'inbox_label' => 'صندوق البريد التجريبي',
         // رابط السلة؛ يجب أن يتضمن الاسم المقروء للمساعدات الرقم الظاهر على الأيقونة في كل الصيغ.
         'cart' => [
-            'zero' => 'السلة (:count)، لا توجد عناصر',
-            'one' => 'السلة (:count)، عنصر واحد',
-            'two' => 'السلة (:count)، عنصران',
+            // The badge shows the count, so the name must contain it as a word of
+            // its own (WCAG 2.5.3); text in brackets would not count, as
+            // accessibility checkers leave bracketed text out of the comparison.
+            'zero' => 'السلة، لا توجد عناصر: :count',
+            'one' => 'السلة، عنصر واحد: :count',
+            'two' => 'السلة، عنصران: :count',
             'few' => 'السلة، :count عناصر',
             'many' => 'السلة، :count عنصرًا',
             'other' => 'السلة، :count عنصر',

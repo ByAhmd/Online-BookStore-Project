@@ -272,8 +272,8 @@ final class CommerceTranslationsTest extends TestCase
         }
         use_locale('ar');
         try {
-            self::assertSame('السلة (0)، لا توجد عناصر', tn('common.nav.cart', 0));
-            self::assertSame('السلة (2)، عنصران', tn('common.nav.cart', 2));
+            self::assertSame('السلة، لا توجد عناصر: 0', tn('common.nav.cart', 0));
+            self::assertSame('السلة، عنصران: 2', tn('common.nav.cart', 2));
         } finally {
             use_locale(null);
         }
