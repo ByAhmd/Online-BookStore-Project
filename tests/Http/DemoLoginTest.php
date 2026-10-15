@@ -212,6 +212,11 @@ final class DemoLoginTest extends HttpTestCase
         $form = $this->assertHtmlPage($delete)->form('profilePage.php', ['action' => 'delete_account']);
         self::assertArrayNotHasKey('delete_password', $form->fields);
         $this->assertPageText('Demo accounts are deleted automatically 24 hours after they were created. You can also delete this one now; no password is needed.', $delete);
+        // Unlike other accounts, its canceled and expired checkouts go with it (delete_demo_guest()).
+        self::assertSame(
+            'Your order records (books, amounts, dates and payment references) are kept for accounting, anonymised: they are no longer linked to this account. Checkouts that were canceled or expired are deleted with the account, since no money was paid for them.',
+            $this->assertHtmlPage($delete)->text('//p[' . HtmlDocument::hasClass('delete-kept') . ']')
+        );
 
         $unconfirmed = $visitor->submitForm($delete, 'profilePage.php', [], ['action' => 'delete_account']);
         $this->assertRedirect($unconfirmed, 'profilePage.php?section=delete');

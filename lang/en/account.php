@@ -192,6 +192,8 @@ return [
         'email_hint' => 'This demo account has a made-up address, which cannot be changed.',
         'security' => 'You signed in with the demo button, so this account has no password and none can be set. To choose a password, log out and sign up for an account of your own.',
         'password_locked' => 'Demo accounts have no password, so none can be set or changed.',
+        // Replaces delete.kept for demo guests, whose abandoned checkouts are deleted with them.
+        'kept' => 'Your order records (books, amounts, dates and payment references) are kept for accounting, anonymised: they are no longer linked to this account. Checkouts that were canceled or expired are deleted with the account, since no money was paid for them.',
         'delete_intro' => [
             'one' => 'Demo accounts are deleted automatically :count hour after they were created. You can also delete this one now; no password is needed.',
             'other' => 'Demo accounts are deleted automatically :count hours after they were created. You can also delete this one now; no password is needed.',

@@ -631,7 +631,7 @@ page_header($sections[$section]['label'], ['profilePage.css']);
 <?php endforeach; ?>
                             </ul>
                             <h3 class="profile-subsection-title"><?= e(t('account.delete.kept_heading')) ?></h3>
-                            <p class="delete-kept"><?= e(t('account.delete.kept')) ?></p>
+                            <p class="delete-kept"><?= e(t($isDemoGuest ? 'account.demo_guest.kept' : 'account.delete.kept')) ?></p>
                         </div>
 
                         <form class="profile-form delete-form" method="post" action="profilePage.php" data-once data-confirm="<?= e(t('account.delete.confirm_prompt')) ?>">
