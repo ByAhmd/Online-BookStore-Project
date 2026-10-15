@@ -707,3 +707,13 @@ body [lang="ar"],
 [dir="rtl"] body {
     line-height: 1.7;
 }
+
+/* An empty field shows its placeholder in the page's direction. Fields for
+   left-to-right input (dir="ltr", such as the owner's order search) and
+   dir="auto" fields, which are left-to-right while empty, would otherwise
+   draw an Arabic placeholder from the left, so that the Latin example in it
+   is read first. Typed text takes the field's own direction again. */
+html[dir="rtl"] input[dir]:placeholder-shown,
+html[dir="rtl"] textarea[dir]:placeholder-shown {
+    direction: rtl;
+}

@@ -86,7 +86,13 @@ test('a read-only administrator can look at everything and change nothing', asyn
     // The same in Arabic: the orders page, the order's page and the dashboard.
     await openIn(page, 'admin_orders.php', 'ar');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    // The search is for left-to-right input, but while it is empty its Arabic
+    // placeholder is drawn right to left, so its Latin example is not read first.
+    const search = page.getByLabel(orderSearch.ar.label, { exact: true });
+    await expect(search).toHaveAttribute('dir', 'ltr');
+    expect(await search.evaluate((element) => window.getComputedStyle(element).direction), 'the empty search').toBe('rtl');
     const arabicRow = await findOrder(page, orderId, 'ar');
+    expect(await search.evaluate((element) => window.getComputedStyle(element).direction), 'the search with an order number').toBe('ltr');
     await arabicRow.getByRole('link', { name: `#${orderId}` }).click();
     await expect(page).toHaveURL(new RegExp(`admin_order\\.php\\?id=${orderId}$`));
     await expect(page.locator('html')).toHaveAttribute('lang', 'ar');

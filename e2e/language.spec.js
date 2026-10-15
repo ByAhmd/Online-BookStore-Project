@@ -1,6 +1,7 @@
 // The language switch in the header: Arabic pages are right-to-left, stay
-// Arabic from page to page, keep what the visitor was looking at, and fit
-// narrow and wide windows without scrolling sideways.
+// Arabic from page to page, keep what the visitor was looking at, show the
+// placeholder of an empty search field right to left, and fit narrow and
+// wide windows without scrolling sideways.
 import { test, expect } from '@playwright/test';
 import { expectNoHorizontalScroll, labels, openIn } from './support/store.js';
 
@@ -25,6 +26,26 @@ test('the header switches the store to Arabic and back', async ({ page }) => {
     await page.getByRole('link', { name: labels.ar.language, exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
+});
+
+test('an empty search field shows its Arabic placeholder right to left', async ({ page }) => {
+    const direction = (locator) => locator.evaluate((element) => window.getComputedStyle(element).direction);
+
+    // The Explore search takes its direction from what is typed (dir="auto"),
+    // which would make it left-to-right while empty: the placeholder
+    // "مثال: Olivia Wilson" would then be read from its Latin example.
+    await openIn(page, 'Explore_Page.php', 'ar');
+    const search = page.getByRole('searchbox');
+    await expect(search).toHaveAttribute('dir', 'auto');
+    await expect(search).toHaveAttribute('placeholder', 'مثال: Olivia Wilson');
+    expect(await direction(search), 'empty').toBe('rtl');
+    await search.fill('Love');
+    expect(await direction(search), 'with Latin text').toBe('ltr');
+    await search.fill('حب');
+    expect(await direction(search), 'with Arabic text').toBe('rtl');
+
+    await openIn(page, 'Explore_Page.php', 'en');
+    expect(await direction(page.getByRole('searchbox')), 'empty, in English').toBe('ltr');
 });
 
 for (const width of [375, 1280]) {

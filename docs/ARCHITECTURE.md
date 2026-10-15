@@ -408,6 +408,7 @@ Every page, form message, email and error page is available in English and Arabi
 - Visitors switch language with the link in the header (`?lang=ar` / `?lang=en`). The choice is kept in a cookie and, for signed-in customers, on the account, so emails arrive in the same language.
 - Arabic pages use `dir="rtl"`, the Tajawal font, Arabic plural forms (zero, one, two, few, many, other), Arabic month names and amounts written as `19.99 ر.س`.
   The stylesheets use logical CSS properties (`margin-inline-start` and so on), so the layout mirrors without separate RTL files.
+  On Arabic pages an empty field shows its placeholder right to left, also a field for left-to-right input such as the order search; typed text takes the field's own direction.
 - Catalog content (titles, authors, descriptions) is shown as entered. Common genre names are translated (`shop.genres` in `lang/<language>/shop.php`); other genres appear as stored.
 - Text in the other script must not reorder the sentence around it, so it is isolated. Pages mark titles and names with `dir="auto"` or put them in `<bdi>`.
   Plain text, such as emails and flash messages, wraps them with `bidi_isolate()` (Unicode isolates), and flash messages show those as `<bdi>`; a flash message itself takes the page's direction.
