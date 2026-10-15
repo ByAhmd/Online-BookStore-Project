@@ -83,7 +83,7 @@ final class AdminRolesTest extends DatabaseTestCase
         self::assertSame(ADMIN_ROLE_VIEWER, self::role(DEMO_VIEWER_ADMIN_EMAIL));
     }
 
-    public function testCreateAdminMakesOwnersOrWithViewerReadOnlyAdministrators(): void
+    public function testCreateAdminMakesOwnersOrWithViewerReadOnlyAdministratorsAndKeepsTheRoleOnAReset(): void
     {
         $env = ['BOOKWISE_ADMIN_PASSWORD' => self::PASSWORD];
 
@@ -95,20 +95,39 @@ final class AdminRolesTest extends DatabaseTestCase
         self::assertSame('admin', attempt_login('reviewer@example.com', self::PASSWORD)['type'] ?? null);
         self::assertStringNotContainsString(self::PASSWORD, $viewer['stdout'] . $viewer['stderr']);
 
-        // Running it again sets the role given: an owner unless --viewer.
-        $owner = self::runProjectScript('bin/create-admin.php', $env, ['reviewer@example.com', 'Book Reviewer']);
+        // Resetting the password the documented way keeps the role: a viewer never becomes an owner by accident.
+        $reset = self::runProjectScript('bin/create-admin.php', ['BOOKWISE_ADMIN_PASSWORD' => 'new-admin-password-456'], ['reviewer@example.com', 'Book Reviewer']);
+        self::assertSame(0, $reset['status'], $reset['stdout'] . $reset['stderr']);
+        self::assertSame("Updated read-only administrator reviewer@example.com (other sessions signed out, sign-in lockout cleared).\n", str_replace("\r\n", "\n", $reset['stdout']));
+        self::assertSame(ADMIN_ROLE_VIEWER, self::role('reviewer@example.com'));
+        self::assertSame('admin', attempt_login('reviewer@example.com', 'new-admin-password-456')['type'] ?? null);
+
+        // Only an explicit option changes it, and the change is reported.
+        $owner = self::runProjectScript('bin/create-admin.php', $env, ['reviewer@example.com', 'Book Reviewer', '--owner']);
         self::assertSame(0, $owner['status'], $owner['stdout'] . $owner['stderr']);
-        self::assertStringStartsWith('Updated administrator reviewer@example.com (', $owner['stdout']);
+        self::assertSame("Updated administrator reviewer@example.com (role changed from viewer to owner; other sessions signed out, sign-in lockout cleared).\n", str_replace("\r\n", "\n", $owner['stdout']));
         self::assertSame(ADMIN_ROLE_OWNER, self::role('reviewer@example.com'));
 
+        $kept = self::runProjectScript('bin/create-admin.php', $env, ['reviewer@example.com', 'Book Reviewer']);
+        self::assertStringStartsWith('Updated administrator reviewer@example.com (other sessions', $kept['stdout']);
+        self::assertSame(ADMIN_ROLE_OWNER, self::role('reviewer@example.com'), 'An owner stays an owner too');
+
         $again = self::runProjectScript('bin/create-admin.php', $env, ['reviewer@example.com', 'Book Reviewer', '--viewer']);
-        self::assertStringStartsWith('Updated read-only administrator reviewer@example.com (', $again['stdout']);
+        self::assertStringStartsWith('Updated read-only administrator reviewer@example.com (role changed from owner to viewer; ', $again['stdout']);
         self::assertSame(ADMIN_ROLE_VIEWER, self::role('reviewer@example.com'));
+
+        $created = self::runProjectScript('bin/create-admin.php', $env, ['--owner', 'owner@example.com']);
+        self::assertSame("Created administrator owner@example.com.\n", str_replace("\r\n", "\n", $created['stdout']));
+        self::assertSame(ADMIN_ROLE_OWNER, self::role('owner@example.com'));
+
+        $both = self::runProjectScript('bin/create-admin.php', $env, ['other@example.com', '--viewer', '--owner']);
+        self::assertSame(1, $both['status']);
+        self::assertStringContainsString('Give either --viewer or --owner, not both.', $both['stderr']);
 
         $unknown = self::runProjectScript('bin/create-admin.php', $env, ['other@example.com', '--read-only']);
         self::assertSame(1, $unknown['status']);
         self::assertStringContainsString('Unknown option: --read-only', $unknown['stderr']);
-        self::assertStringContainsString('[--viewer]', $unknown['stderr']);
+        self::assertStringContainsString('[--viewer | --owner]', $unknown['stderr']);
         self::assertNull(self::role('other@example.com'));
     }
 }

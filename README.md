@@ -226,7 +226,8 @@ It also signs out the administrator's other sessions and clears any sign-in lock
 
 Add `--viewer` to create a read-only administrator instead, for example for a reviewer:
 `php bin/create-admin.php reviewer@example.com "Reviewer" --viewer`.
-Running the command again sets the role it is given (an owner unless `--viewer`).
+Running the command again keeps the administrator's role, so resetting a viewer's password never gives it write access.
+Add `--owner` or `--viewer` to change the role; the command says when it changed.
 
 ### 6. Run it
 
