@@ -44,7 +44,7 @@ if (is_post()) {
         flash('success', tn('shop.order.buy_again_added', $result['added'], ['id' => $id]));
     }
     if ($result['unavailable'] !== []) {
-        $titles = array_map(static fn (string $title): string => t('shop.checkout.quoted_title', ['title' => $title]), $result['unavailable']);
+        $titles = array_map(static fn (string $title): string => t('shop.checkout.quoted_title', ['title' => bidi_isolate($title)]), $result['unavailable']);
         flash('error', tn('shop.order.buy_again_unavailable', count($titles), ['titles' => implode(t('shop.checkout.title_separator'), $titles)]));
     }
     redirect('cart.php');

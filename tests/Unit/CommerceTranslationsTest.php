@@ -253,6 +253,23 @@ final class CommerceTranslationsTest extends TestCase
         );
     }
 
+    /**
+     * Flash messages quote titles and names isolated (bidi_isolate()), and the
+     * page shows each isolate as a <bdi> element, after escaping.
+     */
+    public function testFlashMessagesShowIsolatedValuesAsBdiElements(): void
+    {
+        $message = t('admin.dashboard.added', ['title' => bidi_isolate('<ألف ليلة وليلة>')]);
+        self::assertSame("“\u{2068}<ألف ليلة وليلة>\u{2069}” was added.", $message);
+        self::assertSame('“<bdi>&lt;ألف ليلة وليلة&gt;</bdi>” was added.', bidi_isolates_html($message));
+
+        $titles = implode(', ', [bidi_isolate('Esabella'), bidi_isolate('Biology')]);
+        self::assertSame('<bdi>Esabella</bdi>, <bdi>Biology</bdi>', bidi_isolates_html($titles));
+        // Other text is only escaped; an isolate character without its partner stays as it is.
+        self::assertSame('Fish &amp; Chips', bidi_isolates_html('Fish & Chips'));
+        self::assertSame("\u{2068}Fish &amp; Chips", bidi_isolates_html("\u{2068}Fish & Chips"));
+    }
+
     public function testCheckoutMessagesResolveToEnglishText(): void
     {
         // Translations are loaded from the source tree, independent of BASE_PATH.

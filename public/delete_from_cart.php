@@ -23,7 +23,7 @@ foreach ($cartId !== null ? cart_lines($userId) : [] as $line) {
 }
 
 if ($cartId !== null && $title !== null && cart_remove($userId, $cartId)) {
-    flash('success', t('shop.cart.removed', ['title' => $title]));
+    flash('success', t('shop.cart.removed', ['title' => bidi_isolate($title)]));
 } else {
     flash('error', t('shop.cart.line_missing'));
 }

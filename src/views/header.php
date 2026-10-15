@@ -116,10 +116,11 @@ $flashes = take_flashes();
         <p class="read-only-note" role="note"><?= e(t('admin.read_only.note')) ?></p>
 <?php endif; ?>
 <?php if ($flashes !== []): ?>
+<?php /* Messages are written in the page's language and take its direction; the titles and names they quote are isolated (bidi_isolate()). */ ?>
         <div class="flash-stack">
 <?php foreach ($flashes as $flash): ?>
             <div class="flash flash-<?= e($flash['type']) ?>" role="<?= $flash['type'] === 'error' ? 'alert' : 'status' ?>">
-                <p dir="auto"><?= e($flash['message']) ?></p>
+                <p><?= bidi_isolates_html($flash['message']) ?></p>
                 <button type="button" class="flash-close" aria-label="<?= e(t('common.flash.dismiss')) ?>">&times;</button>
             </div>
 <?php endforeach; ?>

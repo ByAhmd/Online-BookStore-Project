@@ -409,6 +409,9 @@ Every page, form message, email and error page is available in English and Arabi
 - Arabic pages use `dir="rtl"`, the Tajawal font, Arabic plural forms (zero, one, two, few, many, other), Arabic month names and amounts written as `19.99 ر.س`.
   The stylesheets use logical CSS properties (`margin-inline-start` and so on), so the layout mirrors without separate RTL files.
 - Catalog content (titles, authors, descriptions) is shown as entered. Common genre names are translated (`shop.genres` in `lang/<language>/shop.php`); other genres appear as stored.
+- Text in the other script must not reorder the sentence around it, so it is isolated. Pages mark titles and names with `dir="auto"` or put them in `<bdi>`.
+  Plain text, such as emails and flash messages, wraps them with `bidi_isolate()` (Unicode isolates), and flash messages show those as `<bdi>`; a flash message itself takes the page's direction.
+  Latin paths and URLs in the Arabic translations, such as `https://`, are wrapped in left-to-right isolates (U+2066 … U+2069), which a unit test checks.
 - Text lives in `lang/<language>/<area>.php` and is looked up with `t('shop.cart.title')`, or `tn('shop.book.sold_times', $count)` for plurals.
   Placeholders such as `:title` are escaped when the text is printed.
 - To add a language, copy `lang/en/` to the new code, translate the files, and add the code to `SUPPORTED_LOCALES` in `src/i18n.php` (and to `RTL_LOCALES` if it is written right to left).

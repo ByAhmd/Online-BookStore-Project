@@ -54,7 +54,7 @@ if ($account !== null && $method === 'POST') {
                 clear_failed_logins($email);
                 login_user($confirmed);
                 app_log('info', 'Email address confirmed', ['user_id' => $confirmed['id']]);
-                flash('success', t('auth.verify.success', ['name' => $confirmed['name']]));
+                flash('success', t('auth.verify.success', ['name' => bidi_isolate($confirmed['name'])]));
                 redirect('Home_Page.php');
             }
             $account = null; // used up meanwhile by another request

@@ -279,8 +279,9 @@ final class CheckoutTest extends CheckoutTestCase
             start_checkout($user, $this->deliveryAddressId($user));
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
+            // The titles are isolated (bidi_isolate()): the message is shown as a flash message.
             self::assertSame(
-                'There are not enough copies of these books in stock: “Esabella”, “Biology”. Please lower the quantities or remove the books from your cart, then try again.',
+                "There are not enough copies of these books in stock: “\u{2068}Esabella\u{2069}”, “\u{2068}Biology\u{2069}”. Please lower the quantities or remove the books from your cart, then try again.",
                 $e->getMessage()
             );
         }
@@ -294,7 +295,7 @@ final class CheckoutTest extends CheckoutTestCase
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertSame(
-                'There are not enough copies of “Esabella” in stock. Please lower the quantity or remove the book from your cart, then try again.',
+                "There are not enough copies of “\u{2068}Esabella\u{2069}” in stock. Please lower the quantity or remove the book from your cart, then try again.",
                 $e->getMessage()
             );
         }
@@ -313,7 +314,7 @@ final class CheckoutTest extends CheckoutTestCase
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
             self::assertSame(
-                'لا تتوفر نسخ كافية من «Esabella» في المخزون. يُرجى تقليل الكمية أو إزالة الكتاب من سلتك ثم المحاولة مرة أخرى.',
+                "لا تتوفر نسخ كافية من «\u{2068}Esabella\u{2069}» في المخزون. يُرجى تقليل الكمية أو إزالة الكتاب من سلتك ثم المحاولة مرة أخرى.",
                 $e->getMessage()
             );
         } finally {

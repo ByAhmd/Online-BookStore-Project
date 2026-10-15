@@ -76,6 +76,26 @@ final class AdminTest extends HttpTestCase
         $this->assertPageText('SAR 24.50', $page);
     }
 
+    /**
+     * A flash message is written in the page's language and takes the page's
+     * direction, also when it starts with a title in the other script: an
+     * Arabic title must not turn an English sentence right to left (as
+     * dir="auto" on the paragraph did, which put the full stop first). The
+     * title is isolated in a <bdi> element instead.
+     */
+    public function testAFlashMessageIsolatesTheTitleItQuotes(): void
+    {
+        [$admin] = $this->signedInAdmin();
+        $dashboard = $admin->follow($this->addBook($admin, self::validBook(['title' => 'ألف ليلة وليلة'])));
+        $this->assertFlash($dashboard, 'success', '“ألف ليلة وليلة” was added.');
+
+        $flash = '//div[' . HtmlDocument::hasClass('flash-success') . ']/p';
+        $paragraph = $dashboard->document()->first($flash);
+        self::assertNotNull($paragraph);
+        self::assertFalse($paragraph->hasAttribute('dir'), 'The message takes the direction of the page');
+        self::assertSame(['ألف ليلة وليلة'], $dashboard->document()->texts($flash . '/bdi'));
+    }
+
     public function testInvalidBookShowsFieldErrorsAndAddsNothing(): void
     {
         [$admin] = $this->signedInAdmin();

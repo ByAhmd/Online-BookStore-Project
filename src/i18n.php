@@ -275,13 +275,27 @@ function translation_replace(string $text, array $replace): string
 
 /**
  * $text in a first-strong isolate (U+2068 FSI … U+2069 PDI), for plain
- * text such as emails (pages use <bdi>). Inside a sentence of either
- * direction it takes its own direction from its first letter, and it no
- * longer pulls its neighbours along: without it, the price after a Latin
- * book title in an Arabic line ("1 × «A Minor Fall»: 11.00 ر.س") would join
- * the title's left-to-right run and be drawn on the wrong side of it.
+ * text such as emails and flash messages (pages use <bdi>). Inside a
+ * sentence of either direction it takes its own direction from its first
+ * letter, and it no longer pulls its neighbours along: without it, the price
+ * after a Latin book title in an Arabic line ("1 × «A Minor Fall»: 11.00 ر.س")
+ * would join the title's left-to-right run and be drawn on the wrong side of
+ * it.
  */
 function bidi_isolate(string $text): string
 {
     return "\u{2068}" . $text . "\u{2069}";
+}
+
+/**
+ * Plain text as escaped HTML in which each isolate of bidi_isolate() is a
+ * <bdi> element, which pages use for the same purpose. For flash messages:
+ * they are kept in the session as plain text, and name books and people
+ * inside sentences of the visitor's language. An isolate character without
+ * its partner is left as it is.
+ */
+function bidi_isolates_html(string $text): string
+{
+    $html = e($text);
+    return preg_replace('/\x{2068}([^\x{2068}\x{2069}]*)\x{2069}/u', '<bdi>$1</bdi>', $html) ?? $html;
 }

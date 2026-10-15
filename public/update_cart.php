@@ -22,11 +22,11 @@ if ($result === null || $result['status'] === 'missing') {
 } elseif ($result['status'] === 'invalid') {
     flash('error', t('shop.cart.quantity_error', ['max' => CART_MAX_QUANTITY]));
 } elseif ($result['status'] === 'out_of_stock') {
-    flash('error', t('shop.cart.out_of_stock', ['title' => $result['title']]));
+    flash('error', t('shop.cart.out_of_stock', ['title' => bidi_isolate($result['title'])]));
 } elseif ($result['status'] === 'capped') {
-    flash('info', tn('shop.cart.capped', $result['quantity'], ['title' => $result['title']]));
+    flash('info', tn('shop.cart.capped', $result['quantity'], ['title' => bidi_isolate($result['title'])]));
 } else {
-    flash('success', tn('shop.cart.updated', $result['quantity'], ['title' => $result['title']]));
+    flash('success', tn('shop.cart.updated', $result['quantity'], ['title' => bidi_isolate($result['title'])]));
 }
 
 redirect('cart.php');

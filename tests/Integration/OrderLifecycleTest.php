@@ -103,7 +103,7 @@ final class OrderLifecycleTest extends CheckoutTestCase
             start_checkout($user, null);
             self::fail('Expected CheckoutException');
         } catch (CheckoutException $e) {
-            self::assertStringStartsWith('There are not enough copies of “Esabella” in stock.', $e->getMessage());
+            self::assertStringStartsWith("There are not enough copies of “\u{2068}Esabella\u{2069}” in stock.", $e->getMessage());
             self::assertSame(0, $e->getCode(), 'Sends the customer to the cart, not the address');
         }
     }

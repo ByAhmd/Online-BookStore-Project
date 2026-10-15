@@ -461,7 +461,7 @@ function start_checkout_locked(array $user, ?int $addressId): string
     // customer pays is still delivered (see fulfill_order()).
     $unavailable = cart_unavailable_lines($lines);
     if ($unavailable !== []) {
-        $titles = array_map(static fn (array $line): string => t('shop.checkout.quoted_title', ['title' => $line['title']]), $unavailable);
+        $titles = array_map(static fn (array $line): string => t('shop.checkout.quoted_title', ['title' => bidi_isolate($line['title'])]), $unavailable);
         throw new CheckoutException(tn('shop.checkout.insufficient_stock', count($titles), [
             'titles' => implode(t('shop.checkout.title_separator'), $titles),
         ]));

@@ -69,7 +69,7 @@ if (is_post()) {
             flash('error', t('admin.edit.gone'));
             redirect('admin_dashboard.php#manage-books');
         }
-        flash('success', t('admin.edit.updated', ['title' => $clean['title']]));
+        flash('success', t('admin.edit.updated', ['title' => bidi_isolate($clean['title'])]));
         redirect('admin_dashboard.php#manage-books');
     }
 

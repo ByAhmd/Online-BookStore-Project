@@ -37,6 +37,8 @@ if (is_post()) {
     $userId = (int) $user['id'];
     $userEmail = (string) $user['Eaddress'];
     verify_csrf();
+    // The title as the flash messages below quote it (see bidi_isolate()).
+    $flashTitle = bidi_isolate($title);
 
     switch (input_string($_POST, 'action', 32)) {
         case 'add_to_cart':
@@ -53,27 +55,27 @@ if (is_post()) {
                 case 'missing':
                     abort(404, t('shop.book.not_found'));
                 case 'out_of_stock':
-                    flash('error', t('shop.book.out_of_stock_flash', ['title' => $title]));
+                    flash('error', t('shop.book.out_of_stock_flash', ['title' => $flashTitle]));
                     redirect($bookUrl . '#purchase');
                 case 'at_limit':
                     flash('info', $stockLimited
-                        ? tn('shop.book.at_limit_stock', $result['limit'], ['title' => $title])
-                        : t('shop.book.at_limit_max', ['max' => CART_MAX_QUANTITY, 'title' => $title]));
+                        ? tn('shop.book.at_limit_stock', $result['limit'], ['title' => $flashTitle])
+                        : t('shop.book.at_limit_max', ['max' => CART_MAX_QUANTITY, 'title' => $flashTitle]));
                     redirect('cart.php');
                 case 'capped':
                     flash('success', $stockLimited
-                        ? tn('shop.book.added_capped_stock', $result['limit'], ['added' => $result['added'], 'title' => $title])
-                        : t('shop.book.added_capped_max', ['added' => $result['added'], 'title' => $title, 'max' => CART_MAX_QUANTITY]));
+                        ? tn('shop.book.added_capped_stock', $result['limit'], ['added' => $result['added'], 'title' => $flashTitle])
+                        : t('shop.book.added_capped_max', ['added' => $result['added'], 'title' => $flashTitle, 'max' => CART_MAX_QUANTITY]));
                     redirect('cart.php');
                 default:
-                    flash('success', t('shop.book.added', ['added' => $result['added'], 'title' => $title]));
+                    flash('success', t('shop.book.added', ['added' => $result['added'], 'title' => $flashTitle]));
                     redirect('cart.php');
             }
 
             // no break: every branch redirects
         case 'toggle_favorite':
             $favorited = toggle_favorite($userId, $bookId);
-            flash('success', t($favorited ? 'shop.book.favorite_added' : 'shop.book.favorite_removed', ['title' => $title]));
+            flash('success', t($favorited ? 'shop.book.favorite_added' : 'shop.book.favorite_removed', ['title' => $flashTitle]));
             redirect($bookUrl . '#book');
 
         case 'add_review':

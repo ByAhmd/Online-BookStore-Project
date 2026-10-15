@@ -52,7 +52,7 @@ if (is_post()) {
                 delete_uploaded_cover($storedCover);
                 throw $e;
             }
-            flash('success', t('admin.dashboard.added', ['title' => $book['title']]));
+            flash('success', t('admin.dashboard.added', ['title' => bidi_isolate($book['title'])]));
             redirect('admin_dashboard.php');
 
         case 'delete_book':
@@ -63,7 +63,7 @@ if (is_post()) {
             $book = find_book($id);
             // delete_book() also deletes the book's uploaded cover file.
             if ($book !== null && delete_book($id)) {
-                flash('success', t('admin.dashboard.deleted', ['title' => $book['title']]));
+                flash('success', t('admin.dashboard.deleted', ['title' => bidi_isolate($book['title'])]));
             } else {
                 flash('error', t('admin.dashboard.delete_missing'));
             }

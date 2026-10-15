@@ -56,7 +56,7 @@ if ($action === 'register') {
     demo_inbox_remember_account($email);
     send_welcome_email($email, $userId);
 
-    flash('success', t('auth.signup.welcome', ['name' => $name]));
+    flash('success', t('auth.signup.welcome', ['name' => bidi_isolate($name)]));
     redirect(post_login_redirect('user'));
 }
 
@@ -110,7 +110,7 @@ if ($action === 'login') {
     }
 
     $displayName = trim((string) ($result['record']['name'] ?? ''));
-    flash('success', $displayName !== '' ? t('auth.login.welcome_back_name', ['name' => $displayName]) : t('auth.login.welcome_back'));
+    flash('success', $displayName !== '' ? t('auth.login.welcome_back_name', ['name' => bidi_isolate($displayName)]) : t('auth.login.welcome_back'));
     redirect(post_login_redirect($result['type']));
 }
 

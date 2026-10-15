@@ -38,7 +38,7 @@ if ($as === 'customer') {
     }
 
     login_user($result['user']);
-    flash('success', tn('auth.demo.customer_welcome', DEMO_GUEST_TTL_HOURS, ['name' => (string) $result['user']['name']]));
+    flash('success', tn('auth.demo.customer_welcome', DEMO_GUEST_TTL_HOURS, ['name' => bidi_isolate((string) $result['user']['name'])]));
     redirect(post_login_redirect('user'));
 }
 
