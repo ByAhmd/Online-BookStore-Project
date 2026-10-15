@@ -40,7 +40,8 @@
             "src/orders.php",
             "src/fulfilment.php",
             "src/payment_simulator.php",
-            "src/uploads.php"
+            "src/uploads.php",
+            "src/demo.php"
         ]
     },
     "autoload-dev": {

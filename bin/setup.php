@@ -15,7 +15,9 @@ declare(strict_types=1);
  *     payment simulator, and the demo inbox for its emails (MAIL_DRIVER=database)
  *     with email confirmation on. The file is readable by its owner only;
  *  4. creates the tables and loads the sample catalog (bin/install.php
- *     --seed), or applies pending migrations to an existing BookWise database;
+ *     --seed), or applies pending migrations to an existing BookWise database,
+ *     and adds the demo's showcase: fictional customers with their orders,
+ *     reviews and favorites (src/demo.php), unless the store has it already;
  *  5. optionally creates an administrator.
  * At the end it names the command for the daily cleanup of the demo's
  * one-click accounts (bin/demo-cleanup.php), to run as a scheduled task.

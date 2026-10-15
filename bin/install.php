@@ -8,12 +8,15 @@ declare(strict_types=1);
  *    --seed, loads the sample catalog (database/seed.sql);
  *  - existing BookWise database: applies pending migrations instead.
  * In demo mode (APP_DEMO=true) it also restocks the catalog to at least the
- * sample levels, so visitors' simulated purchases never sell it out for good.
+ * sample levels, so visitors' simulated purchases never sell it out for good,
+ * and adds the demo's showcase (fictional customers with their orders and
+ * reviews, see src/demo.php) when the store has none yet, unless
+ * --no-showcase is given.
  * Optionally creates or updates an administrator from environment variables
  * (BOOKWISE_ADMIN_EMAIL + BOOKWISE_ADMIN_PASSWORD), which is how containers
  * are set up without an interactive prompt.
  *
- * Usage: php bin/install.php [--seed]
+ * Usage: php bin/install.php [--seed] [--no-showcase]
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -25,6 +28,7 @@ require __DIR__ . '/../src/bootstrap.php';
 
 // The command-line arguments (bin/setup.php sets them too when it includes this script).
 $seed = in_array('--seed', (array) ($GLOBALS['argv'] ?? []), true);
+$addShowcase = !in_array('--no-showcase', (array) ($GLOBALS['argv'] ?? []), true);
 
 if (!db_table_exists('users')) {
     $leftovers = array_values(array_filter([...MIGRATION_BASELINE_TABLES, 'email_verifications', 'schema_migrations'], 'db_table_exists'));
@@ -51,6 +55,19 @@ if (config('app.demo')) {
     // never stays sold out (runs at every container start and wake-up).
     $restocked = db_run('UPDATE books SET stock = GREATEST(stock, 3 + ((id * 7) % 28))')->rowCount();
     echo "Demo: restocked $restocked book(s)." . PHP_EOL;
+
+    // A demo without its showcase looks unused: add it once (as bin/demo-seed.php does).
+    if ($addShowcase) {
+        try {
+            $showcase = seed_demo_showcase();
+            if ($showcase['status'] !== 'present') {
+                echo demo_showcase_report($showcase) . PHP_EOL;
+            }
+        } catch (DemoStoreException $e) {
+            // Another seed is running right now: it adds the showcase.
+            echo 'Demo showcase: skipped. ' . $e->getMessage() . PHP_EOL;
+        }
+    }
 }
 
 $adminEmail = normalize_email((string) env('BOOKWISE_ADMIN_EMAIL', ''));

@@ -136,6 +136,8 @@ final class SetupScriptTest extends DatabaseTestCase
         self::assertSame('', $run['stderr']);
         foreach ([
             'The database answers.', 'Database schema is up to date.', 'Created administrator admin@example.test.', 'BookWise is ready at https://bookwise-demo.example.net',
+            // The demo's fictional customers, orders and reviews.
+            'Demo showcase: added 12 customer(s), 31 order(s), 32 review(s)',
             // The daily scheduled task for the one-click demo customers.
             'Delete demo customers older than a day with a daily scheduled task: cd ' . BASE_PATH . ' && php bin/demo-cleanup.php',
         ] as $line) {
@@ -178,6 +180,8 @@ final class SetupScriptTest extends DatabaseTestCase
         self::assertNotNull($hash);
         self::assertTrue(check_password(self::ADMIN_PASSWORD, $hash)['valid']);
         self::assertSame(self::SEED_BOOK_COUNT, book_count());
+        self::assertTrue(demo_showcase_present(), 'The demo starts with its showcase');
+        self::assertSame(12, $this->countRows('users'));
     }
 
     public function testTheAnswersCanBeTypedIn(): void
