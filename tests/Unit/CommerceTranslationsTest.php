@@ -254,6 +254,32 @@ final class CommerceTranslationsTest extends TestCase
     }
 
     /**
+     * The header's cart link shows the number of items on its icon, so its
+     * accessible name contains that number (WCAG 2.5.3, Label in Name) in
+     * every plural form of both languages.
+     */
+    public function testTheCartLinkNameContainsTheCountShownOnTheIcon(): void
+    {
+        foreach (['en', 'ar'] as $locale) {
+            use_locale($locale);
+            try {
+                foreach ([0, 1, 2, 3, 10, 11, 99, 100, 101, 102] as $count) {
+                    self::assertMatchesRegularExpression('/(?<![0-9])' . $count . '(?![0-9])/', tn('common.nav.cart', $count), "$locale, $count items");
+                }
+            } finally {
+                use_locale(null);
+            }
+        }
+        use_locale('ar');
+        try {
+            self::assertSame('السلة (0)، لا توجد عناصر', tn('common.nav.cart', 0));
+            self::assertSame('السلة (2)، عنصران', tn('common.nav.cart', 2));
+        } finally {
+            use_locale(null);
+        }
+    }
+
+    /**
      * Flash messages quote titles and names isolated (bidi_isolate()), and the
      * page shows each isolate as a <bdi> element, after escaping.
      */

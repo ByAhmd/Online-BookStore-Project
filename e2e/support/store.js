@@ -187,9 +187,15 @@ export async function buyBook(page, locale = 'en', index = 0) {
     return paidOrderId(page, locale);
 }
 
-/** axe for the page, with the Arabic ligature workaround above. */
+/**
+ * axe for the page, with the Arabic ligature workaround above. It also runs
+ * label-content-name-mismatch (WCAG 2.5.3, Label in Name), which axe marks
+ * experimental and leaves off: a control's accessible name must contain its
+ * visible text, such as the count on the cart icon, so that speech input
+ * users can say what they see.
+ */
 export function axeFor(page) {
-    return new AxeBuilder({ page, axeSource });
+    return new AxeBuilder({ page, axeSource }).options({ rules: { 'label-content-name-mismatch': { enabled: true } } });
 }
 
 /**

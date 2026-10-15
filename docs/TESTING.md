@@ -172,7 +172,7 @@ The tests create customers and orders, so never point them at a public demo.
 
 ### Accessibility checks
 
-`expectAccessible()` in `e2e/support/store.js` runs axe-core on the page with its default rules (WCAG 2 A and AA, and best practices) and fails on **serious** or **critical** violations, naming each rule and element.
+`expectAccessible()` in `e2e/support/store.js` runs axe-core on the page with its default rules (WCAG 2 A and AA, and best practices) and the rule `label-content-name-mismatch` (WCAG 2.5.3, Label in Name), which axe marks experimental and leaves off. It fails on **serious** or **critical** violations, naming each rule and element.
 Moderate and minor violations do not fail the test; they are listed as annotations of the test in the HTML report.
 
 `e2e/accessibility.spec.js` checks, in English and in Arabic:
@@ -190,6 +190,7 @@ What the checks found, and how it was fixed:
 
 - The demo banner was outside every landmark, so screen-reader users who move between landmarks could miss it. It is now part of the page header (`src/views/header.php`).
 - The scrolling tables of the admin pages had the same name as the section around them, so the two regions could not be told apart. They are now named "Table: …" (`admin.table_region`).
+- In Arabic, the accessible name of the header's cart link left out the number that its icon shows for 0, 1 and 2 items ("السلة، عنصر واحد"), against Label in Name. Every Arabic form now includes the number ("السلة (1)، عنصر واحد"), which `tests/Unit/CommerceTranslationsTest.php` also checks.
 
 The HTTP suite checks both rules on every page it opens (`HtmlDocument::contentOutsideLandmarks()` and `duplicateLandmarks()` in `tests/Support`, used by `assertHtmlPage()`), and `tests/Http/AccessibilityMarkupTest.php` checks the two fixes.
 
