@@ -40,6 +40,16 @@ final class DemoAccountsTest extends TestCase
         self::assertSame('…', masked_name('  '));
     }
 
+    public function testPaymentReferencesAreShortenedToTheirPrefix(): void
+    {
+        // A checkout session id opens its payment page, so none may stay readable.
+        self::assertSame('cs_test_…', masked_reference('cs_test_a1b2c3d4e5f6a7b8c9d0e1f2'));
+        self::assertSame('cs_live_…', masked_reference('cs_live_a1B2c3D4'));
+        self::assertSame('pi_…', masked_reference('pi_3MtwBwLkdIwHu7ix28a3tqPa'));
+        self::assertSame('re_test_…', masked_reference('re_test_0a1b2c'));
+        self::assertSame('…', masked_reference('nounderscore'));
+    }
+
     public function testNobodyMaySignUpWithTheDemoDomain(): void
     {
         self::assertSame('demo.invalid', DEMO_EMAIL_DOMAIN);

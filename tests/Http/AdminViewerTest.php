@@ -20,10 +20,11 @@ use PHPUnit\Framework\Attributes\DataProvider;
  */
 final class AdminViewerTest extends HttpTestCase
 {
-    private const NOTE = "You are signed in as a read-only demo administrator. You can open every page, but the forms are switched off and nothing can be changed. Customers' names and email addresses are shortened.";
+    private const NOTE = "You are signed in as a read-only demo administrator. You can open every page, but the forms are switched off and nothing can be changed. Customers' names and email addresses, and payment references, are shortened.";
     private const REFUSED = 'You are signed in as a read-only demo administrator, so nothing can be changed. You can still open every admin page.';
     private const CUSTOMER_NAME = 'Sara Ali';
-    private const CUSTOMER_EMAIL = 'sara.ali@example.com';
+    // The digits let the tests check that a viewer's search never matches inside addresses.
+    private const CUSTOMER_EMAIL = 'sara.ali4821@example.com';
 
     /**
      * An administrator with the viewer role, signed in through the login form.
@@ -168,11 +169,44 @@ final class AdminViewerTest extends HttpTestCase
         $byNumber = $viewer->get('admin_orders.php?q=' . $orders['paid']);
         self::assertSame(['#' . $orders['paid']], $byNumber->document()->texts('//table[' . HtmlDocument::hasClass('order-list-table') . ']//tbody/tr/th'));
         $this->assertPageText('S…', $byNumber);
-        // Owners search by email as before (newest order first).
-        self::assertSame(
-            ['#' . $orders['pending'], '#' . $orders['paid']],
-            $owner->get('admin_orders.php?q=sara')->document()->texts('//table[' . HtmlDocument::hasClass('order-list-table') . ']//tbody/tr/th')
-        );
+        // A number matches the order number only, never digits inside the addresses.
+        self::assertNotContains(4821, $orders);
+        $byDigits = $viewer->get('admin_orders.php?q=4821');
+        $this->assertPageText('No orders match these filters.', $byDigits);
+        self::assertSame([], $viewer->get('admin_orders.php?q=' . rawurlencode('#4821'))->document()->texts('//table[' . HtmlDocument::hasClass('order-list-table') . ']//tbody/tr/th'));
+        // Owners search by email as before (newest order first), digits included.
+        foreach (['sara', '4821'] as $query) {
+            self::assertSame(
+                ['#' . $orders['pending'], '#' . $orders['paid']],
+                $owner->get('admin_orders.php?q=' . $query)->document()->texts('//table[' . HtmlDocument::hasClass('order-list-table') . ']//tbody/tr/th'),
+                "Owner search for $query"
+            );
+        }
+    }
+
+    public function testAViewerSeesOnlyThePrefixOfPaymentReferences(): void
+    {
+        // A checkout session id is the key to its payment page (pay.php needs no sign-in).
+        $orders = $this->orders();
+        [$owner] = $this->signedInAdmin();
+        [$viewer] = $this->signedInViewer();
+        $this->assertRedirect($owner->postWithToken('admin_order.php?id=' . $orders['paid'], ['action' => 'refund']), 'admin_order.php?id=' . $orders['paid']);
+        $references = static fn (HtmlDocument $page): array => $page->texts('//code[' . HtmlDocument::hasClass('stripe-ref') . ']');
+
+        foreach ($orders as $id) {
+            $row = db_one('SELECT stripe_session_id, stripe_payment_intent, stripe_refund_id FROM orders WHERE id = ?', [$id]);
+            self::assertNotNull($row);
+            $full = array_values(array_filter($row, static fn (mixed $value): bool => is_string($value) && $value !== ''));
+            self::assertSame($full, $references($this->assertHtmlPage($owner->get('admin_order.php?id=' . $id))), 'Owners see the references in full');
+
+            $page = $viewer->get('admin_order.php?id=' . $id);
+            self::assertSame(array_map('masked_reference', $full), $references($this->assertHtmlPage($page)));
+            foreach ($full as $reference) {
+                self::assertStringNotContainsString(substr($reference, (int) strrpos($reference, '_') + 1), $page->body, "No part of $reference for a viewer");
+            }
+        }
+        self::assertSame(['cs_test_…', 'pi_test_…', 're_test_…'], $references($this->assertHtmlPage($viewer->get('admin_order.php?id=' . $orders['paid']))));
+        self::assertSame(['cs_test_…'], $references($this->assertHtmlPage($viewer->get('admin_order.php?id=' . $orders['pending']))));
     }
 
     public function testAViewerLooksAroundButIsKeptOutOfTheShopLikeEveryAdministrator(): void

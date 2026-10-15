@@ -77,13 +77,6 @@ $timestamp = static function (?string $value): string {
     $date = new DateTimeImmutable($value);
     return '<time datetime="' . e($date->format('Y-m-d\TH:i:s')) . '">' . e(display_date($date, true)) . '</time>';
 };
-$reference = static function (?string $value): string {
-    return $value === null || $value === ''
-        ? '<span class="muted">' . e(t('admin.order.none')) . '</span>'
-        : '<code class="stripe-ref" dir="ltr">' . e($value) . '</code>';
-};
-$total = $money((string) $order['total_amount']);
-$status = (string) $order['status'];
 $address = is_array($order['address']) ? $order['address'] : null;
 $fulfilment = in_array($order['fulfilment_status'], FULFILMENT_STATUSES, true) ? (string) $order['fulfilment_status'] : null;
 // Carrier suggestions in the admin's language; any other name may be typed, and it is stored as typed.
@@ -97,6 +90,14 @@ $shipmentAria = static function (string $field, string $hintId) use ($shipmentEr
 // Read-only administrators see the actions switched off and the customer's details shortened.
 $locked = admin_can_write() ? '' : ' disabled';
 $showCustomers = admin_sees_customer_details();
+// The checkout session id opens the order's payment page, so viewers see only its prefix.
+$reference = static function (?string $value) use ($showCustomers): string {
+    return $value === null || $value === ''
+        ? '<span class="muted">' . e(t('admin.order.none')) . '</span>'
+        : '<code class="stripe-ref" dir="ltr">' . e($showCustomers ? $value : masked_reference($value)) . '</code>';
+};
+$total = $money((string) $order['total_amount']);
+$status = (string) $order['status'];
 
 page_header(t('admin.order.title', ['id' => (int) $order['id']]), ['Admin_dashboard.css']);
 ?>

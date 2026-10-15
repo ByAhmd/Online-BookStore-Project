@@ -282,4 +282,35 @@ final class DemoLoginTest extends HttpTestCase
         // The read-only administrator is not limited: it creates nothing.
         $this->assertRedirect($this->tryAs($visitor, 'admin'), 'admin_dashboard.php');
     }
+
+    public function testTheReadOnlyAdministratorNeverSeesTheKeyToACustomersPaymentPage(): void
+    {
+        // As on the alwaysdata demo: payments go through the simulator, whose page
+        // (pay.php) needs no sign-in because the session id in its link is the key.
+        $this->enableDemo(['PAYMENT_SIMULATOR' => 'true']);
+        [$customer] = $this->signedInCustomer('Paying Reader');
+        $this->assertRedirect($this->addToCart($customer, 51, 1), 'cart.php');
+        $checkout = $customer->submitForm($customer->get('cart.php'), 'checkout.php');
+        $this->assertStatus(303, $checkout);
+        self::assertSame(1, preg_match('#/pay\.php\?session=(cs_test_[A-Za-z0-9]+)$#D', (string) $checkout->header('Location'), $match));
+        $sessionId = $match[1];
+        $order = $this->orderBySession($sessionId);
+        self::assertSame('pending', $order['status']);
+
+        $visitor = $this->client();
+        $this->assertRedirect($this->tryAs($visitor, 'admin'), 'admin_dashboard.php');
+        $pages = ['admin_dashboard.php', 'admin_orders.php', 'admin_orders.php?status=pending', 'admin_orders.php?q=' . (int) $order['id'], 'admin_order.php?id=' . (int) $order['id']];
+        foreach ($pages as $path) {
+            $page = $visitor->get($path);
+            $this->assertHtmlPage($page);
+            self::assertStringNotContainsString(substr($sessionId, strlen('cs_test_')), $page->body, "No part of the session id on $path");
+        }
+        $detail = $this->assertHtmlPage($visitor->get('admin_order.php?id=' . (int) $order['id']));
+        self::assertSame(['cs_test_…'], $detail->texts('//code[' . HtmlDocument::hasClass('stripe-ref') . ']'), 'Only the prefix of the session id');
+
+        // Nothing the viewer saw lets it finish the customer's payment.
+        $state = payment_simulator_session($sessionId, self::server()->configuration['PAYMENT_SIMULATOR_STORE']);
+        self::assertSame(['open', 'unpaid'], [$state['status'] ?? null, $state['payment_status'] ?? null]);
+        self::assertSame('pending', $this->orderBySession($sessionId)['status']);
+    }
 }

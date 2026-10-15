@@ -89,7 +89,8 @@ page architecture is unchanged; there is no framework.
   Refunds made in the Stripe Dashboard are picked up by the `charge.refunded` webhook.
 - Accounts are created from the command line (`bin/create-admin.php`, or `bin/install.php` in containers); there is no public admin sign-up.
 - Two roles: **owners** (the default) may change everything; **viewers** (`bin/create-admin.php --viewer`) open every admin page but change nothing.
-  For a viewer every form is switched off with a note that says why, every action that changes something answers 403, and customers' names and email addresses are shortened (`S…`, `s…@….com`), so orders are found by their number only.
+  For a viewer every form is switched off with a note that says why, every admin action that changes something answers 403, and customers' names and email addresses are shortened (`S…`, `s…@….com`), so orders are found by their number only (a search never matches inside the addresses).
+  Payment references are shortened too (`cs_test_…`): a checkout session id is the key to its payment page.
 
 **Everywhere**
 - English and Arabic interface with a language switch in the header, Arabic plural forms, Arabic dates, amounts and genre names, and a mirrored right-to-left layout.
@@ -532,7 +533,7 @@ The suites are:
 
 - **unit:** pure functions, plus the image tools (WebP copies, `bin/optimize-images.php`) on scratch files.
 - **integration:** domain code against a real database.
-- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, guest browsing, cart and stock, the checkout page and delivery addresses, checkout (with Stripe and with every ending of the payment simulator), the order page, deliveries and order emails, refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, read-only administrators (every admin form is posted as a viewer, and nothing may change), the one-click demo accounts, the demo inbox and the Arabic interface.
+- **http:** end-to-end tests that start the application with `php -S` and drive the real pages, covering sign-up, email verification and login, CSRF, access control, guest browsing, cart and stock, the checkout page and delivery addresses, checkout (with Stripe and with every ending of the payment simulator), the order page, deliveries and order emails, refunds, webhooks, password reset and change, account deletion, uploads, cover images, admin pages, read-only administrators (every admin form is posted as a viewer, and nothing may change; no checkout session id is shown to them), the one-click demo accounts, the demo inbox and the Arabic interface.
   Every page check also loads the page's CSS, scripts and images, including each WebP copy in a `srcset`.
 - **deploy:** checks of the Docker files, the deployment guide and `bin/setup.php` (line endings, configuration, the entrypoint's database check, the settings the setup script writes) and of the Apache cache rules. The image itself is built and smoke-tested by the CI's Docker job.
 
@@ -583,7 +584,8 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
   Cart lines, delivery addresses, orders, order pages and payment returns are always scoped to the signed-in user; a checkout accepts only one of the customer's own addresses.
   Guests may only read the catalog and book pages. Every admin request that changes something (book forms, cover uploads, deletions, refunds) requires an owner (`require_admin_write()`): read-only administrators get 403.
 - **Demo accounts:** only in demo mode, through POST forms with a CSRF token. Demo customers get random, unguessable addresses and passwords that nobody knows; they cannot set a password (no password change, no reset link), and their creation is limited per IP address and in total.
-  The shared demo administrator is always a viewer, and sees customers' names and email addresses only shortened.
+  The shared demo administrator is always a viewer, and sees customers' names, email addresses and payment references only shortened.
+  In particular it never sees a checkout session id, which would let anyone finish that customer's payment on the simulator's page (`pay.php` needs no sign-in, like Stripe's).
 - **Passwords:** bcrypt via `password_hash()`, with a transparent upgrade of legacy MD5 hashes.
   Sign-in performs one hash verification per attempt, so response times don't reveal which accounts exist.
   Login is throttled after 5 failures for one email from one IP address, 20 failures from one IP, or 100 failures for one email from anywhere, within 15 minutes.
@@ -645,7 +647,7 @@ These rules need Apache's `mod_headers`; without it, `mod_expires` keeps every s
   - Demo customers are limited per IP address (10 per hour), with the same caveat as login throttling behind a proxy: if every visitor shares the proxy's address, they share the limit too.
   - At most 200 demo customers exist at once. On a busy demo the oldest are deleted to make room, so a visitor's demo account can disappear before its 24 hours are over.
   - They are deleted after 24 hours only when `php bin/demo-cleanup.php` runs (a daily scheduled task, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#schedule-the-demo-cleanup)); a checkout still being confirmed delays it to the next run.
-  - Every visitor who presses **Try as an administrator** shares the same read-only account, and sees every order of the demo (with shortened customer details).
+  - Every visitor who presses **Try as an administrator** shares the same read-only account, and sees every order of the demo (with shortened customer details and payment references).
 - **The demo inbox reveals registered addresses:** after signing up, a confirmation email appears in the browser's inbox only when the address was new.
   The sign-up page itself still gives the same answer either way. This only applies to a demo with `MAIL_DRIVER=database`, which holds no real accounts.
 - **Demo inbox access to a new account ends with the browser session:** without logging in, an account's emails can only be read in the browser session that created it.

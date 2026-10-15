@@ -243,11 +243,14 @@ function recent_orders(int $limit = 20): array
  * ORDER_STATUS_FILTERS (anything else means all); $fulfilment one of
  * FULFILMENT_STATUSES lists the paid orders at that delivery stage (refunded
  * orders are found with the status filter); $query matches an order number
- * ("42" or "#42") or part of the customer's email address.
+ * ("42" or "#42") or part of the customer's email address. With
+ * $matchEmails false (read-only administrators, who see addresses only
+ * shortened) it matches the order number alone, so a search cannot tell
+ * what the addresses contain.
  *
  * @return array{orders: list<array<string, mixed>>, pagination: array{page: int, pages: int, per_page: int, total: int, offset: int}}
  */
-function admin_order_list(string $status, string $query, mixed $page, string $fulfilment = '', int $perPage = ADMIN_PAGE_SIZE): array
+function admin_order_list(string $status, string $query, mixed $page, string $fulfilment = '', int $perPage = ADMIN_PAGE_SIZE, bool $matchEmails = true): array
 {
     $where = [];
     $params = [];
@@ -259,7 +262,11 @@ function admin_order_list(string $status, string $query, mixed $page, string $fu
         $where[] = "o.status = 'paid' AND o.fulfilment_status = ?";
         $params[] = $fulfilment;
     }
-    if ($query !== '') {
+    if ($query !== '' && !$matchEmails) {
+        // The order number alone. Order ids start at 1, so anything else matches nothing.
+        $where[] = 'o.id = ?';
+        $params[] = preg_match('/^#?(\d{1,10})$/D', $query, $m) === 1 ? (int) $m[1] : 0;
+    } elseif ($query !== '') {
         $like = '%' . addcslashes($query, '%_\\') . '%';
         if (preg_match('/^#?(\d{1,10})$/D', $query, $m)) {
             $where[] = '(o.id = ? OR u.Eaddress LIKE ?)';

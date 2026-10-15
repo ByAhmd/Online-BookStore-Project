@@ -21,13 +21,11 @@ if (!in_array($fulfilment, FULFILMENT_STATUSES, true)) {
     $fulfilment = '';
 }
 $query = input_string($_GET, 'q', 255);
-// Read-only administrators see customers' details shortened, so they search by order number only.
+// Read-only administrators see customers' details shortened, so they search by order number only:
+// a search that also matched part of the email addresses would tell what they contain.
 $showCustomers = admin_sees_customer_details();
-$searchable = $showCustomers || $query === '' || preg_match('/^#?\d{1,10}$/D', $query) === 1;
 
-$listing = $searchable
-    ? admin_order_list($status, $query, $_GET['page'] ?? null, $fulfilment)
-    : ['orders' => [], 'pagination' => paginate(0, ADMIN_PAGE_SIZE, 1)];
+$listing = admin_order_list($status, $query, $_GET['page'] ?? null, $fulfilment, matchEmails: $showCustomers);
 $orders = $listing['orders'];
 $pagination = $listing['pagination'];
 $filtered = $status !== '' || $fulfilment !== '' || $query !== '';

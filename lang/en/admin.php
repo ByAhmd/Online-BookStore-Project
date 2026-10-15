@@ -226,7 +226,7 @@ return [
 
     // Read-only administrators (role "viewer"), such as the demo's shared administrator.
     'read_only' => [
-        'note' => "You are signed in as a read-only demo administrator. You can open every page, but the forms are switched off and nothing can be changed. Customers' names and email addresses are shortened.",
+        'note' => "You are signed in as a read-only demo administrator. You can open every page, but the forms are switched off and nothing can be changed. Customers' names and email addresses, and payment references, are shortened.",
         'view' => 'View',
     ],
 ];

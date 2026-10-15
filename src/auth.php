@@ -385,9 +385,10 @@ function admin_display_name(array $admin): string
 }
 
 /**
- * True when admin pages may show customers' names and email addresses in
- * full. A read-only administrator sees them shortened (masked_name(),
- * masked_email()): on a public demo every visitor can sign in as one.
+ * True when admin pages may show customers' names and email addresses, and
+ * the orders' payment references, in full. A read-only administrator sees
+ * them shortened (masked_name(), masked_email(), masked_reference()): on a
+ * public demo every visitor can sign in as one.
  */
 function admin_sees_customer_details(): bool
 {
@@ -416,6 +417,18 @@ function masked_email(string $email): string
     $domain = substr($email, $at + 1);
     $dot = strrpos($domain, '.');
     return mb_substr($email, 0, 1) . '…@…' . ($dot === false ? '' : substr($domain, $dot));
+}
+
+/**
+ * A payment reference (a Stripe or payment simulator id) shortened to its
+ * prefix, e.g. "cs_test_a1B2c3" -> "cs_test_…". A checkout session id is
+ * the only key to its payment page (pay.php needs no sign-in), so it must
+ * never be shown in full to a read-only administrator.
+ */
+function masked_reference(string $reference): string
+{
+    $underscore = strrpos($reference, '_');
+    return ($underscore === false ? '' : substr($reference, 0, $underscore + 1)) . '…';
 }
 
 /**

@@ -485,7 +485,7 @@ The free alwaysdata plan cannot be used for a store that makes money.
 
 - Anyone can register. Do not enter real personal data (delivery addresses included: any made-up Saudi address in the right format works), and expect the data to be reset.
 - One-click demo customers are limited to 10 per visitor address and hour and 200 at once (the oldest are deleted first), and are deleted after 24 hours by `php bin/demo-cleanup.php`.
-  Everybody who tries the read-only administrator shares one account, which shows every order of the demo with shortened customer names and addresses.
+  Everybody who tries the read-only administrator shares one account, which shows every order of the demo with shortened customer names, addresses and payment references (a full checkout session id would open that customer's payment page).
 - Visitors' purchases never take a book below 3 copies, and `php bin/install.php` (or a container start) restocks the catalog.
 - Nothing is ever shipped: a demo order stays *processing* until an administrator marks it shipped and delivered on its order page, which only updates the order and sends its emails to the demo inbox.
 
