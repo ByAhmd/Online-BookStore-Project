@@ -50,7 +50,7 @@ Taken with `npm run screenshots` ([docs/TESTING.md](docs/TESTING.md#readme-scree
 | <a href="docs/screenshots/explore.jpg"><img src="docs/screenshots/explore.jpg" alt="The Explore page" width="180"></a> | <a href="docs/screenshots/book.jpg"><img src="docs/screenshots/book.jpg" alt="A book page" width="180"></a> | <a href="docs/screenshots/cart.jpg"><img src="docs/screenshots/cart.jpg" alt="The cart" width="180"></a> | <a href="docs/screenshots/checkout.jpg"><img src="docs/screenshots/checkout.jpg" alt="The checkout page" width="180"></a> |
 | **Explore**: search, genres, pages | **Book page**: stock, rating, favorites | **Cart**: totals from catalog prices | **Checkout**: delivery address, VAT |
 | <a href="docs/screenshots/payment-simulator.jpg"><img src="docs/screenshots/payment-simulator.jpg" alt="The payment simulator's page" width="180"></a> | <a href="docs/screenshots/inbox.jpg"><img src="docs/screenshots/inbox.jpg" alt="The demo inbox" width="180"></a> | <a href="docs/screenshots/admin-dashboard.jpg"><img src="docs/screenshots/admin-dashboard.jpg" alt="The admin dashboard" width="180"></a> | <a href="docs/screenshots/admin-orders.jpg"><img src="docs/screenshots/admin-orders.jpg" alt="The admin orders page" width="180"></a> |
-| **Payment simulator**: four endings, no card details | **Demo inbox**: the store's emails | **Admin dashboard**: totals, catalog, stock | **Admin orders**: filters, delivery stages |
+| **Payment simulator**: four endings, no card details | **Demo inbox**: the store's emails | **Admin dashboard**: totals and the add-book form | **Admin orders**: filters, delivery stages |
 
 ## Features
 

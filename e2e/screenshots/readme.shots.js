@@ -14,7 +14,7 @@
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
-import { addBookToCart, checkOutToPaymentPage, labels, openIn, paidOrderId, startDemoAdmin, startDemoCustomer } from '../support/store.js';
+import { checkOutToPaymentPage, labels, openIn, paidOrderId, startDemoAdmin, startDemoCustomer } from '../support/store.js';
 
 const folder = fileURLToPath(new URL('../../docs/screenshots/', import.meta.url));
 const desktop = { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 };
@@ -51,12 +51,15 @@ test('README screenshots', async ({ browser, page }) => {
     await openIn(page, 'Home_Page.php', 'ar');
     await shoot(page, 'home-ar');
 
-    // A demo customer buys a book.
+    // A demo customer buys a book: the first one the home page recommends,
+    // so the book page, the cart, the payment and the order show the same book.
     await startDemoCustomer(page, 'en');
     await page.locator('.home-book-link').first().click();
-    await expect(page.locator('#book-title')).toBeVisible();
+    const title = (await page.locator('#book-title').innerText()).trim();
     await shoot(page, 'book');
-    await addBookToCart(page, 'en');
+    await page.getByRole('button', { name: labels.en.addToCart }).click();
+    await expect(page).toHaveURL(/cart\.php/);
+    await expect(page.locator('.cart-table')).toContainText(title);
     await shoot(page, 'cart');
     await page.getByRole('link', { name: labels.en.proceedToCheckout }).click();
     await shoot(page, 'checkout');

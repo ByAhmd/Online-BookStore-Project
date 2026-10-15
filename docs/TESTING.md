@@ -215,7 +215,7 @@ It does not propose PHP 8.5 for the image or MySQL versions after the 8.4 LTS li
 | File | Shows |
 | --- | --- |
 | `home.jpg`, `explore.jpg`, `home-ar.jpg` | The home page, the Explore page and the Arabic home page, as a guest |
-| `book.jpg`, `cart.jpg`, `checkout.jpg`, `payment-simulator.jpg`, `order.jpg`, `inbox.jpg` | A demo customer's book page, cart, checkout page, simulated payment page, order page (with its timeline) and demo inbox |
+| `book.jpg`, `cart.jpg`, `checkout.jpg`, `payment-simulator.jpg`, `order.jpg`, `inbox.jpg` | A demo customer buying the first book the home page recommends: its book page, the cart, the checkout page, the simulated payment page, the order page (with its timeline) and the demo inbox |
 | `order-ar.jpg` | The same order page in Arabic |
 | `admin-dashboard.jpg`, `admin-orders.jpg` | The admin dashboard and the orders page (the demo's [showcase](ARCHITECTURE.md#the-showcase-and-the-daily-reset) orders at every stage of their delivery) |
 | `mobile.jpg`, `mobile-order-ar.jpg` | On a phone (375 pixels wide): the home page, and the customer's order page in Arabic |
