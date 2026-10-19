@@ -367,7 +367,7 @@ unset($_ENV['BOOKWISE_ADMIN_PASSWORD']);
 
 setup_say();
 setup_say("BookWise is ready at $appUrl");
-setup_say('  Demo mode: payments are simulated on the store\'s own page, and no email is sent.');
+setup_say('  Demo mode: payments are simulated on the store\'s own page, and emails are shown in the store\'s demo inbox instead of being sent.');
 if ($adminEmail !== '') {
     setup_say("  Administrator: $adminEmail (sign in on the store's Log in page).");
 } else {

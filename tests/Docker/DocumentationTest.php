@@ -201,8 +201,9 @@ final class DocumentationTest extends TestCase
                 self::assertStringContainsString("| [$file]($file) |", $section[1], "The README's documentation table lists $file");
             }
         }
-        // One line for the address of the public demo, once it is online.
-        self::assertSame(1, preg_match_all('/^<!-- LIVE DEMO: .*-->$/m', $readme));
+        // The public demo's address, once, as a link (no placeholder left).
+        self::assertSame(1, preg_match_all('#^\*\*Live demo:\*\* <https://[a-z0-9-]+\.alwaysdata\.net>#m', $readme));
+        self::assertStringNotContainsString('<!-- LIVE DEMO', $readme);
     }
 
     /**

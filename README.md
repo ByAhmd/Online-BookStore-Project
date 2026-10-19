@@ -21,9 +21,9 @@ It started as a team project for the *Fundamentals of Web Programming* course at
 
 ## Try it
 
-<!-- LIVE DEMO: once the public demo runs (docs/DEPLOYMENT.md, (b)), replace this comment with: **Live demo:** https://<account>.alwaysdata.net -->
+**Live demo:** <https://bookwise.alwaysdata.net> (alwaysdata's free plan, set up as in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#b-free-public-demo-on-alwaysdata)). After a while without visitors the first page can take a few seconds to load.
 
-Start the demo store with Docker ([Quick start](#quick-start)), open <http://localhost:8080> and choose on the sign-in page:
+Open the live demo, or start the demo store yourself with Docker ([Quick start](#quick-start)) and open <http://localhost:8080>. Then choose on the **Log in** page:
 
 - **Try as a customer**: a fresh demo customer, already signed in, with a few favorites and a made-up delivery address in Riyadh. Add a book to the cart and check out.
 - **Try as an administrator (read-only)**: every admin page, with every form switched off and customers' names, email addresses and payment references shortened.

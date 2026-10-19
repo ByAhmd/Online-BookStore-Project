@@ -81,7 +81,7 @@ final class ArabicPagesTest extends HttpTestCase
         $switch = $guest->get('About_us.php?lang=ar');
         $this->assertRedirect($switch, 'About_us.php');
         $document = $this->assertArabicPage($guest->follow($switch), 'من نحن');
-        self::assertSame(['أحمد مساعد', 'نواف الزهراني', 'حسن الحربي', 'سلمان الفقيه', 'ضيف الله نعمان'], $document->texts('//li[' . HtmlDocument::hasClass('about-member') . ']'));
+        self::assertSame(['احمد المسعد', 'نواف الزهراني', 'حسن الحربي', 'سلمان الفقيه', 'ضيف الله نعمان'], $document->texts('//li[' . HtmlDocument::hasClass('about-member') . ']'));
         $this->assertPageText('بإشراف د. خالد رياض', $guest->get('About_us.php'));
 
         $home = $guest->get('Home_Page.php');

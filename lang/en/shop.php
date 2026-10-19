@@ -574,7 +574,7 @@ return [
         'project_text' => 'We are a group of Computer Science students at King Faisal University. This project is part of our "Fundamentals of Web Programming" course, supervised by :supervisor. It represents our combined effort to learn and showcase essential web development concepts.',
         'supervisor' => 'Dr. Khaled Riad',
         'team_heading' => 'Meet the Team',
-        'team' => ['Ahmed Musaed', 'Nawaf Alzahrani', 'Hasan Alharbi', 'Salman Alfakih', 'Diffallah Noman'],
+        'team' => ['Ahmed Almusaed', 'Nawaf Alzahrani', 'Hasan Alharbi', 'Salman Alfakih', 'Diffallah Noman'],
         'university_heading' => 'Our University',
         'university_text' => 'This project was developed at :university. We are proud to represent our institution and apply the knowledge we’ve gained to create meaningful projects.',
         'university' => 'King Faisal University',

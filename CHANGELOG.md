@@ -8,6 +8,16 @@ The release workflow publishes each version's section below as the notes of its 
 
 ## [Unreleased]
 
+### Added
+
+- The public demo is online at <https://bookwise.alwaysdata.net>, linked from the README.
+
+### Changed
+
+- Playwright 1.64.0 and axe-core 4.14.0 for the browser tests. The Arabic names of the cart link now end with the item count (": 0"), because axe-core 4.14 no longer counts text in brackets.
+- `bin/setup.php` says at the end that a demo shows its emails in the demo inbox, instead of "no email is sent".
+- The About page writes the first team member's name as "Ahmed Almusaed" / "احمد المسعد".
+
 ## [1.0.0] - 2026-10-15
 
 The first versioned release of BookWise: the audited and extended version of the original student project, the course project of *Fundamentals of Web Programming* at King Faisal University.
