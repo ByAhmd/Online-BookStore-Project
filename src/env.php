@@ -132,7 +132,7 @@ function app_config(bool $refresh = false): array
             'timezone' => env('APP_TIMEZONE', 'Asia/Riyadh'),
             // Directory for app.log, mail.log and php-error.log; relative paths start at the project root.
             'log_dir' => env('LOG_DIR', 'storage/logs'),
-            // Public demo: shows a banner and uses the built-in payment simulator; MAIL_DRIVER=database
+            // Public demo: one-click demo accounts and the built-in payment simulator; MAIL_DRIVER=database
             // then shows its emails in the demo inbox (inbox.php).
             'demo' => env_bool('APP_DEMO', false),
             'default_locale' => env('APP_DEFAULT_LOCALE', 'en'),

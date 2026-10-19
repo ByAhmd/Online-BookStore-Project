@@ -55,7 +55,7 @@ services:
       APP_URL: ${BOOKWISE_APP_URL:-http://localhost:8080}
       APP_ENV: local
       APP_DEBUG: "false"
-      # Demo mode: banner, and the built-in payment simulator takes every
+      # Demo mode: one-click demo accounts, and the built-in payment simulator takes every
       # payment (pay.php; no Stripe account needed, no real payments).
       APP_DEMO: "true"
       REQUIRE_EMAIL_VERIFICATION: "false"

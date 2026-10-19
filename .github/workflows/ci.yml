@@ -188,8 +188,12 @@ jobs:
           code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -X POST --data '{}' http://localhost:8081/stripe_webhook.php)"
           echo "stripe_webhook.php without APP_DEMO: HTTP $code"
           test "$code" = 400
-          if curl -s --max-time 5 http://localhost:8081/Home_Page.php | grep -q 'demo-banner'; then
-            echo "the demo banner must not be shown without APP_DEMO" >&2
+          # The one-click demo accounts: on the demo store's sign-in page only.
+          curl -fsS --max-time 5 -o /tmp/login-demo.html 'http://localhost:8080/index.php?form=login'
+          grep -q 'id="demo-logins"' /tmp/login-demo.html
+          curl -fsS --max-time 5 -o /tmp/login-real.html 'http://localhost:8081/index.php?form=login'
+          if grep -q 'id="demo-logins"' /tmp/login-real.html; then
+            echo "the one-click demo accounts must not be offered without APP_DEMO" >&2
             exit 1
           fi
 

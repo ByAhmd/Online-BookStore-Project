@@ -17,6 +17,11 @@ The release workflow publishes each version's section below as the notes of its 
 - Playwright 1.64.0 and axe-core 4.14.0 for the browser tests. The Arabic names of the cart link now end with the item count (": 0"), because axe-core 4.14 no longer counts text in brackets.
 - `bin/setup.php` says at the end that a demo shows its emails in the demo inbox, instead of "no email is sent".
 - The About page writes the first team member's name as "Ahmed Almusaed" / "احمد المسعد".
+- The Docker job of the CI checks that only the demo store's sign-in page offers the one-click demo accounts, instead of looking for the demo banner.
+
+### Removed
+
+- The demo banner above every page of a demo store. The sign-in page still offers the one-click demo accounts and says that payments are simulated, as do the cart and the payment page.
 
 ## [1.0.0] - 2026-10-15
 

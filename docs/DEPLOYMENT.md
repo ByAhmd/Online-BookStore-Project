@@ -165,7 +165,7 @@ The entrypoint never prints passwords, keys or other secrets.
 
 | | `APP_DEMO=true` (demo) | `APP_DEMO=false` (real store) |
 | --- | --- | --- |
-| Banner | "Demo store …" on every page | none |
+| One-click demo accounts | on the sign-in page | none (`demo_login.php` answers 404) |
 | Payments | the [payment simulator](#the-payment-simulator) (unless `PAYMENT_SIMULATOR=false`) | Stripe Checkout with your own keys. `PAYMENT_SIMULATOR=true` is refused with `APP_ENV=production` and works only outside it, for example with `APP_ENV=local` for development |
 | `pay.php` | the simulated payment page | 404 |
 | `stripe_webhook.php` | 404 while the simulator is on | Stripe's webhooks, checked with `STRIPE_WEBHOOK_SECRET` |
@@ -640,7 +640,7 @@ Notes:
 
 Starting from the Docker setup, or from a server prepared with `bin/setup.php`, change the following (in the container's environment or in `.env`).
 
-1. **Leave demo mode:** if you keep the demo's database, empty it first as step 8 describes; that only works in demo mode. Then set `APP_DEMO=false` **and** `PAYMENT_SIMULATOR=false`. The banner disappears and `pay.php` answers 404.
+1. **Leave demo mode:** if you keep the demo's database, empty it first as step 8 describes; that only works in demo mode. Then set `APP_DEMO=false` **and** `PAYMENT_SIMULATOR=false`. The sign-in page no longer offers the one-click demo accounts, and `pay.php` answers 404.
    `bin/setup.php` writes `PAYMENT_SIMULATOR=true` into `.env`, so on a server set up with it both lines must change (the Docker setup does not set `PAYMENT_SIMULATOR`, but `false` does no harm there).
    If `PAYMENT_SIMULATOR=true` is left in place, the store takes no payments at all: checkout says "Online payments are not available in this environment.", `app.log` says `Refusing the payment simulator on a real store …`, and the container does not start.
 2. **Stripe:**
@@ -743,7 +743,7 @@ These variables are specific to the container and `docker-compose.yml`. The appl
 | `PORT` | `8080` | Port Apache listens on (above 1023) |
 | `APP_URL` | `http://localhost:$PORT` | Public address of the store, without a trailing slash |
 | `BOOKWISE_APP_URL` | `http://localhost:8080` | Read by `docker-compose.yml` from your shell: the `APP_URL` it gives the container |
-| `APP_DEMO` | `false` | `true`: demo banner, sample catalog and the payment simulator |
+| `APP_DEMO` | `false` | `true`: one-click demo accounts, sample catalog and the payment simulator |
 | `PAYMENT_SIMULATOR` | follows `APP_DEMO` | `true`/`false`: payment simulator on or off, whatever `APP_DEMO` says. `true` stops the container on a real store (`APP_ENV=production`, `APP_DEMO=false`) |
 | `PAYMENT_SIMULATOR_STORE` | `storage/payment-simulator.json` | The simulator's state file |
 | `DB_WAIT_SECONDS` | `60` | How long the entrypoint waits for the database |
@@ -769,7 +769,7 @@ The **Docker image** job in `.github/workflows/ci.yml` runs next to the test mat
      It also checks that `/.env`, `/composer.json`, `/vendor/autoload.php`, `/storage/logs/app.log`, `/storage/payment-simulator.json` and other private paths answer 403/404, and the security headers;
    - that the order is stored as `paid` in MySQL, and that the simulator's state file in `storage/` belongs to `www-data` and records the payment;
    - that the container refuses the local-only administrator password with a public `APP_URL`, and `PAYMENT_SIMULATOR=true` on a real store (`APP_ENV=production`, `APP_DEMO=false`);
-   - that a second container with `APP_DEMO=false` and `PORT=9090` serves the store without the simulator: its `pay.php` answers 404 without the simulator's message (which the demo store shows for the same link), the application reports the simulator off, and `stripe_webhook.php` checks signatures again (400 for an unsigned request);
+   - that a second container with `APP_DEMO=false` and `PORT=9090` serves the store without the simulator: its `pay.php` answers 404 without the simulator's message (which the demo store shows for the same link), the application reports the simulator off, `stripe_webhook.php` checks signatures again (400 for an unsigned request), and its sign-in page offers no one-click demo accounts (which the demo store's does);
    - that `/health.php` answers 503 after the database is stopped.
 4. On failure it prints the container logs.
 

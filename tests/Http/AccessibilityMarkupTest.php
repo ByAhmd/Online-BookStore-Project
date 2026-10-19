@@ -19,20 +19,6 @@ final class AccessibilityMarkupTest extends HttpTestCase
 {
     use AccountHelpers;
 
-    public function testTheDemoBannerIsPartOfThePageHeader(): void
-    {
-        $this->configureServer(['APP_DEMO' => 'true']);
-        $guest = $this->client();
-
-        foreach (['Home_Page.php' => 200, 'index.php?form=login' => 200, 'Selected.php?id=999999' => 404] as $path => $status) {
-            $document = $this->assertHtmlPage($guest->get($path), $status);
-            $banner = $document->first('//body/header[' . HtmlDocument::hasClass('site-header') . ']/p[' . HtmlDocument::hasClass('demo-banner') . ']');
-            self::assertNotNull($banner, "$path: the demo banner is inside the page header (the banner landmark)");
-            self::assertSame('note', $banner->getAttribute('role'));
-            self::assertSame([], $document->contentOutsideLandmarks(), "$path has content outside its landmarks");
-        }
-    }
-
     public function testAdminTablesScrollInRegionsWithNamesOfTheirOwn(): void
     {
         [$admin] = $this->signedInAdmin();

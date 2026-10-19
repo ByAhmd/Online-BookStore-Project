@@ -1,8 +1,7 @@
 // The keyboard alone: on the profile page, the skip link, the section menu
 // and the main controls of every section are reached with Tab, opened with
-// Enter, and always show where the focus is; so does the demo banner's link.
-// An address sent back with errors starts on the first field the server
-// rejected.
+// Enter, and always show where the focus is. An address sent back with
+// errors starts on the first field the server rejected.
 import { test, expect } from '@playwright/test';
 import { signUp } from './support/store.js';
 
@@ -63,17 +62,6 @@ async function expectVisibleFocus(locator, name) {
     const ring = style.focused.boxShadow !== 'none' && style.focused.boxShadow !== style.unfocused.boxShadow;
     expect(outline || ring, `${name} shows a focus outline or ring it does not have without the focus: ${JSON.stringify(style)}`).toBe(true);
 }
-
-test('the demo banner in the dark header shows a dark focus ring on its yellow', async ({ page }) => {
-    await page.goto('Home_Page.php');
-    await page.keyboard.press('Tab');
-    await expect(page.locator('a.skip-link')).toBeFocused();
-    await page.keyboard.press('Tab');
-    const link = page.locator('header .demo-banner a');
-    await expectVisibleFocus(link, 'the demo banner link');
-    // The header's own links get a yellow ring, which would vanish on the yellow banner.
-    expect(await link.evaluate((element) => window.getComputedStyle(element).outlineColor)).toBe('rgb(11, 12, 12)');
-});
 
 /** Each section and the main controls a keyboard user must reach in it. */
 const sections = [

@@ -23,7 +23,7 @@ final class HtmlLandmarksTest extends TestCase
     {
         $page = self::page(
             '<a class="skip-link" href="#main">Skip</a>'
-            . '<header><p class="demo-banner" role="note">Demo</p><nav aria-label="Main"><a href="/">Home</a></nav></header>'
+            . '<header><p class="site-note" role="note">Note</p><nav aria-label="Main"><a href="/">Home</a></nav></header>'
             . '<main id="main"><section aria-labelledby="a"><h2 id="a">Books</h2>'
             . '<div role="region" aria-label="Table: Books" tabindex="0"><table></table></div></section>'
             . '<section aria-labelledby="b"><h2 id="b">Orders</h2></section><section><h2>Unnamed sections are no landmarks</h2></section>'
@@ -37,9 +37,9 @@ final class HtmlLandmarksTest extends TestCase
 
     public function testContentOutsideLandmarksIsReported(): void
     {
-        $page = self::page('<a class="skip-link" href="#main">Skip</a><p class="demo-banner" role="note">Demo</p><header></header><main id="main"></main><div>Loose</div>');
+        $page = self::page('<a class="skip-link" href="#main">Skip</a><p class="site-note" role="note">Note</p><header></header><main id="main"></main><div>Loose</div>');
 
-        self::assertSame(['p.demo-banner', 'div'], $page->contentOutsideLandmarks());
+        self::assertSame(['p.site-note', 'div'], $page->contentOutsideLandmarks());
     }
 
     public function testLandmarksWithTheSameRoleAndNameAreReported(): void

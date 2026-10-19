@@ -126,7 +126,7 @@ The page itself then:
 - **handles a form** only on POST: `require_post()` answers anything else with 405, and `verify_csrf()` checks the session's CSRF token (419 *Page Expired* when it is missing or wrong). Input is read with `input_string()`, which treats text that is not valid UTF-8 as empty;
 - **calls the modules** in `src/`, which use the database through `db_run()`, `db_one()`, `db_all()`, `db_value()` and `db_transaction()`, always with prepared statements;
 - **answers a form** with `flash()` and `redirect()` (303 See Other, the Post/Redirect/Get pattern). Invalid input is kept with `remember_input()` and `remember_errors()` and shown next to its field on the next page;
-- **renders a page** with `page_header()` (`src/views/header.php`: the document head, the navigation, the demo banner and the flash messages), its own HTML, escaped with `e()`, and `page_footer()` (`src/views/footer.php` and the page's scripts from `public/js`). CSS, scripts and images are linked with `asset()`, which adds a version to the URL ([below](#images-and-browser-caching));
+- **renders a page** with `page_header()` (`src/views/header.php`: the document head, the navigation and the flash messages), its own HTML, escaped with `e()`, and `page_footer()` (`src/views/footer.php` and the page's scripts from `public/js`). CSS, scripts and images are linked with `asset()`, which adds a version to the URL ([below](#images-and-browser-caching));
 - **stops with an error** through `abort($status)`, which renders the translated error page (`src/views/error.php`). Status 419 is sent with a full status line (`HTTP/1.1 419 Page Expired`), because Apache would otherwise turn a status it does not know into 500.
 
 Paths that do not reach PHP (a missing file, or a path the server denies) get the store's translated 404 or 403 page from `public/not_found.php` in the Docker image (`ErrorDocument` in `docker/apache/site.conf`).
@@ -397,7 +397,7 @@ After 48 hours they are hidden, and deleted the next time an email is stored or 
 - Deleting an account deletes its emails. Emails to an address without an account, such as the account-deleted notice, are not stored, because nobody could read them.
   Emails left over for an address without an account are also removed before the address is registered again.
 - Emails are shown as plain text, in their own language and text direction. Only links to the store (`APP_URL`) are clickable; the HTML part is stored but never displayed. The page is sent with `Cache-Control: no-store`.
-- The demo banner and the notes on the password reset and confirmation pages point to the inbox.
+- The navigation links to the inbox, and the notes on the password reset and confirmation pages point to it.
 - The one-click demo customers have made-up addresses at the reserved `demo.invalid` domain: their emails appear in the demo inbox (or `mail.log`), and are never sent over SMTP.
   Nobody can sign up with, or ask for links to, an address at that domain.
 
@@ -507,14 +507,14 @@ Existing MD5 passwords keep working and are re-hashed with bcrypt the next time 
 
 `APP_DEMO=true` turns a store into a public showcase ([DEPLOYMENT.md](DEPLOYMENT.md) shows how to run one):
 
-- A banner on every page says that payments are simulated, that data may be reset and, with the demo inbox, that emails go there. Visitors who are not signed in are pointed to the one-click demo accounts.
+- The sign-in page offers the [one-click demo accounts](#one-click-demo-accounts) and says that payments are simulated.
 - The [payment simulator](#the-payment-simulator) takes the payments (unless `PAYMENT_SIMULATOR=false`). A live Stripe key is never used.
 - The [demo inbox](#the-demo-inbox) can show the store's emails (`MAIL_DRIVER=database`).
 - The stock is topped up at every `bin/install.php` (and so at every container start), and simulated purchases never take a book below 3 copies, so visitors cannot sell the shared catalog out.
 
 ### One-click demo accounts
 
-Only in demo mode, the sign-in page offers two buttons (`demo_login.php`, which answers 404 without `APP_DEMO=true`; both are POST forms with a CSRF token), and the banner links to them for visitors who are not signed in:
+Only in demo mode, the sign-in page offers two buttons (`demo_login.php`, which answers 404 without `APP_DEMO=true`; both are POST forms with a CSRF token):
 
 - **Try as a customer** creates a fresh account for that visitor ("Demo reader 4821", a random address at the reserved `demo.invalid` domain, a random password nobody knows, already confirmed, with a few favorites and a made-up delivery address in Riyadh) and signs it in, so the visitor can check out at once.
   It can use the whole store (cart, simulated checkout, reviews of the books it bought, the demo inbox) and delete itself, but it has no password to change or reset.

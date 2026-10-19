@@ -642,32 +642,8 @@ textarea.form-control {
 }
 
 /* ---------------------------------------------------------------------
-   Demo banner, language switch and right-to-left (Arabic) support
+   Read-only note, language switch and right-to-left (Arabic) support
    --------------------------------------------------------------------- */
-
-.demo-banner {
-    margin: 0;
-    padding: 8px 16px;
-    background: #ffbf47;
-    color: #0b0c0c;
-    text-align: center;
-    font-weight: 700;
-    font-size: 0.95rem;
-}
-
-/* "Try the store in one click". */
-.demo-banner a {
-    color: inherit;
-}
-
-/* The banner is yellow inside the dark header: its link keeps the shared
-   two-tone ring, whose black outline shows on the yellow (a yellow-only ring
-   would disappear). */
-.site-header .demo-banner :focus-visible {
-    outline: 3px solid var(--color-focus-ink);
-    outline-offset: 2px;
-    box-shadow: 0 0 0 5px var(--color-focus);
-}
 
 /* Read-only administrators (role "viewer"): above every page, explaining the switched-off forms. */
 .read-only-note {

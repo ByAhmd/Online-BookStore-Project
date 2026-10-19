@@ -42,7 +42,7 @@ On PHP hosting, `php bin/setup.php` writes a `.env` with the values of a public 
 | `APP_URL` | `http://localhost:8000` | Public URL of `public/` without a trailing slash (trailing slashes are removed). Used for Stripe return URLs, the payment simulator's return addresses and the links in emails (password reset, email confirmation, order pages). With `https://`, cookies are marked `Secure` and HSTS is sent. |
 | `APP_TIMEZONE` | `Asia/Riyadh` | PHP and database-session timezone |
 | `APP_DEFAULT_LOCALE` | `en` | Interface language for visitors who have not chosen one: `en` or `ar` |
-| `APP_DEMO` | `false` | Public demo mode: shows a banner, offers the one-click demo accounts on the sign-in page (`demo_login.php` answers 404 without it), turns the payment simulator on (unless `PAYMENT_SIMULATOR=false`), keeps the sample catalog in stock and lets `bin/install.php` add the [showcase](ARCHITECTURE.md#the-showcase-and-the-daily-reset) ([DEPLOYMENT.md](DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
+| `APP_DEMO` | `false` | Public demo mode: offers the one-click demo accounts on the sign-in page (`demo_login.php` answers 404 without it), turns the payment simulator on (unless `PAYMENT_SIMULATOR=false`), keeps the sample catalog in stock and lets `bin/install.php` add the [showcase](ARCHITECTURE.md#the-showcase-and-the-daily-reset) ([DEPLOYMENT.md](DEPLOYMENT.md)). Required for the demo inbox (`MAIL_DRIVER=database`). |
 | `REQUIRE_EMAIL_VERIFICATION` | `true` | New customers must confirm their email address before signing in. Needs working email in production. |
 | `LOG_DIR` | `storage/logs` | Directory for `app.log`, `php-error.log` and `mail.log` (relative paths start at the project root) |
 

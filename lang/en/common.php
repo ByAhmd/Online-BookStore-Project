@@ -8,11 +8,6 @@ return [
     'main_navigation' => 'Main',
     'admin_tag' => 'Admin',
     'session_expired' => 'Your session expired. Please log in again.',
-    'demo_banner' => 'Demo store: payments are simulated, no emails are sent, and data may be reset at any time.',
-    'demo_banner_inbox' => 'Demo store: payments are simulated, emails go to the demo inbox instead of being sent, and data may be reset at any time.',
-    // Added to the banner for visitors who are not signed in; :link is a link labelled with demo_try_link.
-    'demo_try' => 'New here? :link as a customer or as a read-only administrator.',
-    'demo_try_link' => 'Try the store in one click',
 
     'nav' => [
         'home' => 'Home',

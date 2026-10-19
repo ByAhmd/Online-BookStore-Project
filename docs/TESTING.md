@@ -90,7 +90,7 @@ Each test is independent: it creates its own customer, either a one-click demo c
 | `e2e/purchase.spec.js` | **Try as a customer**, a book in the cart, the checkout page with the demo customer's saved address chosen, **Pay** on the simulated payment page, the confirmation, the order page and the confirmation email in the demo inbox, whose line for the book (a title in Latin letters) shows the price after the title in both directions (English in a desktop window, Arabic in a 375-pixel one). **Decline** keeps the payment page open for another try, **Cancel** charges nothing and keeps the cart, and **Slow payment** is confirmed after about 15 seconds. |
 | `e2e/signup.spec.js` | Signing up through the form shows the welcome email (or, with `REQUIRE_EMAIL_VERIFICATION=true`, the confirmation email) in the demo inbox, in English and Arabic. |
 | `e2e/admin-viewer.spec.js` | **Try as an administrator (read-only)**: the dashboard, the orders page (its search still works) and an order's page, in English and Arabic, with every control of every form that would change something switched off, and customers' details shortened. In Arabic, the empty order search shows its placeholder right to left, and the cover hint draws `https://` and its paths left to right. |
-| `e2e/keyboard.spec.js` | The profile page with the keyboard alone: the skip link, the section menu in tab order, Enter opens a section and moves the focus to its heading, Tab reaches the main controls of every section, the focus is always visible, and a form is sent with Enter. An address sent back with errors keeps the focus on the first field the server rejected. The demo banner's link keeps a dark focus ring on its yellow inside the dark header. |
+| `e2e/keyboard.spec.js` | The profile page with the keyboard alone: the skip link, the section menu in tab order, Enter opens a section and moves the focus to its heading, Tab reaches the main controls of every section, the focus is always visible, and a form is sent with Enter. An address sent back with errors keeps the focus on the first field the server rejected. |
 | `e2e/accessibility.spec.js` | axe-core on the main pages in English and Arabic (see [below](#accessibility-checks)). |
 
 Shared steps (the demo buttons, signing up, buying a book, the axe check) are in `e2e/support/store.js`.
@@ -188,11 +188,10 @@ Two things to know:
 
 What the checks found, and how it was fixed:
 
-- The demo banner was outside every landmark, so screen-reader users who move between landmarks could miss it. It is now part of the page header (`src/views/header.php`).
 - The scrolling tables of the admin pages had the same name as the section around them, so the two regions could not be told apart. They are now named "Table: …" (`admin.table_region`).
-- In Arabic, the accessible name of the header's cart link left out the number that its icon shows for 0, 1 and 2 items ("السلة، عنصر واحد"), against Label in Name. Every Arabic form now includes the number ("السلة (1)، عنصر واحد"), which `tests/Unit/CommerceTranslationsTest.php` also checks.
+- In Arabic, the accessible name of the header's cart link left out the number that its icon shows for 0, 1 and 2 items ("السلة، عنصر واحد"), against Label in Name. Every Arabic form now includes the number as a word of its own ("السلة، عنصر واحد: 1"; axe-core leaves text in brackets out of the comparison), which `tests/Unit/CommerceTranslationsTest.php` also checks.
 
-The HTTP suite checks both rules on every page it opens (`HtmlDocument::contentOutsideLandmarks()` and `duplicateLandmarks()` in `tests/Support`, used by `assertHtmlPage()`), and `tests/Http/AccessibilityMarkupTest.php` checks the two fixes.
+On every page it opens, the HTTP suite checks that every part of the page is inside a landmark and that landmarks sharing a role have names of their own (`HtmlDocument::contentOutsideLandmarks()` and `duplicateLandmarks()` in `tests/Support`, used by `assertHtmlPage()`), and `tests/Http/AccessibilityMarkupTest.php` checks the names of the admin tables.
 
 ## Continuous integration
 

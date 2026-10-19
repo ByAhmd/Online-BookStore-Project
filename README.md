@@ -74,7 +74,7 @@ Taken with `npm run screenshots` ([docs/TESTING.md](docs/TESTING.md#readme-scree
 
 **Demo mode** (`APP_DEMO=true`)
 
-- A banner, the payment simulator and, with `MAIL_DRIVER=database`, the demo inbox.
+- The payment simulator and, with `MAIL_DRIVER=database`, the demo inbox.
 - The one-click demo accounts: demo customers (limited per visitor and in number, deleted after 24 hours) and one shared read-only administrator.
 - The showcase of fictional customers, orders and reviews, and a nightly reset (`php bin/demo-reset.php --yes`) that deletes everything visitors did and puts the sample catalog and the showcase back.
 - A catalog that visitors cannot sell out: simulated purchases never take a book below 3 copies.

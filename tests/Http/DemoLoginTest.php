@@ -59,7 +59,6 @@ final class DemoLoginTest extends HttpTestCase
         $guest = $this->client();
         $login = $this->assertHtmlPage($guest->get('index.php?form=login'));
         self::assertFalse($login->hasForm('demo_login.php'));
-        self::assertSame(0, $login->count('//p[' . HtmlDocument::hasClass('demo-banner') . ']'));
         $this->assertHtmlPage($guest->postWithToken('demo_login.php', ['as' => 'customer']), 404);
         $this->assertHtmlPage($guest->postWithToken('demo_login.php', ['as' => 'admin']), 404);
         $this->assertHtmlPage($guest->get('demo_login.php'), 404);
@@ -82,16 +81,34 @@ final class DemoLoginTest extends HttpTestCase
         $this->assertPageText('It is deleted after 24 hours, or earlier when the demo is reset.', $page);
         $this->assertPageText('Every form is switched off, so nothing can be changed.', $page);
 
-        // The banner points guests to the buttons.
-        $banner = $this->assertHtmlPage($guest->get('Home_Page.php'))->first('//p[' . HtmlDocument::hasClass('demo-banner') . ']');
-        self::assertNotNull($banner);
-        self::assertStringEndsWith('New here? Try the store in one click as a customer or as a read-only administrator.', HtmlDocument::normalize($banner->textContent));
-        self::assertSame(['index.php?form=login#demo-logins'], array_map(static fn (\DOMElement $link): string => $link->getAttribute('href'), iterator_to_array($banner->getElementsByTagName('a'))));
         $arabic = $guest->follow($guest->get('index.php?form=login&lang=ar'));
         $this->assertHtmlPage($arabic);
         $this->assertPageText('جرّب بصفتك مشرفًا (للقراءة فقط)', $arabic);
-        $this->assertPageText('زائر جديد؟ جرّب المتجر بنقرة واحدة بصفتك عميلًا أو مشرفًا للقراءة فقط.', $arabic);
         $this->assertPageText('ويُحذف الحساب بعد 24 ساعة، أو قبل ذلك إذا أُعيد المتجر التجريبي إلى حالته الأولى.', $arabic);
+    }
+
+    public function testDemoPagesHaveNoBannerAboveTheNavigation(): void
+    {
+        $this->enableDemo(['MAIL_DRIVER' => 'database']);
+        $visitor = $this->client();
+        $headerChildren = function (string $path, int $status) use ($visitor): array {
+            $document = $this->assertHtmlPage($visitor->get($path), $status);
+            return array_map(
+                static fn (\DOMElement $element): string => $element->tagName,
+                $document->elements('//body/header[' . HtmlDocument::hasClass('site-header') . ']/*')
+            );
+        };
+
+        // The sign-in page offers the demo accounts, and the sign-in, cart and
+        // payment pages say that payments are simulated: the header only holds
+        // the navigation, for guests and for demo customers alike.
+        foreach (['Home_Page.php' => 200, 'index.php?form=login' => 200, 'Selected.php?id=999999' => 404] as $path => $status) {
+            self::assertSame(['nav'], $headerChildren($path, $status), "$path as a guest");
+        }
+        $this->assertRedirect($this->tryAs($visitor, 'customer'), 'Home_Page.php');
+        foreach (['Home_Page.php' => 200, 'cart.php' => 200, 'Selected.php?id=999999' => 404] as $path => $status) {
+            self::assertSame(['nav'], $headerChildren($path, $status), "$path as a demo customer");
+        }
     }
 
     public function testTheButtonsAreFormsWithACsrfToken(): void
@@ -127,7 +144,6 @@ final class DemoLoginTest extends HttpTestCase
         self::assertCount(1, $flashes);
         self::assertSame('success', $flashes[0]['type']);
         self::assertMatchesRegularExpression(self::CUSTOMER_WELCOME, $flashes[0]['message']);
-        self::assertSame(0, $home->document()->count('//p[' . HtmlDocument::hasClass('demo-banner') . ']//a'), 'No invitation once signed in');
 
         $guest = db_one('SELECT * FROM users WHERE demo_guest_at IS NOT NULL');
         self::assertNotNull($guest);

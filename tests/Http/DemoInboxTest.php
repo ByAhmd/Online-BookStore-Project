@@ -133,7 +133,6 @@ final class DemoInboxTest extends HttpTestCase
         $link = $home->first('//nav//ul[' . HtmlDocument::hasClass('nav-links') . ']//a[@href="inbox.php"]');
         self::assertNotNull($link, 'The navigation links to the inbox');
         self::assertSame(['Inbox', 'Demo inbox'], [HtmlDocument::normalize($link->textContent), $link->getAttribute('aria-label')]);
-        self::assertStringContainsString('emails go to the demo inbox instead of being sent', $home->text('//p[' . HtmlDocument::hasClass('demo-banner') . ']'));
 
         $inbox = $this->inbox($guest);
         self::assertSame('Demo inbox', $inbox->text('//h1'));
